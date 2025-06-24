@@ -1395,6 +1395,10 @@ def test_db():
     except Exception as e:
         return str(e), 500
 
+@app.route('/debug_db_uri')
+def debug_db_uri():
+    return app.config['SQLALCHEMY_DATABASE_URI']
+
 with app.app_context():
     db.create_all()
 
