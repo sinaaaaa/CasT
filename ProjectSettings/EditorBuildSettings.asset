@@ -9,9 +9,6 @@ EditorBuildSettings:
     path: Assets/CameraFeedScene.unity
     guid: 11eacbe8419294c89b6c9233a7b5a008
   - enabled: 1
-    path: Assets/LoadingScene.unity
-    guid: a7d089f3244734532bef194987a95e89
-  - enabled: 1
     path: Assets/Tutorial.unity
     guid: 921b1d389cd86a54999b65f5cd6415f1
   - enabled: 1
@@ -20,6 +17,9 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/level1.unity
     guid: 09e4b1385096e45adaae707ee2f8cc2e
+  - enabled: 1
+    path: Assets/LoadingScene.unity
+    guid: a7d089f3244734532bef194987a95e89
   - enabled: 0
     path: Assets/lg1.unity
     guid: e925884c3c03a468e81637652fadc848

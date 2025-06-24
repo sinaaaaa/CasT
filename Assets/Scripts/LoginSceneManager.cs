@@ -22,7 +22,7 @@ public class LoginSceneManager : MonoBehaviour
     [SerializeField] private TMP_Text errorText;
     [SerializeField] private GameObject loadingPanel;
 
-    private const string FLASK_URL = "http://127.0.0.1:5000"; // Your Flask server URL
+    private const string FLASK_URL = "https://web-production-db15b.up.railway.app"; // Your Flask server URL
 
     private void Start()
     {

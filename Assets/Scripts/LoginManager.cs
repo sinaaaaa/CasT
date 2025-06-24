@@ -22,6 +22,16 @@ public class LoginManager : MonoBehaviour
         {
             Debug.LogError("Login button not assigned!");
         }
+        // Ensure keyboard shows on touch devices
+        if (studentIdInput != null)
+        {
+            studentIdInput.onSelect.AddListener(OnInputFieldSelected);
+        }
+    }
+
+    private void OnInputFieldSelected(string text)
+    {
+        studentIdInput.ActivateInputField();
     }
 
     public void OnLoginButtonClicked()
@@ -31,6 +41,9 @@ public class LoginManager : MonoBehaviour
             ShowError("Please enter your student ID");
             return;
         }
+
+        // Unlock audio for WebGL on first user interaction
+        AudioInitializer.EnsureAudioUnlocked();
 
         // Use FlaskCommunication singleton instead of direct API call
         if (FlaskCommunication.Instance != null)

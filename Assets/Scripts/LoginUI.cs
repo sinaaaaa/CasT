@@ -33,7 +33,14 @@ public class LoginUI : MonoBehaviour
                     studentIdInput.text = value.Substring(0, value.Length - 1);
                 }
             });
+            // Ensure keyboard shows on touch devices
+            studentIdInput.onSelect.AddListener(OnInputFieldSelected);
         }
+    }
+
+    private void OnInputFieldSelected(string text)
+    {
+        studentIdInput.ActivateInputField();
     }
 
     public void ShowError(string message)

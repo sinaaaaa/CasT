@@ -208,6 +208,9 @@ public class CharacterMove : MonoBehaviour
 
     private List<GameObject> activeObstacles = new List<GameObject>();
 
+
+    public AudioClip dragAppleAudio;
+
     // Helper method to get the desired string for actionLog
     private string GetActionLogString(CharacterAction action)
     {
@@ -238,8 +241,8 @@ public class CharacterMove : MonoBehaviour
             {
                 levelName = "Level 1",
                 applePositions = new List<Vector2Int> { new Vector2Int(1,0)},
-                robotStartPosition = new Vector2Int(3,0),
-                robotStartFacing = Vector2Int.up // Default
+                robotStartPosition = new Vector2Int(1,2),
+                robotStartFacing = Vector2Int.down // Default
                 // guidedActions = null (free play)
             },
             new LevelData 
@@ -249,7 +252,8 @@ public class CharacterMove : MonoBehaviour
                 robotStartPosition = new Vector2Int(0,0),
                 robotStartFacing = Vector2Int.left,
                 isAppleDragGuidedLevel = true,
-                applePositions = new List<Vector2Int> { new Vector2Int(-3,0) },
+                applePositions = new List<Vector2Int> { new Vector2Int(0,1)},
+        
             },
             new LevelData 
             {
@@ -580,6 +584,9 @@ public class CharacterMove : MonoBehaviour
             // Place apple at default (0,0) and allow drag
             currentLevelApplePositions.Clear();
             currentLevelApplePositions.Add(new Vector2Int(0,0));
+            
+            // Play drag apple instruction audio
+            PlayDragAppleAudio();
         }
         // ... existing code ...
         if (moveForwardButton != null) moveForwardButton.interactable = true;
@@ -685,6 +692,11 @@ public class CharacterMove : MonoBehaviour
                 if (apple.gameObject.activeSelf)
                     multiTargetCamera.targets.Add(apple);
             }
+        }
+
+        if (levelData.isAppleDragGuidedLevel && dragAppleAudio != null)
+        {
+            // StartCoroutine(PlayDragAppleInstruction()); // <-- REMOVE THIS LINE
         }
     }
 
@@ -1633,6 +1645,10 @@ public class CharacterMove : MonoBehaviour
     {
         Debug.Log("Trying to play collect sound.");
         yield return new WaitForSeconds(delay); 
+        
+        // Ensure audio is unlocked for WebGL
+        AudioInitializer.EnsureAudioUnlocked();
+        
         if (collectSound != null && audioSource != null) // Null checks
         {
             Debug.Log("Playing collect sound.");
@@ -2060,6 +2076,22 @@ public class CharacterMove : MonoBehaviour
         if (chatGPTResponseText != null)
         {
             chatGPTResponseText.text = "Which arrow belongs here?";
+        }
+    }
+
+    private void PlayDragAppleAudio()
+    {
+        // Ensure audio is unlocked for WebGL
+        AudioInitializer.EnsureAudioUnlocked();
+        
+        if (dragAppleAudio != null && audioSource != null)
+        {
+            audioSource.PlayOneShot(dragAppleAudio);
+        }
+        // Optionally, show a text prompt as well
+        if (chatGPTResponseText != null)
+        {
+            chatGPTResponseText.text = "Drag the apple to the correct position!";
         }
     }
 

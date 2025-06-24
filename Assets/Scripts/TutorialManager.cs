@@ -212,11 +212,12 @@ public class TutorialManager : MonoBehaviour
     // Play the audio clip for the current instruction
     void PlayInstructionAudio(AudioClip clip)
     {
-        if (clip != null && audioSource != null)
+        // Ensure audio is unlocked for WebGL
+        AudioInitializer.EnsureAudioUnlocked();
+        
+        if (audioSource != null && clip != null)
         {
-            audioSource.Stop();
-            audioSource.clip = clip;
-            audioSource.Play();
+            audioSource.PlayOneShot(clip);
         }
     }
 
