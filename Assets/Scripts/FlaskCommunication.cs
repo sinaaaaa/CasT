@@ -68,6 +68,33 @@ public class FlaskCommunication : MonoBehaviour
         StartCoroutine(GetLogsFromFlask(userId, callback));
     }
 
+    public void CheckOrCreateStudent(string studentId, Action<bool, string> callback)
+    {
+        StartCoroutine(CheckStudentFromFlask(studentId, callback));
+    }
+
+    private IEnumerator CheckStudentFromFlask(string studentId, Action<bool, string> callback)
+    {
+        string url = FLASK_URL + $"/api/check_student/{studentId}";
+        Debug.Log($"[FlaskCommunication] Checking/creating student: {url}");
+
+        using (UnityWebRequest www = UnityWebRequest.Get(url))
+        {
+            yield return www.SendWebRequest();
+
+            if (www.result == UnityWebRequest.Result.Success)
+            {
+                Debug.Log($"[FlaskCommunication] Student check successful: {www.downloadHandler.text}");
+                callback?.Invoke(true, www.downloadHandler.text);
+            }
+            else
+            {
+                Debug.LogError($"[FlaskCommunication] Error checking student: {www.error}");
+                callback?.Invoke(false, www.error);
+            }
+        }
+    }
+
     private IEnumerator GetLogsFromFlask(string userId, Action<string> callback)
     {
         using (UnityWebRequest www = UnityWebRequest.Get(FLASK_URL + $"/api/get_user_logs/{userId}"))
