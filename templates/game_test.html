@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Unity WebGL Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .debug-info { background: #f0f0f0; padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .error { color: red; }
+        .success { color: green; }
+    </style>
+</head>
+<body>
+    <h1>Unity WebGL Debug Test</h1>
+    
+    <div class="debug-info">
+        <h3>Debug Information:</h3>
+        <div id="debug-output">Loading...</div>
+    </div>
+    
+    <div class="debug-info">
+        <h3>WebGL Support:</h3>
+        <div id="webgl-support">Checking...</div>
+    </div>
+    
+    <div class="debug-info">
+        <h3>File Check:</h3>
+        <div id="file-check">Checking...</div>
+    </div>
+    
+    <h2>Unity Game (if working):</h2>
+    <iframe src="/game" width="960" height="600" frameborder="0"></iframe>
+    
+    <script>
+        // Check WebGL support
+        function checkWebGL() {
+            const canvas = document.createElement('canvas');
+            const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+            
+            if (gl) {
+                document.getElementById('webgl-support').innerHTML = 
+                    '<span class="success">✅ WebGL is supported</span>';
+            } else {
+                document.getElementById('webgl-support').innerHTML = 
+                    '<span class="error">❌ WebGL is NOT supported</span>';
+            }
+        }
+        
+        // Check if Unity files exist
+        async function checkFiles() {
+            try {
+                const response = await fetch('/game/debug');
+                const data = await response.json();
+                
+                let html = `<p><strong>Game directory exists:</strong> ${data.game_dir_exists ? '✅ Yes' : '❌ No'}</p>`;
+                html += '<p><strong>Files found:</strong></p><ul>';
+                
+                data.files.forEach(file => {
+                    const status = file.exists ? '✅' : '❌';
+                    html += `<li>${status} ${file.name} (${file.size} bytes)</li>`;
+                });
+                
+                html += '</ul>';
+                document.getElementById('file-check').innerHTML = html;
+            } catch (error) {
+                document.getElementById('file-check').innerHTML = 
+                    `<span class="error">❌ Error checking files: ${error.message}</span>`;
+            }
+        }
+        
+        // Check browser info
+        function checkBrowser() {
+            const info = {
+                userAgent: navigator.userAgent,
+                platform: navigator.platform,
+                cookieEnabled: navigator.cookieEnabled,
+                onLine: navigator.onLine
+            };
+            
+            document.getElementById('debug-output').innerHTML = 
+                `<pre>${JSON.stringify(info, null, 2)}</pre>`;
+        }
+        
+        // Run all checks
+        checkWebGL();
+        checkFiles();
+        checkBrowser();
+    </script>
+</body>
+</html> 

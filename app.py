@@ -1301,9 +1301,36 @@ def json_loads_filter(s):
     except Exception:
         return []
 
+@app.route('/game-test')
+def game_test():
+    return render_template('game_test.html')
+
 @app.route('/game')
 def serve_game():
     return send_from_directory('webgl/coding-game', 'index.html')
+
+@app.route('/game/debug')
+def debug_game_files():
+    """Debug route to check if Unity WebGL files exist"""
+    import os
+    files = []
+    game_dir = 'webgl/coding-game'
+    
+    if os.path.exists(game_dir):
+        for root, dirs, filenames in os.walk(game_dir):
+            for filename in filenames:
+                filepath = os.path.join(root, filename)
+                files.append({
+                    'name': filename,
+                    'path': filepath,
+                    'size': os.path.getsize(filepath) if os.path.exists(filepath) else 0,
+                    'exists': os.path.exists(filepath)
+                })
+    
+    return jsonify({
+        'game_dir_exists': os.path.exists(game_dir),
+        'files': files
+    })
 
 @app.route('/game/<path:filename>')
 def serve_game_files(filename):
