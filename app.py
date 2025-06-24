@@ -1386,6 +1386,14 @@ def serve_build_data(filename):
 def serve_template_data(filename):
     return send_from_directory('webgl/coding-game/TemplateData', filename)
 
+@app.route('/test_db')
+def test_db():
+    try:
+        db.session.execute('SELECT 1')
+        return 'DB OK'
+    except Exception as e:
+        return str(e), 500
+
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
