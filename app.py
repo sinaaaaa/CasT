@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template, redirect, url_for, session, send_from_directory
+from flask import Flask, request, jsonify, render_template, redirect, url_for, session, send_from_directory, Response
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from datetime import datetime
@@ -9,6 +9,7 @@ from openai import OpenAI
 import re
 from sqlalchemy.exc import IntegrityError
 from collections import defaultdict, deque
+import gzip
 
 app = Flask(__name__, static_folder='webgl/coding-game', static_url_path='/game')
 CORS(app)
@@ -1306,7 +1307,49 @@ def serve_game():
 
 @app.route('/game/<path:filename>')
 def serve_game_files(filename):
-    return send_from_directory('webgl/coding-game', filename)
+    file_path = os.path.join('webgl/coding-game', filename)
+    
+    # Handle compressed Unity WebGL files
+    if filename.endswith('.gz'):
+        try:
+            with open(file_path, 'rb') as f:
+                content = f.read()
+            response = Response(content)
+            
+            # Set correct MIME types for Unity WebGL files
+            if filename.endswith('.wasm.gz'):
+                response.headers['Content-Type'] = 'application/wasm'
+            elif filename.endswith('.js.gz'):
+                response.headers['Content-Type'] = 'application/javascript'
+            elif filename.endswith('.data.gz'):
+                response.headers['Content-Type'] = 'application/octet-stream'
+            
+            response.headers['Content-Encoding'] = 'gzip'
+            return response
+        except FileNotFoundError:
+            return "File not found", 404
+    
+    # Handle regular files
+    try:
+        response = send_from_directory('webgl/coding-game', filename)
+        
+        # Set correct MIME types for Unity WebGL files
+        if filename.endswith('.wasm'):
+            response.headers['Content-Type'] = 'application/wasm'
+        elif filename.endswith('.js'):
+            response.headers['Content-Type'] = 'application/javascript'
+        elif filename.endswith('.data'):
+            response.headers['Content-Type'] = 'application/octet-stream'
+        elif filename.endswith('.css'):
+            response.headers['Content-Type'] = 'text/css'
+        elif filename.endswith('.png'):
+            response.headers['Content-Type'] = 'image/png'
+        elif filename.endswith('.jpg') or filename.endswith('.jpeg'):
+            response.headers['Content-Type'] = 'image/jpeg'
+        
+        return response
+    except FileNotFoundError:
+        return "File not found", 404
 
 if __name__ == '__main__':
     with app.app_context():
