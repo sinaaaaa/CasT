@@ -5,7 +5,7 @@ using System;
 
 public class FlaskCommunication : MonoBehaviour
 {
-    private const string FLASK_URL = "http://127.0.0.1:5000";
+    private const string FLASK_URL = "https://web-production-db15b.up.railway.app";
     private static FlaskCommunication instance;
 
     public static FlaskCommunication Instance
