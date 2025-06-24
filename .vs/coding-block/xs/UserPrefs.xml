@@ -1,0 +1,33 @@
+﻿<Properties StartupConfiguration="{AD448CF1-7B3B-9FAD-466B-CA916BDCFB1E}|">
+  <MonoDevelop.Ide.Workbench ActiveDocument="Assets/Scripts/CharacterMove.cs">
+    <Files>
+      <File FileName="Assets/Scripts/CharacterAction.cs" Line="10" Column="1" />
+      <File FileName="Assets/Scripts/Camera.cs" />
+      <File FileName="Assets/Scripts/MoveAction.cs" Line="12" Column="34" />
+      <File FileName="Assets/Scripts/RotateAction.cs" Line="4" Column="27" />
+      <File FileName="Assets/Scripts/SimpleWebcamDisplay.cs" Line="15" Column="54" />
+      <File FileName="Assets/Scripts/SceneSwitcher.cs" Line="13" Column="9" />
+      <File FileName="Assets/Scripts/CharacterMove.cs" Line="141" Column="23" />
+    </Files>
+    <Pads>
+      <Pad Id="ProjectPad">
+        <State name="__root__">
+          <Node name="coding-block" expanded="True">
+            <Node name="Assets" expanded="True">
+              <Node name="Scripts" expanded="True">
+                <Node name="CharacterMove.cs" selected="True" />
+              </Node>
+            </Node>
+          </Node>
+        </State>
+      </Pad>
+    </Pads>
+  </MonoDevelop.Ide.Workbench>
+  <MonoDevelop.Ide.DebuggingService.PinnedWatches />
+  <MonoDevelop.Ide.Workspace ActiveConfiguration="Debug" />
+  <MonoDevelop.Ide.ItemProperties.Assembly-CSharp PreferredExecutionTarget="98da604d-51fe-4280-a906-667158a8f71e" />
+  <MonoDevelop.Ide.DebuggingService.Breakpoints>
+    <BreakpointStore />
+  </MonoDevelop.Ide.DebuggingService.Breakpoints>
+  <MultiItemStartupConfigurations />
+</Properties>

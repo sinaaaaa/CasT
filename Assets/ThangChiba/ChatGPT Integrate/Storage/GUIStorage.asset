@@ -1,0 +1,36 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7b8ea657ecdc450eb1ee0dab4892a200, type: 3}
+  m_Name: GUIStorage
+  m_EditorClassIdentifier: 
+  clearHistoryOnStart: 1
+  maxSendCount: 10
+  temperature: 0.7
+  maxTokens: 100
+  trains:
+  - role: system
+    content: you are helpful ai in game
+  messages:
+  - role: user
+    content: "t\xF4i mu\u1ED1n \u0111i ch\u01A1i"
+  - role: assistant
+    content: "Xin l\u1ED7i, t\xF4i l\xE0 tr\u1EE3 l\xFD \u1EA3o trong tr\xF2 ch\u01A1i
+      v\xE0 kh\xF4ng th\u1EC3 gi\xFAp b\u1EA1n \u0111i ch\u01A1i ngo\xE0i \u0111\u1EDDi
+      th\u1EF1c. Tuy nhi\xEAn, n\u1EBFu b\u1EA1n c\xF3 b\u1EA5t k\u1EF3 c\xE2u h\u1ECFi
+      n\xE0o li\xEAn quan \u0111\u1EBFn tr\xF2 ch\u01A1i, t\xF4i s\u1EBD c\u1ED1
+      g\u1EAFng tr\u1EA3 l\u1EDDi gi\xFAp b\u1EA1n. V"
+  - role: user
+    content: "ti\u1EBFp t\u1EE5c"
+  - role: assistant
+    content: "V\xE2ng, vui l\xF2ng cho t\xF4i bi\u1EBFt c\xE2u h\u1ECFi c\u1EE7a
+      b\u1EA1n v\u1EC1 tr\xF2 ch\u01A1i m\xE0 b\u1EA1n \u0111ang ch\u01A1i. T\xF4i
+      s\u1EBD c\u1ED1 g\u1EAFng tr\u1EA3 l\u1EDDi gi\xFAp b\u1EA1n."

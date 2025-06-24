@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Teacher Dashboard - Coding Block</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/chart.js@3.7.0/dist/chart.min.css" rel="stylesheet">
+    <style>
+        .student-card {
+            margin-bottom: 20px;
+            transition: transform 0.2s;
+        }
+        .student-card:hover {
+            transform: translateY(-5px);
+        }
+        .score-card {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .modal-lg {
+            max-width: 800px;
+        }
+        .assessment-history {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .skill-progress {
+            height: 25px;
+            margin-bottom: 10px;
+        }
+        .filter-section {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        .comparison-chart {
+            height: 300px;
+            margin-bottom: 20px;
+        }
+        .feedback-section {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+        .analytics-card {
+            margin-bottom: 20px;
+        }
+        .export-buttons {
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="#">Coding Block Teacher Dashboard</a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/logout">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <!-- Export Section -->
+        <div class="export-buttons">
+            <button class="btn btn-success" onclick="exportToCSV()">Export to CSV</button>
+            <button class="btn btn-primary" onclick="exportToPDF()">Export to PDF</button>
+            <button class="btn btn-info" onclick="exportAnalytics()">Export Analytics</button>
+        </div>
+
+        <!-- Filter Section -->
+        <div class="filter-section">
+            <div class="row">
+                <div class="col-md-4">
+                    <input type="text" class="form-control" id="searchInput" placeholder="Search students...">
+                </div>
+                <div class="col-md-4">
+                    <select class="form-select" id="levelFilter">
+                        <option value="">All Levels</option>
+                        <option value="Level 1">Level 1</option>
+                        <option value="Level 2">Level 2</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <select class="form-select" id="scoreFilter">
+                        <option value="">All Scores</option>
+                        <option value="high">High Scores (3-4)</option>
+                        <option value="medium">Medium Scores (2-3)</option>
+                        <option value="low">Low Scores (0-2)</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Analytics Section -->
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card analytics-card">
+                    <div class="card-body">
+                        <h5 class="card-title">Skill Distribution</h5>
+                        <canvas id="skillDistribution"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card analytics-card">
+                    <div class="card-body">
+                        <h5 class="card-title">Progress Over Time</h5>
+                        <canvas id="progressChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Statistics Section -->
+        <div class="row">
+            <div class="col-md-12 mb-4">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Overall Statistics</h5>
+                        <canvas id="overallStats"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Student Comparison Section -->
+        <div class="row mt-4">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Student Comparison</h5>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <select class="form-select" id="student1Select">
+                                    <option value="">Select Student 1</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <select class="form-select" id="student2Select">
+                                    <option value="">Select Student 2</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="comparison-chart mt-3">
+                            <canvas id="comparisonChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Student List -->
+        <div class="row" id="studentList">
+            <!-- Student cards will be dynamically added here -->
+        </div>
+
+        <!-- Add this to the dashboard layout -->
+        <div class="row mb-4">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0">Class-wide Advanced CT Profile</h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="classRadarChart" width="500" height="350"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="row mb-4">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header bg-danger text-white">
+                        <h5 class="mb-0">Students Needing Help (Advanced Skills)</h5>
+                    </div>
+                    <div class="card-body" id="studentsNeedingHelp"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Student Feedback Modal -->
+    <div class="modal fade" id="feedbackModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Student Feedback</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="feedbackForm">
+                        <div class="mb-3">
+                            <label class="form-label">Student</label>
+                            <select class="form-select" id="feedbackStudentSelect" required></select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Feedback Type</label>
+                            <select class="form-select" id="feedbackType" required>
+                                <option value="praise">Praise</option>
+                                <option value="improvement">Areas for Improvement</option>
+                                <option value="suggestion">Suggestion</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Message</label>
+                            <textarea class="form-control" id="feedbackMessage" rows="4" required></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Submit Feedback</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Student Details Modal -->
+    <div class="modal fade" id="studentModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Student Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Student Information</h6>
+                            <p id="studentInfo"></p>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Current Progress</h6>
+                            <div id="currentProgress"></div>
+                        </div>
+                    </div>
+                    <div class="mt-4">
+                        <h6>Assessment History</h6>
+                        <div class="assessment-history" id="assessmentHistory"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.0/dist/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <script>
+        let allStudents = [];
+        let allAssessments = {};
+        const studentModal = new bootstrap.Modal(document.getElementById('studentModal'));
+
+        // Fetch and display student data
+        function loadDashboard() {
+            fetch('/api/students')
+                .then(response => response.json())
+                .then(students => {
+                    allStudents = students;
+                    const studentList = document.getElementById('studentList');
+                    studentList.innerHTML = '';
+                    
+                    students.forEach(student => {
+                        fetch(`/api/assessments/${student.id}`)
+                            .then(response => response.json())
+                            .then(assessments => {
+                                allAssessments[student.id] = assessments;
+                                const card = createStudentCard(student, assessments);
+                                studentList.appendChild(card);
+                            });
+                    });
+                });
+
+            // Load overall statistics
+            fetch('/api/statistics')
+                .then(response => response.json())
+                .then(stats => {
+                    updateOverallStats(stats);
+                });
+        }
+
+        function createStudentCard(student, assessments) {
+            const col = document.createElement('div');
+            col.className = 'col-md-6 col-lg-4 student-card-container';
+            
+            const card = document.createElement('div');
+            card.className = 'card student-card';
+            
+            const cardBody = document.createElement('div');
+            cardBody.className = 'card-body';
+            
+            const latestAssessment = assessments.length > 0 ? assessments[0] : null;
+            const totalScore = latestAssessment ? latestAssessment.total_score : 0;
+            
+            cardBody.innerHTML = `
+                <h5 class="card-title">${student.username}</h5>
+                <p class="card-text">Joined: ${new Date(student.created_at).toLocaleDateString()}</p>
+                <div class="score-card">
+                    <h6>Latest Assessment</h6>
+                    ${latestAssessment ? `
+                        <p>Level: ${latestAssessment.level}</p>
+                        <p>Total Score: ${totalScore}/4</p>
+                        <div class="progress">
+                            <div class="progress-bar ${getScoreColor(totalScore)}" role="progressbar" 
+                                style="width: ${(totalScore/4)*100}%">
+                                ${(totalScore/4)*100}%
+                            </div>
+                        </div>
+                    ` : '<p>No assessments yet</p>'}
+                </div>
+                <button class="btn btn-primary" onclick="showDetails(${student.id})">
+                    View Details
+                </button>
+            `;
+            
+            card.appendChild(cardBody);
+            col.appendChild(card);
+            return col;
+        }
+
+        function showDetails(studentId) {
+            const student = allStudents.find(s => s.id === studentId);
+            const assessments = allAssessments[studentId] || [];
+            
+            document.getElementById('studentInfo').innerHTML = `
+                <p><strong>Username:</strong> ${student.username}</p>
+                <p><strong>Joined:</strong> ${new Date(student.created_at).toLocaleDateString()}</p>
+                <p><strong>Total Assessments:</strong> ${assessments.length}</p>
+            `;
+
+            // Create skill progress bars
+            const latestAssessment = assessments[0];
+            document.getElementById('currentProgress').innerHTML = latestAssessment ? `
+                <div class="skill-progress">
+                    <label>Decomposition</label>
+                    <div class="progress">
+                        <div class="progress-bar" role="progressbar" 
+                            style="width: ${(latestAssessment.decomposition_score/4)*100}%">
+                            ${latestAssessment.decomposition_score}/4
+                        </div>
+                    </div>
+                </div>
+                <div class="skill-progress">
+                    <label>Pattern Recognition</label>
+                    <div class="progress">
+                        <div class="progress-bar" role="progressbar" 
+                            style="width: ${(latestAssessment.pattern_recognition_score/4)*100}%">
+                            ${latestAssessment.pattern_recognition_score}/4
+                        </div>
+                    </div>
+                </div>
+                <div class="skill-progress">
+                    <label>Algorithmic Thinking</label>
+                    <div class="progress">
+                        <div class="progress-bar" role="progressbar" 
+                            style="width: ${(latestAssessment.algorithmic_thinking_score/4)*100}%">
+                            ${latestAssessment.algorithmic_thinking_score}/4
+                        </div>
+                    </div>
+                </div>
+                <div class="skill-progress">
+                    <label>Debugging</label>
+                    <div class="progress">
+                        <div class="progress-bar" role="progressbar" 
+                            style="width: ${(latestAssessment.debugging_score/4)*100}%">
+                            ${latestAssessment.debugging_score}/4
+                        </div>
+                    </div>
+                </div>
+            ` : '<p>No assessments available</p>';
+
+            // Create assessment history
+            document.getElementById('assessmentHistory').innerHTML = assessments.map(assessment => `
+                <div class="card mb-2">
+                    <div class="card-body">
+                        <h6>${assessment.level}</h6>
+                        <p>Date: ${new Date(assessment.created_at).toLocaleDateString()}</p>
+                        <p>Total Score: ${assessment.total_score}/4</p>
+                        <p>Action Log: ${assessment.action_log}</p>
+                    </div>
+                </div>
+            `).join('');
+
+            studentModal.show();
+        }
+
+        function updateOverallStats(stats) {
+            const ctx = document.getElementById('overallStats').getContext('2d');
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Decomposition', 'Pattern Recognition', 'Algorithmic Thinking', 'Debugging'],
+                    datasets: [{
+                        label: 'Average Scores',
+                        data: [
+                            stats.decomposition,
+                            stats.pattern_recognition,
+                            stats.algorithmic_thinking,
+                            stats.debugging
+                        ],
+                        backgroundColor: [
+                            'rgba(255, 99, 132, 0.5)',
+                            'rgba(54, 162, 235, 0.5)',
+                            'rgba(255, 206, 86, 0.5)',
+                            'rgba(75, 192, 192, 0.5)'
+                        ]
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 4
+                        }
+                    }
+                }
+            });
+        }
+
+        function getScoreColor(score) {
+            if (score >= 3) return 'bg-success';
+            if (score >= 2) return 'bg-warning';
+            return 'bg-danger';
+        }
+
+        // Filter functionality
+        document.getElementById('searchInput').addEventListener('input', filterStudents);
+        document.getElementById('levelFilter').addEventListener('change', filterStudents);
+        document.getElementById('scoreFilter').addEventListener('change', filterStudents);
+
+        function filterStudents() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const levelFilter = document.getElementById('levelFilter').value;
+            const scoreFilter = document.getElementById('scoreFilter').value;
+
+            const studentCards = document.querySelectorAll('.student-card-container');
+            studentCards.forEach(card => {
+                const studentName = card.querySelector('.card-title').textContent.toLowerCase();
+                const assessment = allAssessments[parseInt(card.dataset.studentId)]?.[0];
+                
+                let show = studentName.includes(searchTerm);
+                
+                if (show && levelFilter && assessment) {
+                    show = assessment.level === levelFilter;
+                }
+                
+                if (show && scoreFilter && assessment) {
+                    const score = assessment.total_score;
+                    switch(scoreFilter) {
+                        case 'high': show = score >= 3; break;
+                        case 'medium': show = score >= 2 && score < 3; break;
+                        case 'low': show = score < 2; break;
+                    }
+                }
+                
+                card.style.display = show ? 'block' : 'none';
+            });
+        }
+
+        // Export Functions
+        function exportToCSV() {
+            const headers = ['Student', 'Level', 'Decomposition', 'Pattern Recognition', 'Algorithmic Thinking', 'Debugging', 'Total Score', 'Date'];
+            const csvData = [];
+            
+            allStudents.forEach(student => {
+                const assessments = allAssessments[student.id] || [];
+                assessments.forEach(assessment => {
+                    csvData.push([
+                        student.username,
+                        assessment.level,
+                        assessment.decomposition_score,
+                        assessment.pattern_recognition_score,
+                        assessment.algorithmic_thinking_score,
+                        assessment.debugging_score,
+                        assessment.total_score,
+                        new Date(assessment.created_at).toLocaleDateString()
+                    ]);
+                });
+            });
+
+            const csvContent = [
+                headers.join(','),
+                ...csvData.map(row => row.join(','))
+            ].join('\n');
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            saveAs(blob, 'student_assessments.csv');
+        }
+
+        function exportToPDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            
+            doc.text('Student Assessment Report', 20, 20);
+            
+            let y = 40;
+            allStudents.forEach(student => {
+                const assessments = allAssessments[student.id] || [];
+                doc.text(`Student: ${student.username}`, 20, y);
+                y += 10;
+                
+                assessments.forEach(assessment => {
+                    doc.text(`Level: ${assessment.level}`, 30, y);
+                    doc.text(`Score: ${assessment.total_score}/4`, 30, y + 7);
+                    y += 20;
+                });
+                y += 10;
+            });
+            
+            doc.save('student_assessments.pdf');
+        }
+
+        function exportAnalytics() {
+            const analytics = {
+                totalStudents: allStudents.length,
+                averageScores: calculateAverageScores(),
+                skillDistribution: calculateSkillDistribution(),
+                progressTrends: calculateProgressTrends()
+            };
+            
+            const blob = new Blob([JSON.stringify(analytics, null, 2)], { type: 'application/json' });
+            saveAs(blob, 'analytics_report.json');
+        }
+
+        // Analytics Functions
+        function calculateAverageScores() {
+            const scores = {
+                decomposition: 0,
+                pattern_recognition: 0,
+                algorithmic_thinking: 0,
+                debugging: 0
+            };
+            
+            let count = 0;
+            Object.values(allAssessments).forEach(assessments => {
+                assessments.forEach(assessment => {
+                    scores.decomposition += assessment.decomposition_score;
+                    scores.pattern_recognition += assessment.pattern_recognition_score;
+                    scores.algorithmic_thinking += assessment.algorithmic_thinking_score;
+                    scores.debugging += assessment.debugging_score;
+                    count++;
+                });
+            });
+            
+            if (count > 0) {
+                Object.keys(scores).forEach(key => {
+                    scores[key] = scores[key] / count;
+                });
+            }
+            
+            return scores;
+        }
+
+        function calculateSkillDistribution() {
+            const distribution = {
+                decomposition: { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0 },
+                pattern_recognition: { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0 },
+                algorithmic_thinking: { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0 },
+                debugging: { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0 }
+            };
+            
+            Object.values(allAssessments).forEach(assessments => {
+                assessments.forEach(assessment => {
+                    distribution.decomposition[assessment.decomposition_score]++;
+                    distribution.pattern_recognition[assessment.pattern_recognition_score]++;
+                    distribution.algorithmic_thinking[assessment.algorithmic_thinking_score]++;
+                    distribution.debugging[assessment.debugging_score]++;
+                });
+            });
+            
+            return distribution;
+        }
+
+        function calculateProgressTrends() {
+            const trends = {};
+            
+            allStudents.forEach(student => {
+                const assessments = allAssessments[student.id] || [];
+                trends[student.id] = assessments.map(assessment => ({
+                    date: assessment.created_at,
+                    score: assessment.total_score
+                }));
+            });
+            
+            return trends;
+        }
+
+        // Student Comparison Functions
+        function initializeComparison() {
+            const student1Select = document.getElementById('student1Select');
+            const student2Select = document.getElementById('student2Select');
+            
+            allStudents.forEach(student => {
+                const option = new Option(student.username, student.id);
+                student1Select.add(option.cloneNode(true));
+                student2Select.add(option);
+            });
+            
+            student1Select.addEventListener('change', updateComparison);
+            student2Select.addEventListener('change', updateComparison);
+        }
+
+        function updateComparison() {
+            const student1Id = document.getElementById('student1Select').value;
+            const student2Id = document.getElementById('student2Select').value;
+            
+            if (!student1Id || !student2Id) return;
+            
+            const student1 = allStudents.find(s => s.id === parseInt(student1Id));
+            const student2 = allStudents.find(s => s.id === parseInt(student2Id));
+            const assessments1 = allAssessments[student1Id] || [];
+            const assessments2 = allAssessments[student2Id] || [];
+            
+            const latest1 = assessments1[0];
+            const latest2 = assessments2[0];
+            
+            if (!latest1 || !latest2) return;
+            
+            const ctx = document.getElementById('comparisonChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: ['Decomposition', 'Pattern Recognition', 'Algorithmic Thinking', 'Debugging'],
+                    datasets: [
+                        {
+                            label: student1.username,
+                            data: [
+                                latest1.decomposition_score,
+                                latest1.pattern_recognition_score,
+                                latest1.algorithmic_thinking_score,
+                                latest1.debugging_score
+                            ],
+                            backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                            borderColor: 'rgba(255, 99, 132, 1)'
+                        },
+                        {
+                            label: student2.username,
+                            data: [
+                                latest2.decomposition_score,
+                                latest2.pattern_recognition_score,
+                                latest2.algorithmic_thinking_score,
+                                latest2.debugging_score
+                            ],
+                            backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                            borderColor: 'rgba(54, 162, 235, 1)'
+                        }
+                    ]
+                },
+                options: {
+                    scales: {
+                        r: {
+                            beginAtZero: true,
+                            max: 4
+                        }
+                    }
+                }
+            });
+        }
+
+        // Feedback System
+        const feedbackModal = new bootstrap.Modal(document.getElementById('feedbackModal'));
+        
+        function initializeFeedback() {
+            const feedbackStudentSelect = document.getElementById('feedbackStudentSelect');
+            allStudents.forEach(student => {
+                feedbackStudentSelect.add(new Option(student.username, student.id));
+            });
+            
+            document.getElementById('feedbackForm').addEventListener('submit', submitFeedback);
+        }
+
+        function submitFeedback(event) {
+            event.preventDefault();
+            
+            const feedback = {
+                student_id: document.getElementById('feedbackStudentSelect').value,
+                type: document.getElementById('feedbackType').value,
+                message: document.getElementById('feedbackMessage').value,
+                date: new Date().toISOString()
+            };
+            
+            // Send feedback to server
+            fetch('/api/feedback', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(feedback)
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert('Feedback submitted successfully!');
+                feedbackModal.hide();
+                document.getElementById('feedbackForm').reset();
+            })
+            .catch(error => {
+                alert('Error submitting feedback: ' + error);
+            });
+        }
+
+        // Initialize all features
+        function initializeDashboard() {
+            loadDashboard();
+            initializeComparison();
+            initializeFeedback();
+            
+            // Add feedback button to navbar
+            const navbar = document.querySelector('.navbar-nav');
+            const feedbackButton = document.createElement('button');
+            feedbackButton.className = 'btn btn-outline-light ms-2';
+            feedbackButton.textContent = 'Give Feedback';
+            feedbackButton.onclick = () => feedbackModal.show();
+            navbar.appendChild(feedbackButton);
+        }
+
+        // Start the dashboard
+        initializeDashboard();
+
+        // Helper to compute class-wide averages for all 12 dimensions
+        function computeClassAverages() {
+            let count = 0;
+            let sums = {
+                decomposition: 0,
+                pattern_recognition: 0,
+                abstraction: 0,
+                algorithmic_thinking: 0,
+                debugging: 0,
+                planning_quality: 0,
+                execution_fidelity: 0,
+                adaptation_iteration: 0,
+                creativity: 0,
+                time_to_solution: 0,
+                block_efficiency: 0,
+                hint_reliance: 0
+            };
+            Object.values(allAssessments).forEach(assessments => {
+                if (assessments.length > 0) {
+                    const a = assessments[0]; // latest
+                    sums.decomposition += a.decomposition_score || 0;
+                    sums.pattern_recognition += a.pattern_recognition_score || 0;
+                    sums.abstraction += a.abstraction_score || 0;
+                    sums.algorithmic_thinking += a.algorithmic_thinking_score || 0;
+                    sums.debugging += a.debugging_score || 0;
+                    let extra = {};
+                    try { extra = JSON.parse(a.ct_extra_scores || '{}'); } catch(e) {}
+                    if (extra.advanced_scores) {
+                        sums.planning_quality += extra.advanced_scores.planning_quality || 0;
+                        sums.execution_fidelity += extra.advanced_scores.execution_fidelity || 0;
+                        sums.adaptation_iteration += extra.advanced_scores.adaptation_iteration || 0;
+                        sums.creativity += extra.advanced_scores.creativity || 0;
+                        sums.time_to_solution += extra.advanced_scores.time_to_solution || 0;
+                        sums.block_efficiency += extra.advanced_scores.block_efficiency || 0;
+                        sums.hint_reliance += extra.advanced_scores.hint_reliance || 0;
+                    }
+                    count++;
+                }
+            });
+            if (count === 0) count = 1;
+            Object.keys(sums).forEach(k => sums[k] = (sums[k] / count).toFixed(2));
+            return sums;
+        }
+
+        function renderClassRadarChart() {
+            const ctx = document.getElementById('classRadarChart').getContext('2d');
+            const avgs = computeClassAverages();
+            new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: [
+                        'Decomposition', 'Pattern Recognition', 'Abstraction', 'Algorithmic Thinking', 'Debugging',
+                        'Planning Quality', 'Execution Fidelity', 'Adaptation/Iteration', 'Creativity', 'Time to Solution', 'Block Efficiency', 'Hint Reliance'
+                    ],
+                    datasets: [{
+                        label: 'Class Average',
+                        data: [
+                            avgs.decomposition, avgs.pattern_recognition, avgs.abstraction, avgs.algorithmic_thinking, avgs.debugging,
+                            avgs.planning_quality, avgs.execution_fidelity, avgs.adaptation_iteration, avgs.creativity, avgs.time_to_solution, avgs.block_efficiency, avgs.hint_reliance
+                        ],
+                        backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                        borderColor: 'rgba(255, 99, 132, 1)',
+                        borderWidth: 2,
+                        pointBackgroundColor: 'rgba(255, 99, 132, 1)'
+                    }]
+                },
+                options: {
+                    responsive: false,
+                    plugins: { legend: { display: true } },
+                    scales: { r: { min: 0, max: 4, ticks: { stepSize: 1 } } }
+                }
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(renderClassRadarChart, 1000); // Wait for data to load
+        });
+
+        // Highlight students needing help (lowest in any advanced dimension)
+        function renderStudentsNeedingHelp() {
+            let helpList = [];
+            Object.entries(allAssessments).forEach(([studentId, assessments]) => {
+                if (assessments.length > 0) {
+                    const a = assessments[0];
+                    let extra = {};
+                    try { extra = JSON.parse(a.ct_extra_scores || '{}'); } catch(e) {}
+                    if (extra.advanced_scores) {
+                        for (const [dim, score] of Object.entries(extra.advanced_scores)) {
+                            if (score !== undefined && score <= 1) {
+                                helpList.push({
+                                    studentId,
+                                    dim,
+                                    score,
+                                    studentName: allStudents.find(s => s.id == studentId)?.username || studentId
+                                });
+                            }
+                        }
+                    }
+                }
+            });
+            const helpDiv = document.getElementById('studentsNeedingHelp');
+            if (helpList.length === 0) {
+                helpDiv.innerHTML = '<p>All students are doing well in advanced skills!</p>';
+                return;
+            }
+            let html = '<table class="table"><thead><tr><th>Student</th><th>Dimension</th><th>Score</th></tr></thead><tbody>';
+            helpList.forEach(item => {
+                html += `<tr><td>${item.studentName}</td><td>${item.dim.replace('_',' ').replace(/\b\w/g, l => l.toUpperCase())}</td><td>${item.score}/4</td></tr>`;
+            });
+            html += '</tbody></table>';
+            helpDiv.innerHTML = html;
+        }
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(renderStudentsNeedingHelp, 1200);
+        });
+    </script>
+</body>
+</html> 

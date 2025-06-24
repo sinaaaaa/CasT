@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block title %}Teacher Panel - Coding Block{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1 class="mb-4">Teacher Panel</h1>
+    
+    <!-- Statistics Cards -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Total Students</h5>
+                    <h2 class="card-text">{{ total_students }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Total Assessments</h5>
+                    <h2 class="card-text">{{ total_assessments }}</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Student Progress -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Student Progress</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Student</th>
+                            <th>Average Score</th>
+                            <th>Total Assessments</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for progress in student_progress %}
+                        <tr>
+                            <td>{{ progress.student.username }}</td>
+                            <td>
+                                <div class="progress">
+                                    <div class="progress-bar" role="progressbar" 
+                                         style="width: {{ progress.avg_score }}%"
+                                         aria-valuenow="{{ progress.avg_score }}" 
+                                         aria-valuemin="0" 
+                                         aria-valuemax="100">
+                                        {{ progress.avg_score|round|int }}%
+                                    </div>
+                                </div>
+                            </td>
+                            <td>{{ progress.total_assessments }}</td>
+                            <td>
+                                <a href="{{ url_for('view_student', student_id=progress.student.id) }}" 
+                                   class="btn btn-primary btn-sm">View Details</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Assessments -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">Recent Assessments</h5>
+        </div>
+        <div class="card-body">
+            {% if recent_assessments %}
+                {% for assessment in recent_assessments %}
+                <div class="assessment-card mb-3">
+                    <div class="d-flex justify-content-between">
+                        <h6>Student: {{ assessment.student.username }}</h6>
+                        <small class="text-muted">{{ assessment.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</small>
+                    </div>
+                    <div class="mt-2">
+                        <p>Level: {{ assessment.level }}</p>
+                        <p>Total Score: <span class="badge bg-success">{{ assessment.total_score }}</span></p>
+                        <div class="progress mt-2">
+                            <div class="progress-bar bg-success" role="progressbar" 
+                                 style="width: {{ assessment.total_score }}%"
+                                 aria-valuenow="{{ assessment.total_score }}" 
+                                 aria-valuemin="0" 
+                                 aria-valuemax="100">
+                                {{ assessment.total_score }}%
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <p class="text-muted">No recent assessments available.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %} 

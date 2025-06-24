@@ -1,0 +1,33 @@
+﻿<Properties StartupConfiguration="{81004E48-F096-3F20-AD11-6736066D9C30}|">
+  <MonoDevelop.Ide.Workbench ActiveDocument="Assets/Scripts/ChatGPTClient.cs">
+    <Files>
+      <File FileName="Assets/Scripts/Level1.cs" Line="60" Column="1" />
+      <File FileName="Assets/Scripts/CharacterMove.cs" />
+      <File FileName="Assets/Scripts/NewMonoBehaviour.cs" />
+      <File FileName="Assets/Scripts/LoadingSceneController.cs" />
+      <File FileName="Assets/Scripts/LevelIcon.cs" />
+      <File FileName="Assets/Scripts/OpenAIController.cs" Line="27" Column="1" />
+      <File FileName="Assets/ChatGPT/OpenAI_API/Moderation/ModerationResult.cs" />
+      <File FileName="Assets/ChatGPT/OpenAI_API/Completions/CompletionRequest.cs" />
+      <File FileName="Assets/ChatGPT/OpenAI_API/OpenAIAPI.cs" />
+      <File FileName="Assets/ChatGPT/OpenAI_API/EndpointBase.cs" />
+      <File FileName="Assets/Scripts/ChatGPTManager.cs" Line="66" Column="1" />
+      <File FileName="Assets/Scripts/ChatUIManager.cs" Line="28" Column="1" />
+      <File FileName="Assets/Scripts/ChatGPTClient.cs" Line="38" Column="1" />
+    </Files>
+    <Pads>
+      <Pad Id="ProjectPad">
+        <State name="__root__">
+          <Node name="coding-block copy" expanded="True" selected="True" />
+        </State>
+      </Pad>
+    </Pads>
+  </MonoDevelop.Ide.Workbench>
+  <MonoDevelop.Ide.DebuggingService.PinnedWatches />
+  <MonoDevelop.Ide.Workspace ActiveConfiguration="Debug" />
+  <MonoDevelop.Ide.ItemProperties.Assembly-CSharp PreferredExecutionTarget="7834477a-f30e-4aab-a240-7095dd31fe48" />
+  <MonoDevelop.Ide.DebuggingService.Breakpoints>
+    <BreakpointStore />
+  </MonoDevelop.Ide.DebuggingService.Breakpoints>
+  <MultiItemStartupConfigurations />
+</Properties>
