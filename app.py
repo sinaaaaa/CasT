@@ -1381,7 +1381,14 @@ def serve_game_files(filename):
 
 @app.route('/Build/<path:filename>')
 def serve_build_data(filename):
-    return send_from_directory('webgl/coding-game/Build', filename)
+    response = send_from_directory('webgl/coding-game/Build', filename)
+    
+    # Add cache-busting headers for WebGL files
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    
+    return response
 
 @app.route('/TemplateData/<path:filename>')
 def serve_template_data(filename):
