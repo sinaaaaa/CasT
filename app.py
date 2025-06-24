@@ -1378,6 +1378,14 @@ def serve_game_files(filename):
     except FileNotFoundError:
         return "File not found", 404
 
+@app.route('/Build/<path:filename>')
+def serve_build_data(filename):
+    return send_from_directory('webgl/coding-game/Build', filename)
+
+@app.route('/TemplateData/<path:filename>')
+def serve_template_data(filename):
+    return send_from_directory('webgl/coding-game/TemplateData', filename)
+
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
