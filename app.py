@@ -10,6 +10,7 @@ import re
 from sqlalchemy.exc import IntegrityError
 from collections import defaultdict, deque
 import gzip
+from sqlalchemy import text
 
 app = Flask(__name__, static_folder='webgl/coding-game', static_url_path='/game')
 CORS(app)
@@ -1389,7 +1390,7 @@ def serve_template_data(filename):
 @app.route('/test_db')
 def test_db():
     try:
-        db.session.execute('SELECT 1')
+        db.session.execute(text('SELECT 1'))
         return 'DB OK'
     except Exception as e:
         return str(e), 500
