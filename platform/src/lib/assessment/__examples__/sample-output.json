@@ -1,0 +1,40 @@
+{
+  "assessmentVersion": "v1",
+  "summary": {
+    "overallScore": 78,
+    "overallMastery": "proficient",
+    "confidence": 82,
+    "taskMastery": "Met level goals (Proficient CT profile)",
+    "behaviors": [
+      "Completed the level successfully.",
+      "Used 8 commands; shortest known route uses 6.",
+      "Included 2 extra command(s) compared to an efficient route.",
+      "Visited required objects in the correct order.",
+      "Student route: 8 commands · Optimal route: 6 commands."
+    ],
+    "interpretations": [
+      "Shows solid sequencing: commands follow a logical order.",
+      "Understands how direction and turns connect to movement.",
+      "Solves the task correctly but could plan a tighter path.",
+      "Handles multi-step goals in the right order.",
+      "Strongest area: sequencing."
+    ],
+    "recommendations": [
+      "Try a shortest-route challenge: ask the student to solve again with fewer moves.",
+      "Continue the multi-stage-navigation strand with the next level in sequence."
+    ],
+    "taskType": "multi-stage-navigation"
+  },
+  "constructScores": [
+    { "slug": "sequencing", "score": 84, "mastery": "proficient", "weight": 40 },
+    { "slug": "decomposition", "score": 76, "mastery": "proficient", "weight": 35 },
+    { "slug": "algorithm-design", "score": 72, "mastery": "proficient", "weight": 25 }
+  ],
+  "evidence": {
+    "commandCount": 8,
+    "optimalCommandCount": 6,
+    "efficiencyRatio": 75,
+    "goalCompletion": 100,
+    "correctGoalOrder": true
+  }
+}

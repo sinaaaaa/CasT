@@ -20,7 +20,7 @@
                     {% for log in game_logs %}
                     <div class="log-entry">
                         <div class="d-flex justify-content-between">
-                            <h6>Level: {{ log.level }}</h6>
+                            <h6>Item: {{ log.level }}</h6>
                             <small class="text-muted">{{ log.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</small>
                         </div>
                         <p class="mb-1">Score: <span class="badge bg-primary">{{ log.score }}</span></p>
@@ -45,7 +45,7 @@
                     {% for assessment in assessments %}
                     <div class="assessment-card">
                         <div class="d-flex justify-content-between">
-                            <h6>Level: {{ assessment.level }}</h6>
+                            <h6>Item: {{ assessment.level }}</h6>
                             <small class="text-muted">{{ assessment.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</small>
                         </div>
                         <div class="mt-3">

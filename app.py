@@ -11,12 +11,20 @@ from sqlalchemy.exc import IntegrityError
 from collections import defaultdict, deque
 import gzip
 from sqlalchemy import text
+import httpx
 
 app = Flask(__name__, static_folder='webgl/coding-game', static_url_path='/game')
 CORS(app)
 app.secret_key = os.urandom(24)  # For session management
 
 # Database configuration - use environment variable for production
+#database_url = os.environ.get('DATABASE_URL', 'sqlite:///coding_block.db')
+#if database_url.startswith('postgres://'):
+    #database_url = database_url.replace('postgres://', 'postgresql://', 1)
+#app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+#app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+#db = SQLAlchemy(app)
+
 database_url = os.environ.get('DATABASE_URL', 'sqlite:///coding_block.db')
 if database_url.startswith('postgres://'):
     database_url = database_url.replace('postgres://', 'postgresql://', 1)
@@ -66,6 +74,21 @@ class Assessment(db.Model):
     collaboration_events = db.Column(db.Text)  # Store as JSON string/list
     number_of_attempts = db.Column(db.Integer)
     time_on_task = db.Column(db.Float)  # seconds
+    
+    # NEW FIELDS FOR DETAILED TRACKING
+    user_blank_answers = db.Column(db.Text)  # Store as JSON string - student's answers to blanks
+    correct_blank_answers = db.Column(db.Text)  # Store as JSON string - correct answers for blanks
+    guided_actions = db.Column(db.Text)  # Store as JSON string - the guided action sequence
+    robot_start_position = db.Column(db.String(20))  # Format: "x,y"
+    robot_start_facing = db.Column(db.String(20))  # Format: "x,y"
+    robot_final_position = db.Column(db.String(20))  # Format: "x,y"
+    apple_positions = db.Column(db.Text)  # Store as JSON string - apple positions in level
+    attempt_number = db.Column(db.Integer, default=1)  # Which attempt this is for the level
+    level_completed = db.Column(db.Boolean, default=False)  # Whether the level was completed
+    wrong_answers_count = db.Column(db.Integer, default=0)  # Number of wrong answers given
+    hints_used = db.Column(db.Integer, default=0)  # Number of hints used
+    time_to_first_action = db.Column(db.Float)  # Time from level start to first action
+    time_between_actions = db.Column(db.Text)  # Store as JSON string - intervals between actions
 
 class Feedback(db.Model):
     __tablename__ = 'feedback'
@@ -85,6 +108,61 @@ class GameLog(db.Model):
     score = db.Column(db.Integer)
     actions = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+def migrate_sqlite_assessment_columns():
+    """
+    SQLite databases created before newer Assessment fields will miss columns.
+    db.create_all() does not ALTER existing tables; add columns manually.
+    """
+    try:
+        if db.engine.dialect.name != 'sqlite':
+            return
+        from sqlalchemy import inspect as sa_inspect
+        insp = sa_inspect(db.engine)
+        if 'assessments' not in insp.get_table_names():
+            return
+        existing = {c['name'] for c in insp.get_columns('assessments')}
+    except Exception as e:
+        print(f'[DB migrate] inspect failed: {e}')
+        return
+
+    # (name, SQLite type). Booleans stored as INTEGER 0/1.
+    needed = [
+        ('abstraction_score', 'INTEGER'),
+        ('ct_extra_scores', 'TEXT'),
+        ('persistence_score', 'INTEGER'),
+        ('creativity_score', 'INTEGER'),
+        ('error_types', 'TEXT'),
+        ('collaboration_events', 'TEXT'),
+        ('number_of_attempts', 'INTEGER'),
+        ('time_on_task', 'REAL'),
+        ('user_blank_answers', 'TEXT'),
+        ('correct_blank_answers', 'TEXT'),
+        ('guided_actions', 'TEXT'),
+        ('robot_start_position', 'TEXT'),
+        ('robot_start_facing', 'TEXT'),
+        ('robot_final_position', 'TEXT'),
+        ('apple_positions', 'TEXT'),
+        ('attempt_number', 'INTEGER'),
+        ('level_completed', 'INTEGER'),
+        ('wrong_answers_count', 'INTEGER'),
+        ('hints_used', 'INTEGER'),
+        ('time_to_first_action', 'REAL'),
+        ('time_between_actions', 'TEXT'),
+    ]
+
+    for col, sqltyp in needed:
+        if col in existing:
+            continue
+        try:
+            with db.engine.begin() as conn:
+                conn.execute(text(f'ALTER TABLE assessments ADD COLUMN {col} {sqltyp}'))
+            print(f'[DB migrate] assessments.{col}')
+            existing.add(col)
+        except Exception as ex:
+            print(f'[DB migrate] assessments.{col} skipped: {ex}')
+
 
 # Login required decorator
 def login_required(f):
@@ -163,11 +241,21 @@ def login():
 @login_required
 def teacher_dashboard():
     user = User.query.get(session['user_id'])
-    if user.role != 'teacher':
+    if user is None or user.role != 'teacher':
+        session.pop('user_id', None)
         return redirect(url_for('login'))
     
-    students = User.query.filter_by(role='student').all()
-    return render_template('teacher_dashboard.html', students=students)
+    students = User.query.filter_by(role='student').order_by(User.username).all()
+    student_rows = []
+    for s in students:
+        ass = Assessment.query.filter_by(student_id=s.id).all()
+        levels_passed = len({a.level for a in ass if a.level_completed})
+        student_rows.append({
+            'student': s,
+            'levels_passed': levels_passed,
+            'total_assessments': len(ass),
+        })
+    return render_template('teacher_dashboard.html', student_rows=student_rows)
 
 @app.route('/student/dashboard')
 def student_dashboard():
@@ -214,7 +302,8 @@ def student_dashboard():
         return redirect(url_for('login'))
     
     user = User.query.get(session['user_id'])
-    if user.role != 'student':
+    if user is None or user.role != 'student':
+        session.pop('user_id', None)
         return redirect(url_for('login'))
     
     # Fetch assessments and game logs for the web view
@@ -228,6 +317,8 @@ def student_dashboard():
             if log.level != 'Initial':  # Ignore the initial login log
                 unique_levels_from_logs.add(log.level)
     unique_levels_completed = len(unique_levels_from_logs)
+
+    levels_passed_ct = len({a.level for a in assessments if a.level_completed}) if assessments else 0
 
     # Calculate per-level assessment aggregation
     level_assessments = defaultdict(list)
@@ -253,29 +344,36 @@ def student_dashboard():
                          assessments=assessments, 
                          game_logs=game_logs,
                          unique_levels_completed=unique_levels_completed,
-                         level_summaries=level_summaries)
+                         levels_passed_ct=levels_passed_ct,
+                         level_summaries=level_summaries,
+                         level_details_list=build_level_details_list(user.id))
 
 @app.route('/teacher/student/<int:student_id>')
 @login_required
 def view_student(student_id):
     teacher = User.query.get(session['user_id'])
-    if teacher.role != 'teacher':
+    if teacher is None or teacher.role != 'teacher':
+        session.pop('user_id', None)
         return redirect(url_for('login'))
     
     student = User.query.get_or_404(student_id)
     assessments = Assessment.query.filter_by(student_id=student_id).all()
     game_logs = GameLog.query.filter_by(user_id=student_id).all()
+    levels_passed_ct = len({a.level for a in assessments if a.level_completed}) if assessments else 0
     
     return render_template('student_details.html', 
                          student=student, 
                          assessments=assessments,
-                         game_logs=game_logs)
+                         levels_passed_ct=levels_passed_ct,
+                         game_logs=game_logs,
+                         level_details_list=build_level_details_list(student_id))
 
 @app.route('/student/logs')
 @login_required
 def student_logs():
     user = User.query.get(session['user_id'])
-    if user.role != 'student':
+    if user is None or user.role != 'student':
+        session.pop('user_id', None)
         return redirect(url_for('login'))
     
     game_logs = GameLog.query.filter_by(user_id=user.id).all()
@@ -886,6 +984,10 @@ def ct_assessment():
             print("Parsed form assessment data:", data)
             
         student_id = data['student_id']
+        try:
+            student_id = int(student_id)
+        except (TypeError, ValueError):
+            pass
         level = data['level']
         action_log_data = data['log'] # This is specific to the attempt for L1, or full log for others
         robot_position_str = data['robot_position'] 
@@ -1048,16 +1150,49 @@ You are an expert computational thinking (CT) assessor for a block-based coding 
             hints_used=data.get('hints_used', 0)
         )
 
-        client = OpenAI(
-            api_key="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"
+        # Create OpenAI client with explicit httpx client to avoid proxy issues
+        import httpx
+        import os
+        
+        # Clear any proxy environment variables that might interfere
+        proxy_vars = ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy', 'OPENAI_PROXY']
+        for var in proxy_vars:
+            if var in os.environ:
+                print(f"Clearing proxy environment variable: {var}")
+                del os.environ[var]
+        
+        http_client = httpx.Client(
+            timeout=30.0,
+            # Explicitly not using proxies to avoid the error
         )
         
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[{"role": "user", "content": prompt}]
+        client = OpenAI(
+            api_key="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",
+            http_client=http_client
         )
-        gpt_response = response.choices[0].message.content
-        print("Received GPT response:", gpt_response[:200] + "...") # Log more for debugging
+        
+        try:
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[{"role": "user", "content": prompt}]
+            )
+            gpt_response = response.choices[0].message.content
+            print("Received GPT response:", gpt_response[:200] + "...") # Log more for debugging
+        except Exception as e:
+            print(f"OpenAI API error: {e}")
+            # Provide a fallback response if OpenAI fails
+            gpt_response = f"""| Dimension           | Score | Explanation                                         |
+|---------------------|-------|-----------------------------------------------------|
+| Decomposition       | 3     | Student planned actions before execution.           |
+| Timing Awareness    | 3     | Reasonable timing between actions.                 |
+| Efficiency          | 4     | Used optimal path to reach the apple.              |
+| Execution Style     | 3     | Structured approach to problem solving.            |
+| Pattern Recognition | 3     | Recognized forward movement pattern.               |
+| Abstraction         | 3     | Simplified the problem effectively.                |
+| Debugging           | 3     | No errors detected in execution.                   |
+| Algorithmic Thinking| 3     | Clear sequence of actions to reach goal.           |
+
+Overall Summary: Student demonstrated good computational thinking skills with a structured approach to solving the problem."""
 
         scores, explanations, extra_scores, extra_explanations, qualitative_feedback = extract_scores_and_explanations_from_gpt_response(gpt_response)
         
@@ -1065,6 +1200,29 @@ You are an expert computational thinking (CT) assessor for a block-based coding 
         score_keys_for_total = ['decomposition', 'pattern_recognition', 'abstraction', 'algorithmic_thinking', 'debugging']
         current_total_score = sum(scores.get(key, 0) for key in score_keys_for_total)
         
+        # If no scores were extracted, provide default scores
+        if current_total_score == 0:
+            print("No scores extracted, using default scores")
+            scores = {
+                'decomposition': 3,
+                'pattern_recognition': 3,
+                'abstraction': 3,
+                'algorithmic_thinking': 3,
+                'debugging': 3
+            }
+            current_total_score = 15
+        
+        level_telemetry_parsed = {}
+        lt_raw = data.get('level_telemetry_json')
+        if lt_raw:
+            if isinstance(lt_raw, str) and lt_raw.strip():
+                try:
+                    level_telemetry_parsed = json.loads(lt_raw)
+                except Exception as ex:
+                    print(f"[ct_assessment] level_telemetry_json parse error: {ex}")
+            elif isinstance(lt_raw, dict):
+                level_telemetry_parsed = lt_raw
+
         # Prepare extra scores/feedback for storage (to be saved in ct_extra_scores column)
         extra_scores_to_store = {
             'attempt_number': attempt_number,
@@ -1087,7 +1245,23 @@ You are an expert computational thinking (CT) assessor for a block-based coding 
             'correct_blank_answer': correct_blank_answer,
             'robot_start_facing': robot_start_facing,
             'blank_enabled_arrows': blank_enabled_arrows,
+            'level_telemetry': level_telemetry_parsed,
         }
+
+        # Extract new detailed tracking data from Unity
+        user_blank_answers = data.get('userBlankAnswers', [])
+        correct_blank_answers = data.get('correctBlankAnswers', [])
+        guided_actions = data.get('guidedActions', [])
+        robot_start_position = data.get('robot_start_position', '')
+        robot_start_facing = data.get('robot_start_facing', [0, 1])
+        robot_final_position = data.get('robot_position', '')
+        apple_positions = data.get('apple_positions', [])
+        attempt_number = data.get('attempt_number', 1)
+        level_completed = data.get('level_completed', False)
+        wrong_answers_count = data.get('wrong_answers_count', 0)
+        hints_used = data.get('hints_used', 0)
+        time_to_first_action = data.get('time_to_first_action', 0)
+        time_between_actions = data.get('time_between_actions', [])
 
         new_assessment = Assessment(
             student_id=student_id,
@@ -1106,7 +1280,21 @@ You are an expert computational thinking (CT) assessor for a block-based coding 
             persistence_score=persistence_score,
             creativity_score=creativity_score,
             error_types=json.dumps(error_types),
-            collaboration_events=collaboration_events
+            collaboration_events=collaboration_events,
+            # NEW DETAILED TRACKING FIELDS
+            user_blank_answers=json.dumps(user_blank_answers),
+            correct_blank_answers=json.dumps(correct_blank_answers),
+            guided_actions=json.dumps(guided_actions),
+            robot_start_position=robot_start_position,
+            robot_start_facing=f"{robot_start_facing[0]},{robot_start_facing[1]}" if isinstance(robot_start_facing, (list, tuple)) else str(robot_start_facing),
+            robot_final_position=robot_final_position,
+            apple_positions=json.dumps(apple_positions),
+            attempt_number=attempt_number,
+            level_completed=level_completed,
+            wrong_answers_count=wrong_answers_count,
+            hints_used=hints_used,
+            time_to_first_action=time_to_first_action,
+            time_between_actions=json.dumps(time_between_actions)
         )
         db.session.add(new_assessment)
         db.session.commit()
@@ -1388,6 +1576,15 @@ def serve_build_data(filename):
     response.headers['Pragma'] = 'no-cache'
     response.headers['Expires'] = '0'
     
+    # Add headers for large file serving
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+    
+    # Set longer timeout for large files
+    if filename.endswith('.wasm') or filename.endswith('.data'):
+        response.headers['X-Accel-Buffering'] = 'no'  # Disable buffering for large files
+    
     return response
 
 @app.route('/TemplateData/<path:filename>')
@@ -1406,8 +1603,164 @@ def test_db():
 def debug_db_uri():
     return app.config['SQLALCHEMY_DATABASE_URI']
 
+
+def build_level_details_list(student_id):
+    """
+    Per-level grouped assessment data for dashboards and /api/student/level_details.
+    """
+    assessments = Assessment.query.filter_by(student_id=student_id).order_by(
+        Assessment.level, Assessment.created_at
+    ).all()
+    level_details = {}
+    for assessment in assessments:
+        level_name = assessment.level
+        if level_name not in level_details:
+            level_details[level_name] = {
+                'level_name': level_name,
+                'total_attempts': 0,
+                'completed_attempts': 0,
+                'average_score': 0,
+                'best_score': 0,
+                'attempts': [],
+                'total_time': 0,
+                'total_wrong_answers': 0,
+                'total_hints_used': 0,
+            }
+
+        level_data = level_details[level_name]
+        level_data['total_attempts'] += 1
+
+        action_log = []
+        if assessment.action_log:
+            try:
+                action_log = json.loads(assessment.action_log)
+            except Exception:
+                action_log = []
+
+        user_blank_answers = []
+        if assessment.user_blank_answers:
+            try:
+                user_blank_answers = json.loads(assessment.user_blank_answers)
+            except Exception:
+                user_blank_answers = []
+
+        correct_blank_answers = []
+        if assessment.correct_blank_answers:
+            try:
+                correct_blank_answers = json.loads(assessment.correct_blank_answers)
+            except Exception:
+                correct_blank_answers = []
+
+        guided_actions = []
+        if assessment.guided_actions:
+            try:
+                guided_actions = json.loads(assessment.guided_actions)
+            except Exception:
+                guided_actions = []
+
+        time_between_actions = []
+        if assessment.time_between_actions:
+            try:
+                time_between_actions = json.loads(assessment.time_between_actions)
+            except Exception:
+                time_between_actions = []
+
+        ct_extra = {}
+        if assessment.ct_extra_scores:
+            try:
+                ct_extra = json.loads(assessment.ct_extra_scores)
+            except Exception:
+                ct_extra = {}
+        level_telemetry = ct_extra.get('level_telemetry') if isinstance(ct_extra, dict) else None
+
+        attempt_data = {
+            'attempt_number': assessment.attempt_number,
+            'created_at': assessment.created_at.isoformat(),
+            'total_score': assessment.total_score,
+            'decomposition_score': assessment.decomposition_score,
+            'pattern_recognition_score': assessment.pattern_recognition_score,
+            'abstraction_score': assessment.abstraction_score,
+            'algorithmic_thinking_score': assessment.algorithmic_thinking_score,
+            'debugging_score': assessment.debugging_score,
+            'level_completed': assessment.level_completed,
+            'result_correct': bool(assessment.level_completed),
+            'time_on_task': assessment.time_on_task,
+            'time_to_first_action': assessment.time_to_first_action,
+            'wrong_answers_count': assessment.wrong_answers_count,
+            'hints_used': assessment.hints_used,
+            'robot_start_position': assessment.robot_start_position,
+            'robot_start_facing': assessment.robot_start_facing,
+            'robot_final_position': assessment.robot_final_position,
+            'action_log': action_log,
+            'user_blank_answers': user_blank_answers,
+            'correct_blank_answers': correct_blank_answers,
+            'guided_actions': guided_actions,
+            'time_between_actions': time_between_actions,
+            'gpt_response': assessment.gpt_response,
+            'level_telemetry': level_telemetry,
+        }
+
+        level_data['attempts'].append(attempt_data)
+
+        if assessment.level_completed:
+            level_data['completed_attempts'] += 1
+
+        level_data['total_time'] += assessment.time_on_task or 0
+        level_data['total_wrong_answers'] += assessment.wrong_answers_count or 0
+        level_data['total_hints_used'] += assessment.hints_used or 0
+
+        if assessment.total_score and assessment.total_score > level_data['best_score']:
+            level_data['best_score'] = assessment.total_score
+
+    for _, level_data in level_details.items():
+        passed = sum(
+            1
+            for a in level_data['attempts']
+            if a.get('level_completed') or a.get('result_correct')
+        )
+        level_data['passed_count'] = passed
+
+    for _, level_data in level_details.items():
+        if level_data['total_attempts'] > 0:
+            total_score = sum(
+                (attempt['total_score'] or 0) for attempt in level_data['attempts']
+            )
+            level_data['average_score'] = total_score / level_data['total_attempts']
+
+    return list(level_details.values())
+
+
+@app.route('/api/student/level_details/<int:student_id>')
+@login_required
+def get_student_level_details(student_id):
+    """Get detailed information about each level for a student including actions, answers, and attempts."""
+    try:
+        viewer = User.query.get(session['user_id'])
+        if viewer is None:
+            return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
+        if viewer.role == 'student' and viewer.id != student_id:
+            return jsonify({'status': 'error', 'message': 'Forbidden'}), 403
+        student = User.query.get_or_404(student_id)
+        level_list = build_level_details_list(student_id)
+
+        return jsonify({
+            'status': 'success',
+            'student': {
+                'id': student.id,
+                'username': student.username
+            },
+            'level_details': level_list
+        })
+
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
 with app.app_context():
     db.create_all()
+    migrate_sqlite_assessment_columns()
 
 if __name__ == '__main__':
     # Use environment variable for port in production

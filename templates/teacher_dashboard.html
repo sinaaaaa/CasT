@@ -1,42 +1,87 @@
 {% extends "base.html" %}
 
-{% block title %}Teacher Dashboard - Coding Block{% endblock %}
+{% block title %}Teacher · Students · Coding Block{% endblock %}
 
 {% block content %}
-<h1 class="mb-4">Teacher Dashboard</h1>
-
-<div class="row">
-    <div class="col-md-12">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="card-title mb-0">Student List</h5>
-            </div>
-            <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table table-hover">
-                        <thead>
-                            <tr>
-                                <th>Username</th>
-                                <th>Last Login</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for student in students %}
-                            <tr>
-                                <td>{{ student.username }}</td>
-                                <td>{{ student.last_login.strftime('%Y-%m-%d %H:%M:%S') if student.last_login else 'Never' }}</td>
-                                <td>
-                                    <a href="{{ url_for('view_student', student_id=student.id) }}" 
-                                       class="btn btn-primary btn-sm">View Details</a>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+<div class="panel-hero">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+        <div>
+            <h1>Teacher dashboard</h1>
+            <p class="lead mb-0">Review every student’s item progress, programs, and hands-on robot interaction.</p>
+        </div>
+        <div class="text-md-end">
+            <span class="badge bg-dark bg-opacity-10 text-dark px-3 py-2 rounded-pill" style="font-weight:600;">
+                <i class="bi bi-people-fill me-1"></i> {{ student_rows|length }} student{{ 's' if student_rows|length != 1 else '' }}
+            </span>
         </div>
     </div>
 </div>
-{% endblock %} 
+
+<div class="panel-section">
+    <div class="panel-section-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <div>
+            <h2><i class="bi bi-person-video3 me-2 text-primary"></i>All students</h2>
+            <p class="hint mb-0">Open a learner to see per-level correctness, command sequences, timing, and robot touch analytics.</p>
+        </div>
+    </div>
+    <div class="panel-section-body">
+        <div class="search-glass mb-3">
+            <div class="input-group">
+                <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+                <input type="search" class="form-control border-start-0" id="teacherStudentFilter" placeholder="Filter by name…" autocomplete="off">
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-students align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Student</th>
+                        <th class="text-center">Items passed</th>
+                        <th class="text-center">Assessments</th>
+                        <th>Registered</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="teacherStudentTbody">
+                    {% for row in student_rows %}
+                    <tr data-student-row data-student-name="{{ row.student.username|lower }}">
+                        <td>
+                            <span class="fw-semibold">{{ row.student.username }}</span>
+                        </td>
+                        <td class="text-center">
+                            <span class="badge rounded-pill {% if row.levels_passed > 0 %}bg-success{% else %}bg-light text-muted border{% endif %} px-3">
+                                {{ row.levels_passed }}
+                            </span>
+                        </td>
+                        <td class="text-center text-muted small">{{ row.total_assessments }}</td>
+                        <td class="text-muted small">{{ row.student.created_at.strftime('%Y-%m-%d') if row.student.created_at else '—' }}</td>
+                        <td class="text-end">
+                            <a href="{{ url_for('view_student', student_id=row.student.id) }}" class="btn btn-sm btn-primary rounded-pill px-3">
+                                Assessment <i class="bi bi-arrow-right-short ms-1"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if not student_rows %}
+        <p class="text-muted mb-0 text-center py-4">No student accounts yet.</p>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+(function(){
+    var inp = document.getElementById('teacherStudentFilter');
+    if (!inp) return;
+    inp.addEventListener('input', function(){
+        var q = (inp.value || '').toLowerCase().trim();
+        document.querySelectorAll('[data-student-row]').forEach(function(row){
+            var name = row.getAttribute('data-student-name') || '';
+            row.style.display = (!q || name.indexOf(q) !== -1) ? '' : 'none';
+        });
+    });
+})();
+</script>
+{% endblock %}

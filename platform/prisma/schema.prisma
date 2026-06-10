@@ -1,0 +1,408 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  STUDENT
+  TEACHER
+  ADMIN
+}
+
+enum AttemptStatus {
+  CORRECT
+  INCORRECT
+  INCOMPLETE
+}
+
+enum CommandAction {
+  ADDED
+  REMOVED
+  MODIFIED
+  REORDERED
+  CLEARED
+  SUBMITTED
+}
+
+enum ButtonEventType {
+  CLICKED
+  DISABLED
+  CLOSED
+  ENABLED
+}
+
+enum RobotTouchType {
+  TOUCH_START
+  TOUCH_END
+}
+
+/// How students interact with actions on this level (Unity reads config + type).
+enum LevelType {
+  /// Teaches action blocks once before Level 1 (orderIndex 0, level_0).
+  INTRO
+  DRAG_ACTIONS
+  FLAG_PLACEMENT
+  CHOOSE_BUTTONS
+  /// Pre-filled program; students drag blocks to add, remove, or reorder before RUN.
+  DRAG_EDIT_PROGRAM
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  role      UserRole
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  studentProfile StudentProfile?
+  teacherProfile TeacherProfile?
+  teacherNotes   TeacherNote[]   @relation("NoteAuthor")
+  passwordResetTokens PasswordResetToken[]
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model StudentProfile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  displayName String
+  externalId  String?  @unique
+  isArchived  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  classMemberships    ClassStudent[]
+  levelAttempts       LevelAttempt[]
+  assignedLevels      LevelStudentAssignment[]
+  sessions            StudentSession[]
+}
+
+/// Browser / WebGL student play sessions (student ID login — separate from NextAuth).
+model StudentSession {
+  id        String         @id @default(cuid())
+  studentId String
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  tokenHash String         @unique
+  createdAt DateTime       @default(now())
+  expiresAt DateTime
+
+  @@index([studentId])
+  @@index([expiresAt])
+}
+
+model TeacherProfile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  displayName String
+  createdAt   DateTime @default(now())
+
+  studentLevelAssignments LevelStudentAssignment[] @relation("AssignedByTeacher")
+  classMemberships        ClassTeacher[]
+  ownedLevels             Level[]                    @relation("LevelOwner")
+}
+
+model Class {
+  id          String   @id @default(cuid())
+  name        String
+  code        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+
+  students         ClassStudent[]
+  teachers         ClassTeacher[]
+  levelAttempts    LevelAttempt[]
+  assignedLevels   LevelClassAssignment[]
+}
+
+model ClassTeacher {
+  id         String         @id @default(cuid())
+  classId    String
+  class      Class          @relation(fields: [classId], references: [id], onDelete: Cascade)
+  teacherId  String
+  teacher    TeacherProfile @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  assignedAt DateTime       @default(now())
+
+  @@unique([classId, teacherId])
+  @@index([teacherId])
+  @@index([classId])
+}
+
+model ClassStudent {
+  id         String         @id @default(cuid())
+  classId    String
+  class      Class          @relation(fields: [classId], references: [id], onDelete: Cascade)
+  studentId  String
+  student    StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  enrolledAt DateTime       @default(now())
+
+  @@unique([classId, studentId])
+  @@index([studentId])
+}
+
+model Level {
+  id          String    @id @default(cuid())
+  levelKey    String    @unique
+  name        String
+  description String?
+  orderIndex  Int       @default(0)
+  difficulty  Int       @default(1)
+  levelType   LevelType @default(DRAG_ACTIONS)
+  /// Full gameplay definition (grid, robot, guided queue, intro, hints) — JSON validated in app code.
+  config      Json      @default("{}")
+  published   Boolean   @default(false)
+  isArchived  Boolean   @default(false)
+  /// null = platform-shared catalog (intro, seed). Set when a teacher creates an item.
+  ownerTeacherId String?
+  ownerTeacher   TeacherProfile? @relation("LevelOwner", fields: [ownerTeacherId], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now()) @updatedAt
+
+  attempts            LevelAttempt[]
+  studentAssignments  LevelStudentAssignment[]
+  classAssignments    LevelClassAssignment[]
+  constructMappings   LevelCTConstruct[]
+
+  @@index([ownerTeacherId])
+}
+
+/// Direct level assignment per student (StudentLevelAssignment). Soft-remove via isActive.
+model LevelStudentAssignment {
+  id                  String          @id @default(cuid())
+  levelId             String
+  level               Level           @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  studentId           String
+  student             StudentProfile  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  assignedByTeacherId String?
+  assignedByTeacher   TeacherProfile? @relation("AssignedByTeacher", fields: [assignedByTeacherId], references: [id], onDelete: SetNull)
+  assignedAt          DateTime        @default(now())
+  isActive            Boolean         @default(true)
+  deactivatedAt       DateTime?
+
+  @@unique([levelId, studentId])
+  @@index([studentId])
+  @@index([studentId, isActive])
+}
+
+/// Levels assigned to a whole class — all enrolled students receive these levels.
+model LevelClassAssignment {
+  id         String   @id @default(cuid())
+  levelId    String
+  level      Level    @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  classId    String
+  class      Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  assignedAt DateTime @default(now())
+
+  @@unique([levelId, classId])
+  @@index([classId])
+}
+
+model LevelAttempt {
+  id                        String        @id @default(cuid())
+  studentId                 String
+  student                   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  classId                   String?
+  class                     Class?         @relation(fields: [classId], references: [id], onDelete: SetNull)
+  levelId                   String
+  level                     Level          @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  attemptNumber             Int            @default(1)
+  startedAt                 DateTime       @default(now())
+  endedAt                   DateTime?
+  totalTimeSeconds          Float?
+  status                    AttemptStatus  @default(INCOMPLETE)
+  passed                    Boolean        @default(false)
+  score                     Int?
+  initialCommand            String?        @db.Text
+  finalCommand              String?        @db.Text
+  commandHistory            Json?
+  closedButtons             Json?
+  disabledButtons           Json?
+  robotTouched              Boolean        @default(false)
+  robotTouchCount           Int            @default(0)
+  robotTouchDurationSeconds Float          @default(0)
+  /// Seconds from attempt start to first robot touch (null if never touched).
+  firstRobotTouchAt         DateTime?
+  /// Student reset button presses during this attempt.
+  resetCount                Int            @default(0)
+  hintsUsed                 Int            @default(0)
+  mistakes                  Json?
+  feedback                  String?        @db.Text
+  createdAt                 DateTime       @default(now())
+  updatedAt                 DateTime       @updatedAt
+
+  commandEvents      CommandEvent[]
+  actionButtonEvents ActionButtonEvent[]
+  robotTouchEvents   RobotTouchEvent[]
+  assessmentResult        AssessmentResult?
+  stealthAssessment       StealthAssessmentResult?
+  teacherNotes            TeacherNote[]
+  constructPerformances   StudentConstructPerformance[]
+
+  @@index([studentId, levelId])
+  @@index([classId])
+  @@index([status])
+  @@index([startedAt])
+}
+
+model CommandEvent {
+  id        String        @id @default(cuid())
+  attemptId String
+  attempt   LevelAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  timestamp DateTime      @default(now())
+  command   String        @db.Text
+  action    CommandAction
+  sequence  Int           @default(0)
+
+  @@index([attemptId, timestamp])
+}
+
+model ActionButtonEvent {
+  id         String          @id @default(cuid())
+  attemptId  String
+  attempt    LevelAttempt      @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  buttonName String
+  eventType  ButtonEventType
+  timestamp  DateTime        @default(now())
+
+  @@index([attemptId, timestamp])
+}
+
+model RobotTouchEvent {
+  id              String         @id @default(cuid())
+  attemptId       String
+  attempt         LevelAttempt   @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  eventType       RobotTouchType
+  timestamp       DateTime       @default(now())
+  durationSeconds Float?
+
+  @@index([attemptId, timestamp])
+}
+
+/// ECD stealth assessment (v1+) — additive; does not replace AssessmentResult or LevelAttempt rows.
+model StealthAssessmentResult {
+  id                String       @id @default(cuid())
+  attemptId         String       @unique
+  attempt           LevelAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  studentId         String
+  levelId           String
+  assessmentVersion String       @default("v1")
+  overallScore      Int
+  overallMastery    String
+  confidence        Int          @default(70)
+  taskType          String
+  constructScores   Json
+  evidence          Json
+  routeAnalysis     Json?
+  teacherSummary    Json
+  recommendations   Json
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  @@index([studentId, levelId])
+  @@index([levelId])
+  @@index([assessmentVersion])
+}
+
+model AssessmentResult {
+  id                 String       @id @default(cuid())
+  attemptId          String       @unique
+  attempt            LevelAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  decomposition      Int?
+  patternRecognition Int?
+  algorithmicThinking Int?
+  debugging          Int?
+  abstraction        Int?
+  persistence        Int?
+  creativity         Int?
+  totalScore         Int?
+  mistakePattern     String?      @db.Text
+  errorTypes         Json?
+  assessmentNotes    String?      @db.Text
+  createdAt          DateTime     @default(now())
+}
+
+model TeacherNote {
+  id        String       @id @default(cuid())
+  attemptId String
+  attempt   LevelAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  teacherId String
+  teacher   User         @relation("NoteAuthor", fields: [teacherId], references: [id], onDelete: Cascade)
+  content   String       @db.Text
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@index([attemptId])
+}
+
+/// Computational thinking construct (teacher-managed catalog).
+model CTConstruct {
+  id                 String   @id @default(cuid())
+  slug               String   @unique
+  name               String
+  description        String?  @db.Text
+  rubricDescription  String?  @db.Text
+  color              String   @default("#6366f1")
+  sortOrder          Int      @default(0)
+  active             Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  levelMappings LevelCTConstruct[]
+  performances  StudentConstructPerformance[]
+}
+
+/// Many-to-many: which CT constructs a level assesses and at what weight.
+model LevelCTConstruct {
+  id                String      @id @default(cuid())
+  levelId           String
+  level             Level       @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  constructId       String
+  construct         CTConstruct @relation(fields: [constructId], references: [id], onDelete: Cascade)
+  weightPercent     Int         @default(0)
+  rubricDescription String?     @db.Text
+  expectedEvidence  String?     @db.Text
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  @@unique([levelId, constructId])
+  @@index([levelId])
+  @@index([constructId])
+}
+
+/// Per-attempt scores for each CT construct on that level.
+model StudentConstructPerformance {
+  id              String        @id @default(cuid())
+  attemptId       String
+  attempt         LevelAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  constructId     String
+  construct       CTConstruct   @relation(fields: [constructId], references: [id], onDelete: Cascade)
+  studentId       String
+  levelId         String
+  score           Int
+  masteryPercent  Int
+  masteryLevel    String
+  feedback        String?       @db.Text
+  evidenceSummary String?       @db.Text
+  analyzedAt      DateTime      @default(now())
+
+  @@unique([attemptId, constructId])
+  @@index([studentId, constructId])
+  @@index([levelId, constructId])
+  @@index([analyzedAt])
+}

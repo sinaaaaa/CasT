@@ -46,7 +46,7 @@
                 <li><strong>Algorithm Design</strong>: Creating clear and efficient sequences of coding blocks to solve the problem.</li>
                 <li><strong>Debugging</strong>: Adjusting your strategy after mistakes, such as fixing errors or trying new approaches when something doesn't work.</li>
             </ul>
-            <p class="mt-2 text-muted">Each time you complete a level, an AI reviews your actions and provides feedback on these skills.</p>
+            <p class="mt-2 text-muted">Each time you complete an item, an AI reviews your actions and provides feedback on these skills.</p>
         </div>
     </div>
     
@@ -149,10 +149,10 @@
         </div>
     </div>
 
-    <!-- Level-wise Assessment Summary -->
+    <!-- Item-wise Assessment Summary -->
     <div class="card mb-4">
         <div class="card-header bg-success text-white">
-            <h5 class="mb-0">Level-wise Assessment Summary</h5>
+            <h5 class="mb-0">Item-wise Assessment Summary</h5>
         </div>
         <div class="card-body">
             {% if level_summaries %}
@@ -222,7 +222,7 @@
         <div class="card-body">
             <div class="assessment-card">
                 <div class="d-flex justify-content-between">
-                    <h6>Level: {{ latest_assessment.level }}</h6>
+                    <h6>Item: {{ latest_assessment.level }}</h6>
                     <small class="text-muted">{{ latest_assessment.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</small>
                 </div>
                 
@@ -295,7 +295,7 @@
                 {% for log in game_logs[:5] %}
                 <div class="log-entry">
                     <div class="d-flex justify-content-between">
-                        <h6>Level: {{ log.level }}</h6>
+                        <h6>Item: {{ log.level }}</h6>
                         <small class="text-muted">{{ log.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</small>
                     </div>
                     <p class="mb-1">Score: <span class="badge bg-primary">{{ log.score }}</span></p>
@@ -318,7 +318,7 @@
                 {% for assessment in assessments %}
                 <div class="assessment-card mb-4">
                     <div class="d-flex justify-content-between">
-                        <h6>Level: {{ assessment.level }}</h6>
+                        <h6>Item: {{ assessment.level }}</h6>
                         <small class="text-muted">{{ assessment.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</small>
                     </div>
                     

@@ -1,71 +1,271 @@
 {% extends "base.html" %}
 
-{% block title %}Student Details - {{ student.username }}{% endblock %}
+{% block title %}{{ student.username }} · Assessment · Coding Block{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h1>Student Details: {{ student.username }}</h1>
-    <a href="{{ url_for('teacher_dashboard') }}" class="btn btn-secondary">Back to Dashboard</a>
+<div class="panel-hero">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+        <div>
+            <p class="small text-uppercase fw-bold text-muted mb-1 letter-spacing">Learner</p>
+            <h1>{{ student.username }}</h1>
+            <p class="lead mb-0">Full assessment view — same data you see in the student panel, optimized for review.</p>
+        </div>
+        <div class="d-flex flex-wrap gap-2 align-items-center">
+            <a href="{{ url_for('teacher_dashboard') }}" class="btn btn-outline-secondary rounded-pill"><i class="bi bi-arrow-left me-1"></i> All students</a>
+        </div>
+    </div>
+    <div class="row g-3 mt-3">
+        <div class="col-6 col-md-4 col-lg-3">
+            <div class="panel-stat-card">
+                <div class="icon-wrap bg-success bg-opacity-10 text-success"><i class="bi bi-check-circle"></i></div>
+                <div class="label">Items passed</div>
+                <div class="value text-success">{{ levels_passed_ct }}</div>
+                <div class="sub">Distinct levels completed successfully</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-4 col-lg-3">
+            <div class="panel-stat-card">
+                <div class="icon-wrap bg-primary bg-opacity-10 text-primary"><i class="bi bi-clipboard-data"></i></div>
+                <div class="label">Stored rows</div>
+                <div class="value">{{ assessments|length }}</div>
+                <div class="sub">Assessment records</div>
+            </div>
+        </div>
+        <div class="col-12 col-md-4 col-lg-3">
+            <div class="panel-stat-card">
+                <div class="icon-wrap bg-warning bg-opacity-10 text-warning"><i class="bi bi-controller"></i></div>
+                <div class="label">Game logs</div>
+                <div class="value">{{ game_logs|length }}</div>
+                <div class="sub">Progress / save events</div>
+            </div>
+        </div>
+    </div>
 </div>
 
-<div class="row">
-    <!-- Game Logs Section -->
-    <div class="col-md-6">
-        <div class="card mb-4">
-            <div class="card-header">
-                <h5 class="card-title mb-0">Game Logs</h5>
+<div class="panel-section mb-4">
+    <div class="panel-section-header">
+        <h2><i class="bi bi-layers me-2 text-primary"></i>Per-item assessment</h2>
+        <p class="hint mb-0">Correct vs incorrect, time, command flow (initial → each RUN → final), disabled blocks, and robot touch time.</p>
+    </div>
+    <div class="panel-section-body p-0">
+        <div class="p-3 border-bottom bg-white">
+            <p class="text-muted small mb-0"><i class="bi bi-info-circle me-1"></i> Data syncs when the game submits a CT assessment after levels. Older runs may show partial fields.</p>
+        </div>
+        <div class="p-3 p-md-4" id="teacherLevelAssessmentRoot">
+            <div class="d-flex align-items-center gap-2 text-muted py-5 justify-content-center" id="teacherLevelAssessmentLoading">
+                <div class="spinner-border spinner-border-sm" role="status"></div>
+                <span>Loading assessment detail…</span>
             </div>
-            <div class="card-body">
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-6">
+        <div class="panel-section h-100">
+            <div class="panel-section-header">
+                <h2 class="h6 mb-0"><i class="bi bi-joystick me-2 text-primary"></i>Game logs</h2>
+            </div>
+            <div class="panel-section-body" style="max-height: 420px; overflow-y: auto;">
                 {% if game_logs %}
                     {% for log in game_logs %}
-                    <div class="log-entry">
-                        <div class="d-flex justify-content-between">
-                            <h6>Level: {{ log.level }}</h6>
-                            <small class="text-muted">{{ log.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</small>
+                    <div class="pb-3 mb-3 border-bottom">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <span class="fw-semibold">{{ log.level }}</span>
+                            <small class="text-muted">{{ log.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
                         </div>
-                        <p class="mb-1">Score: <span class="badge bg-primary">{{ log.score }}</span></p>
-                        <p class="mb-0">Actions: {{ log.actions }}</p>
+                        <div class="mt-1"><span class="badge bg-primary bg-opacity-10 text-primary">Score {{ log.score }}</span></div>
+                        <p class="mb-0 small text-muted mt-1">{{ log.actions }}</p>
                     </div>
                     {% endfor %}
                 {% else %}
-                    <p class="text-muted">No game logs available.</p>
+                    <p class="text-muted mb-0">No game logs.</p>
                 {% endif %}
             </div>
         </div>
     </div>
-
-    <!-- Assessments Section -->
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="card-title mb-0">Assessments</h5>
+    <div class="col-lg-6">
+        <div class="panel-section h-100">
+            <div class="panel-section-header">
+                <h2 class="h6 mb-0"><i class="bi bi-archive me-2 text-primary"></i>Assessment index</h2>
             </div>
-            <div class="card-body">
+            <div class="panel-section-body" style="max-height: 420px; overflow-y: auto;">
                 {% if assessments %}
                     {% for assessment in assessments %}
-                    <div class="assessment-card">
-                        <div class="d-flex justify-content-between">
-                            <h6>Level: {{ assessment.level }}</h6>
-                            <small class="text-muted">{{ assessment.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</small>
+                    <div class="d-flex justify-content-between align-items-start pb-3 mb-3 border-bottom">
+                        <div>
+                            <div class="fw-semibold">{{ assessment.level }}</div>
+                            <small class="text-muted">{{ assessment.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
                         </div>
-                        <div class="mt-3">
-                            <p>Decomposition: <span class="badge bg-info score-badge">{{ assessment.decomposition_score }}</span></p>
-                            <p>Pattern Recognition: <span class="badge bg-info score-badge">{{ assessment.pattern_recognition_score }}</span></p>
-                            <p>Algorithmic Thinking: <span class="badge bg-info score-badge">{{ assessment.algorithmic_thinking_score }}</span></p>
-                            <p>Debugging: <span class="badge bg-info score-badge">{{ assessment.debugging_score }}</span></p>
-                            <p class="mt-2">Total Score: <span class="badge bg-success score-badge">{{ assessment.total_score }}</span></p>
-                        </div>
-                        <div class="mt-3">
-                            <h6>Action Log:</h6>
-                            <pre class="bg-light p-2 rounded">{{ assessment.action_log }}</pre>
+                        <div class="text-end">
+                            {% if assessment.level_completed %}
+                                <span class="badge-result badge-result-pass">Passed</span>
+                            {% else %}
+                                <span class="badge-result badge-result-fail">Incomplete</span>
+                            {% endif %}
+                            <div class="small text-muted mt-1">Total {{ assessment.total_score or '—' }}</div>
                         </div>
                     </div>
                     {% endfor %}
                 {% else %}
-                    <p class="text-muted">No assessments available.</p>
+                    <p class="text-muted mb-0">No assessments in database.</p>
                 {% endif %}
             </div>
         </div>
     </div>
 </div>
-{% endblock %} 
+
+<script>
+(function() {
+    const studentId = {{ student.id }};
+    const SERVER_LEVEL_DETAILS = {{ level_details_list|default([])|tojson }};
+    const root = document.getElementById('teacherLevelAssessmentRoot');
+    const loading = document.getElementById('teacherLevelAssessmentLoading');
+
+    function esc(s) {
+        if (s === null || s === undefined) return '';
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    function fmtCmds(arr) {
+        if (!arr || !arr.length) return '<span class="text-muted">—</span>';
+        return arr.map(function(c) { return '<span class="cmd-chip d-inline-block">' + esc(c) + '</span>'; }).join('<span class="cmd-flow arrow mx-1" style="border:none;background:none;padding:0;">→</span>');
+    }
+
+    function renderTelemetryBlock(att) {
+        var t = att.level_telemetry;
+        var ok = att.result_correct || att.level_completed;
+        if (!t || typeof t !== 'object') {
+            return '<div class="telemetry-panel"><h6>Program &amp; robot</h6>' +
+                '<p class="small text-muted mb-2">No extended program/robot capture for this row. Check timing and action log below.</p>' +
+                '<div class="tl-row"><div class="k">Outcome</div><div class="v">' + (ok ? '<span class="badge-result badge-result-pass">Passed</span>' : '<span class="badge-result badge-result-fail">Not completed</span>') + '</div></div>' +
+                '<div class="tl-row"><div class="k">Initial / final / RUNs</div><div class="v text-muted">—</div></div></div>';
+        }
+        var runsHtml = '';
+        if (t.run_snapshots && t.run_snapshots.length) {
+            runsHtml = '<div class="mt-3"><h6>Program evolution (each RUN)</h6>';
+            t.run_snapshots.forEach(function(s) {
+                var cmds = (s.commands && s.commands.length) ? esc(s.commands.join(' → ')) : '—';
+                runsHtml += '<div class="run-step"><div><strong>' + esc(s.label || 'RUN') + '</strong></div><div class="cmd-flow mt-1 border-0" style="margin-top:6px;">' + cmds + '</div></div>';
+            });
+            runsHtml += '</div>';
+        }
+        var hidden = (t.palette_buttons_hidden && t.palette_buttons_hidden.length) ? t.palette_buttons_hidden.map(esc).join(', ') : '—';
+        var allowed = (t.level_allowed_action_buttons && t.level_allowed_action_buttons.length)
+            ? '<div class="tl-row"><div class="k">Guided blank allowed</div><div class="v">' + t.level_allowed_action_buttons.map(esc).join(', ') + '</div></div>' : '';
+        var robSec = (t.robot_interaction_seconds != null && t.robot_interaction_seconds > 0.02) ? Number(t.robot_interaction_seconds).toFixed(1) : null;
+        var robPill = robSec
+            ? '<span class="pill-robot"><i class="bi bi-hand-index"></i> ' + robSec + 's</span>'
+            : (t.robot_was_touched ? '<span class="pill-robot"><i class="bi bi-hand-index"></i> &lt;0.1s</span>' : '<span class="pill-robot none"><i class="bi bi-hand-index-thumb"></i> No drag</span>');
+        var elapsed = (t.level_elapsed_seconds != null && t.level_elapsed_seconds >= 0)
+            ? '<div class="tl-row"><div class="k">Session time (game)</div><div class="v">' + Number(t.level_elapsed_seconds).toFixed(1) + ' s</div></div>' : '';
+
+        return '<div class="telemetry-panel">' +
+            '<h6>Program &amp; robot</h6>' +
+            '<div class="tl-row"><div class="k">Initial program</div><div class="v cmd-flow border-0" style="padding:0.4rem 0.6rem;">' + fmtCmds(t.initial_commands) + '</div></div>' +
+            '<div class="tl-row"><div class="k">Final program <span class="text-muted fw-normal">(last RUN)</span></div><div class="v cmd-flow border-0" style="padding:0.4rem 0.6rem;">' + fmtCmds(t.final_commands) + '</div></div>' +
+            (runsHtml || '') +
+            '<div class="tl-row"><div class="k">Blocks hidden / disabled</div><div class="v">' + hidden + '</div></div>' +
+            allowed +
+            '<div class="tl-row align-items-center"><div class="k">Robot touch</div><div class="v">' + robPill + '</div></div>' +
+            elapsed +
+            '</div>';
+    }
+
+    function paintLevelDetails(level_details) {
+        if (loading) { loading.remove(); }
+        if (!level_details || !level_details.length) {
+            root.innerHTML = '<div class="alert alert-light border text-center py-4 mb-0"><i class="bi bi-inbox d-block fs-3 text-muted mb-2"></i><strong>No assessment rows in the database.</strong><p class="small text-muted mb-0 mt-2">The student must run items in the game while logged in; data appears after CT assessment is saved.</p></div>';
+            return;
+        }
+        var html = '';
+        level_details.forEach(function(ld) {
+                var passed = ld.passed_count != null ? ld.passed_count : ld.completed_attempts;
+                var levelOk = passed > 0;
+                html += '<div class="level-panel-card">';
+                html += '<div class="level-panel-head">';
+                html += '<div class="level-panel-title"><i class="bi bi-flag text-primary"></i> ' + esc(ld.level_name) + '</div>';
+                html += '<div>' + (levelOk
+                    ? '<span class="badge-result badge-result-pass"><i class="bi bi-check-lg me-1"></i>Passed ' + (passed || 0) + ' run(s)</span>'
+                    : '<span class="badge-result badge-result-fail"><i class="bi bi-dash-lg me-1"></i>No pass yet</span>') + '</div></div>';
+                html += '<div class="level-meta-grid">';
+                html += '<div class="meta-item"><div class="k">Attempts</div><div class="v">' + (ld.total_attempts || 0) + '</div></div>';
+                html += '<div class="meta-item"><div class="k">Passed runs</div><div class="v text-success">' + (passed || 0) + '</div></div>';
+                html += '<div class="meta-item"><div class="k">Time (sum)</div><div class="v">' + ((ld.total_time || 0) / 60).toFixed(1) + ' min</div></div>';
+                html += '<div class="meta-item"><div class="k">Avg score</div><div class="v">' + (ld.average_score != null ? ld.average_score.toFixed(2) : '—') + '</div></div>';
+                html += '<div class="meta-item"><div class="k">Wrong / hints</div><div class="v">' + (ld.total_wrong_answers || 0) + ' / ' + (ld.total_hints_used || 0) + '</div></div>';
+                html += '</div>';
+                html += '<div class="p-3 bg-white"><div class="accordion accordion-assessment" id="acc-' + esc(ld.level_name).replace(/\s+/g, '-') + '">';
+                (ld.attempts || []).forEach(function(att, idx) {
+                    var ok = att.result_correct || att.level_completed;
+                    var bid = 't-att-' + ld.level_name.replace(/\s+/g, '-') + '-' + idx;
+                    html += '<div class="accordion-item border-0 border-bottom">';
+                    html += '<h2 class="accordion-header" id="h-' + bid + '">';
+                    html += '<button class="accordion-button collapsed py-3" type="button" data-bs-toggle="collapse" data-bs-target="#c-' + bid + '">';
+                    html += '<span class="me-2">' + (ok ? '<span class="badge-result badge-result-pass">Correct</span>' : '<span class="badge-result badge-result-fail">Not complete</span>') + '</span>';
+                    html += '<span class="fw-normal text-muted small">Attempt · ' + esc(String(att.attempt_number || (idx + 1))) + '</span>';
+                    html += '<span class="ms-auto small text-muted">' + (att.time_on_task != null ? Number(att.time_on_task).toFixed(0) + 's task' : '') + '</span>';
+                    html += '</button></h2>';
+                    html += '<div id="c-' + bid + '" class="accordion-collapse collapse"><div class="accordion-body px-3 pb-4">';
+                    html += '<div class="row g-3 mb-3"><div class="col-md-6"><h6 class="text-uppercase small fw-bold text-muted">CT scores</h6><ul class="list-unstyled small mb-0">';
+                    html += '<li>Decomposition <strong>' + esc(att.decomposition_score) + '</strong>/4</li>';
+                    html += '<li>Patterns <strong>' + esc(att.pattern_recognition_score) + '</strong>/4</li>';
+                    html += '<li>Abstraction <strong>' + esc(att.abstraction_score) + '</strong>/4</li>';
+                    html += '<li>Algorithms <strong>' + esc(att.algorithmic_thinking_score) + '</strong>/4</li>';
+                    html += '<li>Debugging <strong>' + esc(att.debugging_score) + '</strong>/4</li></ul></div>';
+                    html += '<div class="col-md-6"><h6 class="text-uppercase small fw-bold text-muted">Timing</h6><ul class="list-unstyled small mb-0">';
+                    html += '<li>Time on task: <strong>' + (att.time_on_task != null ? att.time_on_task.toFixed(1) + 's' : '—') + '</strong></li>';
+                    html += '<li>Time to first action: <strong>' + (att.time_to_first_action != null ? att.time_to_first_action.toFixed(2) + 's' : '—') + '</strong></li></ul></div></div>';
+                    html += renderTelemetryBlock(att);
+                    var ga = att.guided_actions;
+                    if (ga && (Array.isArray(ga) ? ga.length : String(ga).length)) {
+                        html += '<p class="mt-3 mb-0 small"><strong class="text-muted">Item template</strong><br><span class="cmd-flow d-inline-block mt-1 w-100">' +
+                            (Array.isArray(ga) ? ga : [ga]).map(esc).join(' → ') + '</span></p>';
+                    }
+                    if (att.action_log && att.action_log.length) {
+                        html += '<details class="mt-3"><summary class="small fw-semibold text-primary">Raw action log</summary><ul class="small mt-2 mb-0">';
+                        att.action_log.forEach(function(e) {
+                            var ts = '';
+                            if (e.timestamp !== undefined && e.timestamp !== null) {
+                                var tn = parseFloat(e.timestamp);
+                                ts = !isNaN(tn) ? tn.toFixed(2) : String(e.timestamp);
+                            }
+                            html += '<li>' + esc(e.action) + (ts ? ' <span class="text-muted">@' + ts + 's</span>' : '') + '</li>';
+                        });
+                        html += '</ul></details>';
+                    }
+                    if (att.gpt_response) {
+                        html += '<details class="mt-3"><summary class="small fw-semibold text-primary">AI feedback</summary><div class="assessment-feedback mt-2 small">' + esc(att.gpt_response).replace(/\n/g, '<br>') + '</div></details>';
+                    }
+                    html += '</div></div></div>';
+                });
+                html += '</div></div></div>';
+            });
+            root.innerHTML = html;
+    }
+
+    paintLevelDetails(Array.isArray(SERVER_LEVEL_DETAILS) ? SERVER_LEVEL_DETAILS : []);
+
+    fetch('/api/student/level_details/' + studentId, {
+        credentials: 'same-origin',
+        headers: { 'Accept': 'application/json' }
+    })
+        .then(function(r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            var ct = r.headers.get('content-type') || '';
+            if (ct.indexOf('application/json') === -1) throw new Error('Not JSON — try logging in again.');
+            return r.json();
+        })
+        .then(function(data) {
+            if (data.status === 'success' && data.level_details)
+                paintLevelDetails(data.level_details);
+        })
+        .catch(function(err) {
+            console.warn(err);
+        });
+})();
+</script>
+<style>
+.cmd-chip { background: #e0e7ff; color: #3730a3; border-radius: 6px; padding: 0.12rem 0.45rem; font-size: 0.78rem; font-weight: 600; }
+</style>
+{% endblock %}

@@ -1,180 +1,136 @@
 {% extends "base.html" %}
 
-{% block title %}Student Dashboard - {{ user.username }}{% endblock %}
+{% block title %}My progress · Coding Block{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.0/dist/chart.min.js"></script>
+<style>
+    .cmd-chip { background: #e0e7ff; color: #3730a3; border-radius: 6px; padding: 0.12rem 0.45rem; font-size: 0.78rem; font-weight: 600; }
+</style>
+{% endblock %}
 
 {% block content %}
-<style>
-    .assessment-table {
-        width: 100%;
-        border-collapse: collapse;
-        margin: 15px 0;
-    }
-    .assessment-table th,
-    .assessment-table td {
-        border: 1px solid #dee2e6;
-        padding: 8px;
-        text-align: left;
-    }
-    .assessment-table th {
-        background-color: #f8f9fa;
-        font-weight: bold;
-    }
-    .assessment-feedback {
-        background-color: #f8f9fa;
-        padding: 15px;
-        border-radius: 5px;
-        margin-top: 10px;
-        white-space: pre-wrap; /* Ensures GPT response formatting is respected */
-    }
-    .dimension-score {
-        font-weight: bold;
-        color: #0d6efd;
-    }
-    .log-entry, .assessment-history-item {
-        border-bottom: 1px solid #dee2e6;
-        padding: 15px 0;
-    }
-    .log-entry:last-child, .assessment-history-item:last-child {
-        border-bottom: none;
-    }
-    .card-header.bg-assessment {
-        background-color: #6f42c1; /* A purple color for assessments */
-        color: white;
-    }
-</style>
 
-<!-- Add Bootstrap Icons and Chart.js in the <head> or before </body> if not already present -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<div class="panel-hero">
+    <p class="small text-uppercase fw-bold text-muted mb-1 letter-spacing">Your space</p>
+    <h1>Hi, {{ user.username }}</h1>
+    <p class="lead mb-0">Track every item: whether you passed, how long you spent, your block programs, and time with the robot.</p>
+</div>
 
-<div class="container">
-    <h1 class="mb-4">Welcome, {{ user.username }}!</h1>
-
-    <!-- Quick Stats -->
-    <div class="row mb-4">
-        <div class="col-md-3">
-            <div class="card bg-primary text-white">
-                <div class="card-body text-center">
-                    <h6>Total Levels Completed</h6>
-                    <h2>{{ unique_levels_completed if unique_levels_completed is defined else 0 }}</h2>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card bg-success text-white">
-                <div class="card-body text-center">
-                    <h6>Average Game Score</h6>
-                    <h2>{{ (game_logs|sum(attribute='score') / game_logs|length)|round|int if game_logs else 0 }}</h2>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card bg-info text-white">
-                <div class="card-body text-center">
-                    <h6>Total Assessments Taken</h6>
-                    <h2>{{ assessments|length }}</h2>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card bg-warning text-white">
-                <div class="card-body text-center">
-                    <h6>Average Assessment Score</h6>
-                    <h2>{{ (assessments|sum(attribute='total_score') / assessments|length)|round|int if assessments else 0 }}</h2>
-                </div>
-            </div>
+<div class="row g-3 mb-4">
+    <div class="col-6 col-lg">
+        <div class="panel-stat-card">
+            <div class="icon-wrap bg-primary bg-opacity-10 text-primary"><i class="bi bi-map"></i></div>
+            <div class="label">Items touched</div>
+            <div class="value">{{ unique_levels_completed if unique_levels_completed is defined else 0 }}</div>
+            <div class="sub">From game activity</div>
         </div>
     </div>
-
-    <!-- Level-wise Assessment Summary -->
-    <div class="card mb-4">
-        <div class="card-header bg-success text-white">
-            <h5 class="mb-0">Level-wise Assessment Summary</h5>
-        </div>
-        <div class="card-body">
-            {% if level_summaries %}
-                {% for level, summary in level_summaries.items() %}
-                    <h6 class="mt-3">{{ level }} ({{ summary.count }} assessments)</h6>
-                    <div class="row">
-                        <div class="col-md-6">
-                            <strong><i class="bi bi-diagram-3"></i> Decomposition</strong>
-                            <div class="progress mb-2">
-                                <div class="progress-bar bg-primary" role="progressbar"
-                                     style="width: {{ (summary.avg_decomposition/4*100)|round|int }}%"
-                                     data-bs-toggle="tooltip"
-                                     title="Decomposition: {{ summary.avg_decomposition|round(2) }}/4 - Breaking down the task into steps">
-                                    {{ summary.avg_decomposition|round(2) }}/4
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <strong><i class="bi bi-repeat"></i> Pattern Recognition</strong>
-                            <div class="progress mb-2">
-                                <div class="progress-bar bg-info" role="progressbar"
-                                     style="width: {{ (summary.avg_pattern_recognition/4*100)|round|int }}%"
-                                     data-bs-toggle="tooltip"
-                                     title="Pattern Recognition: {{ summary.avg_pattern_recognition|round(2) }}/4 - Identifying and using repeated patterns">
-                                    {{ summary.avg_pattern_recognition|round(2) }}/4
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <strong><i class="bi bi-layers"></i> Abstraction</strong>
-                            <div class="progress mb-2">
-                                <div class="progress-bar bg-warning" role="progressbar"
-                                     style="width: {{ (summary.avg_abstraction/4*100)|round|int }}%"
-                                     data-bs-toggle="tooltip"
-                                     title="Abstraction: {{ summary.avg_abstraction|round(2) }}/4 - Simplifying complex problems">
-                                    {{ summary.avg_abstraction|round(2) }}/4
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <strong><i class="bi bi-gear"></i> Algorithmic Thinking</strong>
-                            <div class="progress mb-2">
-                                <div class="progress-bar bg-success" role="progressbar"
-                                     style="width: {{ (summary.avg_algorithmic_thinking/4*100)|round|int }}%"
-                                     data-bs-toggle="tooltip"
-                                     title="Algorithmic Thinking: {{ summary.avg_algorithmic_thinking|round(2) }}/4 - Constructing logical steps">
-                                    {{ summary.avg_algorithmic_thinking|round(2) }}/4
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <strong><i class="bi bi-bug"></i> Debugging</strong>
-                            <div class="progress mb-2">
-                                <div class="progress-bar bg-danger" role="progressbar"
-                                     style="width: {{ (summary.avg_debugging/4*100)|round|int }}%"
-                                     data-bs-toggle="tooltip"
-                                     title="Debugging: {{ summary.avg_debugging|round(2) }}/4 - Adjusting strategy after mistakes">
-                                    {{ summary.avg_debugging|round(2) }}/4
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <canvas id="radarChart-{{ loop.index }}" width="300" height="200" class="my-3"></canvas>
-                    <hr>
-                {% endfor %}
-            {% else %}
-                <p>No assessment data available for summary.</p>
-            {% endif %}
+    <div class="col-6 col-lg">
+        <div class="panel-stat-card">
+            <div class="icon-wrap bg-success bg-opacity-10 text-success"><i class="bi bi-check-circle"></i></div>
+            <div class="label">Items passed</div>
+            <div class="value">{{ levels_passed_ct if levels_passed_ct is defined else 0 }}</div>
+            <div class="sub">Assessment: completed run</div>
         </div>
     </div>
+    <div class="col-6 col-lg">
+        <div class="panel-stat-card">
+            <div class="icon-wrap bg-warning bg-opacity-10 text-warning"><i class="bi bi-star"></i></div>
+            <div class="label">Avg game score</div>
+            <div class="value">{{ (game_logs|sum(attribute='score') / game_logs|length)|round|int if game_logs else 0 }}</div>
+            <div class="sub">Across logs</div>
+        </div>
+    </div>
+    <div class="col-6 col-lg">
+        <div class="panel-stat-card">
+            <div class="icon-wrap bg-secondary bg-opacity-10 text-secondary"><i class="bi bi-clipboard-check"></i></div>
+            <div class="label">CT assessments</div>
+            <div class="value">{{ assessments|length }}</div>
+            <div class="sub">Avg total {{ (assessments|sum(attribute='total_score') / assessments|length)|round|int if assessments else 0 }}</div>
+        </div>
+    </div>
+</div>
 
-    <!-- Initialize Bootstrap tooltips and render radar charts -->
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-            tooltipTriggerList.forEach(function (tooltipTriggerEl) {
-                new bootstrap.Tooltip(tooltipTriggerEl);
-            });
-        });
+{% if level_summaries %}
+<div class="panel-section mb-4">
+    <div class="panel-section-header">
+        <h2><i class="bi bi-graph-up-arrow me-2 text-primary"></i>Thinking skills (averages)</h2>
+        <p class="hint mb-0">Computational thinking dimensions — higher is stronger.</p>
+    </div>
+    <div class="panel-section-body">
         {% for level, summary in level_summaries.items() %}
-        var ctx{{ loop.index }} = document.getElementById('radarChart-{{ loop.index }}').getContext('2d');
-        new Chart(ctx{{ loop.index }}, {
+        <div class="mb-4 pb-4 {% if not loop.last %}border-bottom{% endif %}">
+            <h3 class="h6 fw-bold mb-3">{{ level }} <span class="text-muted fw-normal">· {{ summary.count }} assessment{{ 's' if summary.count != 1 else '' }}</span></h3>
+            <div class="row g-3">
+                <div class="col-md-6 col-lg-4">
+                    <div class="small fw-semibold text-muted mb-1"><i class="bi bi-diagram-3 me-1"></i>Decomposition</div>
+                    <div class="progress" style="height:10px;">
+                        <div class="progress-bar" style="width: {{ (summary.avg_decomposition/4*100)|round|int }}%; background:#2563eb;"></div>
+                    </div>
+                    <div class="small mt-1">{{ summary.avg_decomposition|round(2) }}/4</div>
+                </div>
+                <div class="col-md-6 col-lg-4">
+                    <div class="small fw-semibold text-muted mb-1"><i class="bi bi-repeat me-1"></i>Pattern</div>
+                    <div class="progress" style="height:10px;">
+                        <div class="progress-bar" style="width: {{ (summary.avg_pattern_recognition/4*100)|round|int }}%; background:#0891b2;"></div>
+                    </div>
+                    <div class="small mt-1">{{ summary.avg_pattern_recognition|round(2) }}/4</div>
+                </div>
+                <div class="col-md-6 col-lg-4">
+                    <div class="small fw-semibold text-muted mb-1"><i class="bi bi-layers me-1"></i>Abstraction</div>
+                    <div class="progress" style="height:10px;">
+                        <div class="progress-bar bg-warning" style="width: {{ (summary.avg_abstraction/4*100)|round|int }}%;"></div>
+                    </div>
+                    <div class="small mt-1">{{ summary.avg_abstraction|round(2) }}/4</div>
+                </div>
+                <div class="col-md-6 col-lg-4">
+                    <div class="small fw-semibold text-muted mb-1"><i class="bi bi-gear me-1"></i>Algorithms</div>
+                    <div class="progress" style="height:10px;">
+                        <div class="progress-bar bg-success" style="width: {{ (summary.avg_algorithmic_thinking/4*100)|round|int }}%;"></div>
+                    </div>
+                    <div class="small mt-1">{{ summary.avg_algorithmic_thinking|round(2) }}/4</div>
+                </div>
+                <div class="col-md-6 col-lg-4">
+                    <div class="small fw-semibold text-muted mb-1"><i class="bi bi-bug me-1"></i>Debugging</div>
+                    <div class="progress" style="height:10px;">
+                        <div class="progress-bar bg-danger" style="width: {{ (summary.avg_debugging/4*100)|round|int }}%;"></div>
+                    </div>
+                    <div class="small mt-1">{{ summary.avg_debugging|round(2) }}/4</div>
+                </div>
+                <div class="col-12 col-lg-6">
+                    <canvas id="radarChart-{{ loop.index }}" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<div class="panel-section mb-4">
+    <div class="panel-section-header">
+        <h2><i class="bi bi-ui-checks-grid me-2 text-primary"></i>Item assessment detail</h2>
+        <p class="hint mb-0">Pass/fail, time, initial → each RUN → final program, hidden blocks, robot touch.</p>
+    </div>
+    <div class="panel-section-body">
+        <div id="levelDetailsContainer"></div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.forEach(function (el) { new bootstrap.Tooltip(el); });
+
+    {% for level, summary in level_summaries.items() %}
+    (function() {
+        var el = document.getElementById('radarChart-{{ loop.index }}');
+        if (!el || typeof Chart === 'undefined') return;
+        new Chart(el.getContext('2d'), {
             type: 'radar',
             data: {
-                labels: ['Decomposition', 'Pattern Recognition', 'Abstraction', 'Algorithmic Thinking', 'Debugging'],
+                labels: ['Decomposition', 'Patterns', 'Abstraction', 'Algorithms', 'Debugging'],
                 datasets: [{
                     label: '{{ level }}',
                     data: [
@@ -184,269 +140,323 @@
                         {{ summary.avg_algorithmic_thinking|round(2) }},
                         {{ summary.avg_debugging|round(2) }}
                     ],
-                    backgroundColor: 'rgba(54, 162, 235, 0.2)',
-                    borderColor: 'rgba(54, 162, 235, 1)',
-                    borderWidth: 2,
-                    pointBackgroundColor: 'rgba(54, 162, 235, 1)'
+                    backgroundColor: 'rgba(37, 99, 235, 0.2)',
+                    borderColor: 'rgba(37, 99, 235, 1)',
+                    borderWidth: 2
                 }]
             },
             options: {
-                responsive: false,
-                plugins: {
-                    legend: { display: false }
-                },
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
                 scales: {
-                    r: {
-                        min: 0,
-                        max: 4,
-                        ticks: {
-                            stepSize: 1
-                        }
-                    }
+                    r: { min: 0, max: 4, ticks: { stepSize: 1 } }
                 }
             }
         });
-        {% endfor %}
-    </script>
+    })();
+    {% endfor %}
 
-    <!-- Assessment History -->
-    <div class="card mb-4">
-        <div class="card-header bg-assessment">
-            <h5 class="mb-0">Assessment History</h5>
-        </div>
-        <div class="card-body">
-            {% if assessments %}
-                {% for assessment in assessments %}
-                <div class="assessment-history-item">
-                    <div class="d-flex justify-content-between">
-                        <h4>Level: {{ assessment.level }}</h4>
-                        <small class="text-muted">Assessed on: {{ assessment.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</small>
-                    </div>
-                    <!-- Classic CT Score Table -->
-                    <h6 class="mt-3">Computational Thinking Scores:</h6>
-                    <table class="assessment-table">
-                        <thead>
-                            <tr>
-                                <th>Dimension</th>
-                                <th>Score</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td>Decomposition</td>
-                                <td class="dimension-score">{{ assessment.decomposition_score }}/4</td>
-                            </tr>
-                            <tr>
-                                <td>Pattern Recognition</td>
-                                <td class="dimension-score">{{ assessment.pattern_recognition_score }}/4</td>
-                            </tr>
-                            <tr>
-                                <td>Abstraction</td>
-                                <td class="dimension-score">{{ assessment.abstraction_score }}/4</td>
-                            </tr>
-                            <tr>
-                                <td>Algorithmic Thinking</td>
-                                <td class="dimension-score">{{ assessment.algorithmic_thinking_score }}/4</td>
-                            </tr>
-                            <tr>
-                                <td>Debugging</td>
-                                <td class="dimension-score">{{ assessment.debugging_score }}/4</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                    <!-- AI's Detailed Feedback -->
-                    <div class="mt-3">
-                        <h6>AI's Detailed Feedback for this attempt:</h6>
-                        <div class="assessment-feedback">
-                            {% if assessment.gpt_response %}
-                                {{ assessment.gpt_response }}
-                            {% else %}
-                                <p>No detailed feedback available for this assessment.</p>
-                            {% endif %}
-                        </div>
-                    </div>
-                    <!-- Action Timeline -->
-                    {% if assessment.action_log %}
-                        <h6>Action Timeline:</h6>
-                        <ul class="list-group mb-3">
-                            {% set log = assessment.action_log | safe | loads %}
-                            {% for entry in log %}
-                                <li class="list-group-item">
-                                    <strong>{{ entry.action|capitalize }}</strong>
-                                    <span class="text-muted">at {{ entry.timestamp|round(2) }}s</span>
-                                </li>
-                            {% endfor %}
-                        </ul>
-                    {% endif %}
-                    <!-- Advanced CT Radar -->
-                    {% if assessment.ct_extra_scores %}
-                        {% set extra = assessment.ct_extra_scores | safe | loads %}
-                        {% if extra.advanced_scores %}
-                            <div class="mb-2">
-                                <button type="button"
-                                        class="border-0 bg-transparent p-0"
-                                        style="display:inline-block; cursor:pointer; outline:none;"
-                                        onclick="showRadarModal({{ extra.advanced_scores | tojson }}, 'Advanced CT Skills for Assessment {{ assessment.id }}')">
-                                    <canvas id="radar-{{ assessment.id }}" width="200" height="140" style="max-width:100%;margin-bottom:0.5rem;pointer-events:none;"></canvas>
-                                    <div class="text-center text-primary" style="font-size:0.9em;">Click to expand</div>
-                                </button>
-                            </div>
-                            <script>
-                                document.addEventListener('DOMContentLoaded', function() {
-                                    var ctx = document.getElementById('radar-{{ assessment.id }}').getContext('2d');
-                                    new Chart(ctx, {
-                                        type: 'radar',
-                                        data: {
-                                            labels: [
-                                                'Planning Quality', 'Execution Fidelity', 'Adaptation/Iteration',
-                                                'Creativity', 'Time to Solution', 'Block Efficiency', 'Hint Reliance'
-                                            ],
-                                            datasets: [{
-                                                label: 'Advanced CT Skills',
-                                                data: [
-                                                    {{ extra.advanced_scores.planning_quality|default(0) }},
-                                                    {{ extra.advanced_scores.execution_fidelity|default(0) }},
-                                                    {{ extra.advanced_scores.adaptation_iteration|default(0) }},
-                                                    {{ extra.advanced_scores.creativity|default(0) }},
-                                                    {{ extra.advanced_scores.time_to_solution|default(0) }},
-                                                    {{ extra.advanced_scores.block_efficiency|default(0) }},
-                                                    {{ extra.advanced_scores.hint_reliance|default(0) }}
-                                                ],
-                                                backgroundColor: 'rgba(54, 162, 235, 0.2)',
-                                                borderColor: 'rgba(54, 162, 235, 1)'
-                                            }]
-                                        },
-                                        options: {
-                                            plugins: { legend: { display: false } },
-                                            scales: { r: { min: 0, max: 4, ticks: { stepSize: 1 } } }
-                                        }
-                                    });
-                                });
-                            </script>
-                        {% endif %}
-                        <!-- Qualitative Feedback -->
-                        {% if extra.qualitative_feedback %}
-                            <div class="card mt-3">
-                                <div class="card-header bg-info text-white">AI Feedback</div>
-                                <div class="card-body">
-                                    <p><strong>Misconceptions:</strong> {{ extra.qualitative_feedback.misconceptions }}</p>
-                                    <p><strong>Next Step:</strong> {{ extra.qualitative_feedback.next_step }}</p>
-                                    <p><strong>Harder Challenge:</strong> {{ extra.qualitative_feedback.harder_challenge }}</p>
-                                    <p><strong>Summary:</strong> {{ extra.qualitative_feedback.overall_summary }}</p>
-                                </div>
-                            </div>
-                        {% endif %}
-                    {% endif %}
-                    <!-- Raw JSON (collapsible) -->
-                    <button class="btn btn-secondary btn-sm mt-2" type="button" data-bs-toggle="collapse" data-bs-target="#rawJson-{{ assessment.id }}">
-                        Show Raw Data
-                    </button>
-                    <div class="collapse" id="rawJson-{{ assessment.id }}">
-                        <pre class="bg-light p-2 rounded">{{ assessment.ct_extra_scores | tojson(indent=2) }}</pre>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-6">
-                            <strong>Number of Attempts:</strong>
-                            {{ assessment.number_of_attempts or 'N/A' }}
-                        </div>
-                        <div class="col-md-6">
-                            <strong>Time on Task:</strong>
-                            {{ assessment.time_on_task|round(2) if assessment.time_on_task else 'N/A' }} seconds
-                        </div>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-6">
-                            <strong>Persistence Score:</strong>
-                            {{ assessment.persistence_score or 'N/A' }}
-                        </div>
-                        <div class="col-md-6">
-                            <strong>Creativity Score:</strong>
-                            {{ assessment.creativity_score or 'N/A' }}
-                        </div>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-6">
-                            <strong>Error Types:</strong>
-                            {% if assessment.error_types %}
-                                {{ assessment.error_types }}
-                            {% else %}
-                                N/A
-                            {% endif %}
-                        </div>
-                        <div class="col-md-6">
-                            <strong>Collaboration Events:</strong>
-                            {% if assessment.collaboration_events %}
-                                {{ assessment.collaboration_events }}
-                            {% else %}
-                                N/A
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
-                {% endfor %}
-            {% else %}
-                <p class="text-muted">No assessments available yet. Complete a level to see your first assessment!</p>
-            {% endif %}
-        </div>
+    function esc(s) {
+        if (s === null || s === undefined) return '';
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    function fmtCmds(arr) {
+        if (!arr || !arr.length) return '<span class="text-muted">—</span>';
+        return arr.map(function(c) { return '<span class="cmd-chip">' + esc(c) + '</span>'; }).join('<span class="text-muted px-1">→</span>');
+    }
+
+    function formatLevelTelemetryBlock(attempt) {
+        var t = attempt.level_telemetry;
+        var ok = attempt.result_correct || attempt.level_completed;
+        if (!t) {
+            return '<div class="telemetry-panel">' +
+                '<h6><i class="bi bi-robot me-1"></i> Program &amp; robot</h6>' +
+                '<p class="small text-muted mb-2">No extended program/robot capture for this row (older save, or game did not send telemetry yet). You still have scores, timing, and action log below when available.</p>' +
+                '<div class="tl-row"><div class="k">Outcome</div><div class="v">' + (ok ? '<span class="badge-result badge-result-pass">Passed</span>' : '<span class="badge-result badge-result-fail">Not completed</span>') + '</div></div>' +
+                '<div class="tl-row"><div class="k">Initial / final / RUNs</div><div class="v text-muted">—</div></div>' +
+                '<div class="tl-row"><div class="k">Blocks hidden</div><div class="v text-muted">—</div></div>' +
+                '<div class="tl-row"><div class="k">Robot touch</div><div class="v text-muted">—</div></div></div>';
+        }
+        var runsHtml = '';
+        if (t.run_snapshots && t.run_snapshots.length) {
+            runsHtml = '<div class="mt-3"><h6>Each RUN (program evolution)</h6>';
+            t.run_snapshots.forEach(function(s) {
+                var cmds = (s.commands && s.commands.length) ? esc(s.commands.join(' → ')) : '—';
+                runsHtml += '<div class="run-step"><div><strong>' + esc(s.label || 'RUN') + '</strong></div><div class="cmd-flow mt-1 small">' + cmds + '</div></div>';
+            });
+            runsHtml += '</div>';
+        }
+        var hidden = (t.palette_buttons_hidden && t.palette_buttons_hidden.length) ? t.palette_buttons_hidden.map(esc).join(', ') : '—';
+        var allowed = (t.level_allowed_action_buttons && t.level_allowed_action_buttons.length)
+            ? '<div class="tl-row"><div class="k">Guided blank choices</div><div class="v">' + t.level_allowed_action_buttons.map(esc).join(', ') + '</div></div>' : '';
+        var robSec = (t.robot_interaction_seconds != null && t.robot_interaction_seconds > 0.05) ? Number(t.robot_interaction_seconds).toFixed(1) + ' s' : null;
+        var robShow = robSec || (t.robot_was_touched ? '&lt; 0.1 s' : 'No drag');
+        var robPill = (!robSec && !t.robot_was_touched)
+            ? '<span class="pill-robot none"><i class="bi bi-hand-index-thumb"></i> No touch</span>'
+            : '<span class="pill-robot"><i class="bi bi-hand-index"></i> ' + robShow + '</span>';
+        var elapsed = (t.level_elapsed_seconds != null && t.level_elapsed_seconds >= 0)
+            ? '<div class="tl-row"><div class="k">Item time (game)</div><div class="v">' + Number(t.level_elapsed_seconds).toFixed(1) + ' s</div></div>' : '';
+
+        return '<div class="telemetry-panel">' +
+            '<h6><i class="bi bi-robot me-1"></i> Result & program</h6>' +
+            '<div class="tl-row"><div class="k">Outcome</div><div class="v">' + (ok ? '<span class="badge-result badge-result-pass">Passed</span>' : '<span class="badge-result badge-result-fail">Not completed</span>') + '</div></div>' +
+            '<div class="tl-row"><div class="k">Initial program</div><div class="v">' + fmtCmds(t.initial_commands) + '</div></div>' +
+            '<div class="tl-row"><div class="k">Final program</div><div class="v">' + fmtCmds(t.final_commands) + '</div></div>' +
+            (runsHtml || '') +
+            '<div class="tl-row"><div class="k">Blocks hidden / locked</div><div class="v">' + hidden + '</div></div>' +
+            allowed +
+            '<div class="tl-row align-items-center"><div class="k">Robot</div><div class="v">' + robPill + '</div></div>' +
+            elapsed +
+            '</div>';
+    }
+
+    function displayDetailedLevelInfo(levelDetails) {
+        var container = document.getElementById('levelDetailsContainer');
+        if (!levelDetails.length) {
+            container.innerHTML = '<div class="alert alert-light border text-center py-4 mb-0"><i class="bi bi-inbox d-block fs-3 text-muted mb-2"></i><strong>No assessment rows in the database yet.</strong><p class="small text-muted mb-0 mt-2">Play levels in the Unity game while logged in; when an item finishes, data appears here automatically.</p></div>';
+            return;
+        }
+        var html = '';
+        levelDetails.forEach(function(level) {
+            var passed = level.passed_count != null ? level.passed_count : level.completed_attempts;
+            var badge = passed > 0
+                ? '<span class="badge-result badge-result-pass"><i class="bi bi-check-lg me-1"></i>' + passed + ' passed</span>'
+                : '<span class="badge-result badge-result-fail">No pass yet</span>';
+            html += '<div class="level-panel-card"><div class="level-panel-head">';
+            html += '<div class="level-panel-title"><i class="bi bi-flag text-primary"></i> ' + esc(level.level_name) + '</div><div>' + badge + '</div></div>';
+            html += '<div class="level-meta-grid">';
+            html += '<div class="meta-item"><div class="k">Attempts</div><div class="v">' + (level.total_attempts || 0) + '</div></div>';
+            html += '<div class="meta-item"><div class="k">Time total</div><div class="v">' + ((level.total_time || 0) / 60).toFixed(1) + ' min</div></div>';
+            html += '<div class="meta-item"><div class="k">Avg score</div><div class="v">' + (level.average_score != null ? level.average_score.toFixed(2) : '—') + '</div></div>';
+            html += '<div class="meta-item"><div class="k">Hints / wrong</div><div class="v">' + (level.total_hints_used || 0) + ' / ' + (level.total_wrong_answers || 0) + '</div></div>';
+            html += '</div><div class="p-3 bg-white"><div class="accordion accordion-assessment" id="acc-' + esc(level.level_name).replace(/\s+/g, '-') + '">';
+
+            level.attempts.forEach(function(attempt, index) {
+                var attemptId = esc(level.level_name).replace(/\s+/g, '-') + '-a-' + index;
+                var headerBad = (attempt.result_correct || attempt.level_completed)
+                    ? '<span class="badge-result badge-result-pass me-2">Correct</span>'
+                    : '<span class="badge-result badge-result-fail me-2">Incomplete</span>';
+                html += '<div class="accordion-item border-0 border-bottom">';
+                html += '<h2 class="accordion-header"><button class="accordion-button collapsed py-3" type="button" data-bs-toggle="collapse" data-bs-target="#col-' + attemptId + '">';
+                html += headerBad + '<span class="small text-muted">Attempt ' + esc(attempt.attempt_number) + ' · ' + new Date(attempt.created_at).toLocaleString() + '</span>';
+                html += '<span class="ms-auto small">' + (attempt.total_score != null ? esc(attempt.total_score) + ' pts' : '') + '</span></button></h2>';
+                html += '<div id="col-' + attemptId + '" class="accordion-collapse collapse"><div class="accordion-body px-3 pb-4">';
+                html += '<div class="row g-3 small"><div class="col-md-6"><strong class="text-muted text-uppercase" style="font-size:0.65rem;">Scores</strong><ul class="mb-0 mt-2">';
+                html += '<li>Decomposition ' + esc(attempt.decomposition_score) + '/4</li>';
+                html += '<li>Pattern ' + esc(attempt.pattern_recognition_score) + '/4 · Abstraction ' + esc(attempt.abstraction_score) + '/4</li>';
+                html += '<li>Algorithm ' + esc(attempt.algorithmic_thinking_score) + '/4 · Debug ' + esc(attempt.debugging_score) + '/4</li></ul></div>';
+                html += '<div class="col-md-6"><strong class="text-muted text-uppercase" style="font-size:0.65rem;">Timing</strong><ul class="mb-0 mt-2">';
+                html += '<li>On task: ' + (attempt.time_on_task != null ? attempt.time_on_task.toFixed(1) + 's' : '—') + '</li>';
+                html += '<li>To first action: ' + (attempt.time_to_first_action != null ? attempt.time_to_first_action.toFixed(2) + 's' : '—') + '</li></ul></div></div>';
+                html += formatLevelTelemetryBlock(attempt);
+                if (attempt.guided_actions && attempt.guided_actions.length) {
+                    html += '<p class="mt-3 mb-0 small"><strong>Item template</strong><br><span class="cmd-flow d-block mt-1">' + (
+                        Array.isArray(attempt.guided_actions) ? attempt.guided_actions : [attempt.guided_actions]
+                    ).map(esc).join(' → ') + '</span></p>';
+                }
+                if (attempt.user_blank_answers && attempt.user_blank_answers.length) {
+                    html += '<p class="mt-2 small mb-0"><strong>Your blanks</strong> — ' + (
+                        Array.isArray(attempt.user_blank_answers) ? attempt.user_blank_answers : []
+                    ).map(esc).join(', ') + '</p>';
+                }
+                if (attempt.action_log && attempt.action_log.length) {
+                    html += '<details class="mt-3"><summary class="small fw-semibold">Action log</summary><div class="cmd-flow mt-2 small" style="max-height:180px;overflow:auto;">';
+                    attempt.action_log.forEach(function(action) {
+                        var ts = (action.timestamp !== undefined && action.timestamp !== null && typeof action.timestamp === 'number') ? action.timestamp.toFixed(1) + 's' : '';
+                        html += '<div>' + (ts ? '<span class="text-muted">' + ts + '</span> ' : '') + esc(action.action) + '</div>';
+                    });
+                    html += '</div></details>';
+                }
+                if (attempt.gpt_response) {
+                    html += '<details class="mt-3"><summary class="small fw-semibold">AI feedback</summary><div class="assessment-feedback mt-2 small">' + esc(attempt.gpt_response).replace(/\n/g, '<br>') + '</div></details>';
+                }
+                html += '</div></div></div>';
+            });
+            html += '</div></div></div>';
+        });
+        container.innerHTML = html;
+    }
+
+    var SERVER_LEVEL_DETAILS = {{ level_details_list|default([])|tojson }};
+    displayDetailedLevelInfo(Array.isArray(SERVER_LEVEL_DETAILS) ? SERVER_LEVEL_DETAILS : []);
+
+    fetch('/api/student/level_details/{{ user.id }}', {
+        credentials: 'same-origin',
+        headers: { 'Accept': 'application/json' }
+    })
+        .then(function(r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            var ct = r.headers.get('content-type') || '';
+            if (ct.indexOf('application/json') === -1)
+                throw new Error('Session may have expired — refresh the page and log in again.');
+            return r.json();
+        })
+        .then(function(data) {
+            if (data.status === 'success' && data.level_details)
+                displayDetailedLevelInfo(data.level_details);
+        })
+        .catch(function(err) {
+            var el = document.getElementById('levelDetailsContainer');
+            if (!el) return;
+            if (!el.innerHTML || el.innerHTML.indexOf('level-panel-card') === -1) {
+                el.innerHTML = '<div class="alert alert-warning mb-0"><strong>Could not refresh from server.</strong> ' + esc(String(err.message || err)) + '</div>';
+            }
+        });
+});
+</script>
+
+<div class="panel-section mb-4">
+    <div class="panel-section-header">
+        <h2><i class="bi bi-collection me-2 text-primary"></i>Assessment history</h2>
+        <p class="hint mb-0">Full CT scores and AI commentary per submission.</p>
     </div>
-
-    <!-- Recent Game Logs -->
-    <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <h5 class="mb-0">Recent Game Logs</h5>
-            <a href="{{ url_for('student_logs') }}" class="btn btn-primary btn-sm">View All Logs</a>
-        </div>
-        <div class="card-body">
-            {% if game_logs %}
-                {% for log in game_logs[:5] %}
-                <div class="log-entry">
-                    <div class="d-flex justify-content-between">
-                        <h6>Level: {{ log.level }}</h6>
-                        <small class="text-muted">{{ log.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</small>
-                    </div>
-                    <p class="mb-1">Score: <span class="badge bg-primary">{{ log.score }}</span></p>
-                    <p class="mb-0">Actions: {{ log.actions }}</p>
+    <div class="panel-section-body">
+        {% if assessments %}
+            {% for assessment in assessments %}
+            <div class="assessment-history-item">
+                <div class="d-flex justify-content-between flex-wrap gap-2">
+                    <h3 class="h5 mb-0">{{ assessment.level }}</h3>
+                    <small class="text-muted">{{ assessment.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</small>
                 </div>
-                {% endfor %}
-            {% else %}
-                <p class="text-muted">No game logs available.</p>
-            {% endif %}
-        </div>
+                <div class="mt-2 mb-3">
+                    {% if assessment.level_completed %}
+                        <span class="badge-result badge-result-pass">Level completed</span>
+                    {% else %}
+                        <span class="badge-result badge-result-fail">Not completed</span>
+                    {% endif %}
+                </div>
+                <h4 class="h6 text-muted text-uppercase small fw-bold">Computational thinking</h4>
+                <table class="assessment-table mb-3">
+                    <thead><tr><th>Dimension</th><th>Score</th></tr></thead>
+                    <tbody>
+                        <tr><td>Decomposition</td><td class="dimension-score">{{ assessment.decomposition_score }}/4</td></tr>
+                        <tr><td>Pattern recognition</td><td class="dimension-score">{{ assessment.pattern_recognition_score }}/4</td></tr>
+                        <tr><td>Abstraction</td><td class="dimension-score">{{ assessment.abstraction_score }}/4</td></tr>
+                        <tr><td>Algorithmic thinking</td><td class="dimension-score">{{ assessment.algorithmic_thinking_score }}/4</td></tr>
+                        <tr><td>Debugging</td><td class="dimension-score">{{ assessment.debugging_score }}/4</td></tr>
+                    </tbody>
+                </table>
+                <div class="mt-3">
+                    <h4 class="h6 text-muted">AI feedback</h4>
+                    <div class="assessment-feedback">
+                        {% if assessment.gpt_response %}
+                            {{ assessment.gpt_response }}
+                        {% else %}
+                            <span class="text-muted">No narrative for this row.</span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% if assessment.action_log %}
+                    <h4 class="h6 mt-3 text-muted">Action timeline</h4>
+                    <ul class="list-group list-group-flush">
+                        {% set log = assessment.action_log | safe | loads %}
+                        {% for entry in log %}
+                            <li class="list-group-item px-0 bg-transparent border-light">
+                                <strong>{{ entry.action|capitalize }}</strong>
+                                <span class="text-muted small">@ {{ entry.timestamp|round(2) }}s</span>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+                {% if assessment.ct_extra_scores %}
+                    {% set extra = assessment.ct_extra_scores | safe | loads %}
+                    {% if extra.advanced_scores %}
+                        <div class="mt-3">
+                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="showRadarModal({{ extra.advanced_scores | tojson }}, 'Advanced skills · {{ assessment.id }}')">
+                                Expand radar chart
+                            </button>
+                            <canvas id="radar-{{ assessment.id }}" width="200" height="140" class="mt-2 d-block" style="max-width:100%"></canvas>
+                        </div>
+                        <script>
+                        document.addEventListener('DOMContentLoaded', function() {
+                            var c = document.getElementById('radar-{{ assessment.id }}');
+                            if (!c || typeof Chart === 'undefined') return;
+                            new Chart(c.getContext('2d'), {
+                                type: 'radar',
+                                data: {
+                                    labels: ['Planning','Execution','Adaptation','Creativity','Time','Blocks','Hints'],
+                                    datasets: [{
+                                        data: [
+                                            {{ extra.advanced_scores.planning_quality|default(0) }},
+                                            {{ extra.advanced_scores.execution_fidelity|default(0) }},
+                                            {{ extra.advanced_scores.adaptation_iteration|default(0) }},
+                                            {{ extra.advanced_scores.creativity|default(0) }},
+                                            {{ extra.advanced_scores.time_to_solution|default(0) }},
+                                            {{ extra.advanced_scores.block_efficiency|default(0) }},
+                                            {{ extra.advanced_scores.hint_reliance|default(0) }}
+                                        ],
+                                        backgroundColor: 'rgba(99, 102, 241, 0.2)',
+                                        borderColor: 'rgba(99, 102, 241, 1)'
+                                    }]
+                                },
+                                options: {
+                                    plugins: { legend: { display: false } },
+                                    scales: { r: { min: 0, max: 4 } }
+                                }
+                            });
+                        });
+                        </script>
+                    {% endif %}
+                {% endif %}
+                <button class="btn btn-sm btn-light border mt-2" type="button" data-bs-toggle="collapse" data-bs-target="#raw-{{ assessment.id }}">Raw JSON</button>
+                <div class="collapse mt-2" id="raw-{{ assessment.id }}"><pre class="bg-light p-3 rounded small">{{ assessment.ct_extra_scores | tojson(indent=2) if assessment.ct_extra_scores else '{}' }}</pre></div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <p class="text-muted mb-0">No assessments yet — complete an item in the game.</p>
+        {% endif %}
     </div>
 </div>
 
-<!-- Modal for expanded radar chart (add once at the bottom of the template, outside the assessment loop) -->
-<div class="modal fade" id="radarModal" tabindex="-1" aria-labelledby="radarModalLabel" aria-hidden="true">
+<div class="panel-section">
+    <div class="panel-section-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h2 class="h5 mb-0"><i class="bi bi-clock-history me-2 text-primary"></i>Recent game logs</h2>
+        <a href="{{ url_for('student_logs') }}" class="btn btn-sm btn-primary rounded-pill">View all</a>
+    </div>
+    <div class="panel-section-body">
+        {% if game_logs %}
+            {% for log in game_logs[:5] %}
+            <div class="log-entry">
+                <div class="d-flex justify-content-between">
+                    <span class="fw-semibold">{{ log.level }}</span>
+                    <small class="text-muted">{{ log.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                </div>
+                <span class="badge bg-primary bg-opacity-10 text-primary mt-1">Score {{ log.score }}</span>
+                <p class="mb-0 small text-muted mt-1">{{ log.actions }}</p>
+            </div>
+            {% endfor %}
+        {% else %}
+            <p class="text-muted mb-0">No logs yet.</p>
+        {% endif %}
+    </div>
+</div>
+
+<div class="modal fade" id="radarModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
+    <div class="modal-content border-0 shadow">
       <div class="modal-header">
-        <h5 class="modal-title" id="radarModalLabel">Advanced CT Skills (Expanded View)</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        <h5 class="modal-title" id="radarModalLabel">Advanced CT skills</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body text-center">
-        <canvas id="radarModalCanvas" width="350" height="250"></canvas>
+        <canvas id="radarModalCanvas" height="280"></canvas>
       </div>
     </div>
   </div>
 </div>
 <script>
 function showRadarModal(scores, title) {
-    var modal = new bootstrap.Modal(document.getElementById('radarModal'));
-    document.getElementById('radarModalLabel').textContent = title || 'Advanced CT Skills';
-    // Destroy previous chart if exists
-    if (window.radarModalChart) {
-        window.radarModalChart.destroy();
-    }
+    document.getElementById('radarModalLabel').textContent = title || 'Advanced CT skills';
+    if (window.radarModalChart) window.radarModalChart.destroy();
     var ctx = document.getElementById('radarModalCanvas').getContext('2d');
     window.radarModalChart = new Chart(ctx, {
         type: 'radar',
         data: {
-            labels: [
-                'Planning Quality', 'Execution Fidelity', 'Adaptation/Iteration',
-                'Creativity', 'Time to Solution', 'Block Efficiency', 'Hint Reliance'
-            ],
+            labels: ['Planning','Execution','Adaptation','Creativity','Time','Blocks','Hints'],
             datasets: [{
-                label: 'Advanced CT Skills',
+                label: 'Skills',
                 data: [
                     scores.planning_quality || 0,
                     scores.execution_fidelity || 0,
@@ -456,19 +466,13 @@ function showRadarModal(scores, title) {
                     scores.block_efficiency || 0,
                     scores.hint_reliance || 0
                 ],
-                backgroundColor: 'rgba(54, 162, 235, 0.2)',
-                borderColor: 'rgba(54, 162, 235, 1)'
+                backgroundColor: 'rgba(99, 102, 241, 0.2)',
+                borderColor: 'rgba(99, 102, 241, 1)'
             }]
         },
-        options: {
-            plugins: { legend: { display: true } },
-            scales: { r: { min: 0, max: 4, ticks: { stepSize: 1 } } }
-        }
+        options: { scales: { r: { min: 0, max: 4 } } }
     });
-    modal.show();
+    new bootstrap.Modal(document.getElementById('radarModal')).show();
 }
 </script>
-<!-- Ensure Bootstrap JS and Chart.js are loaded at the end of the body -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.0/dist/chart.min.js"></script>
-{% endblock %} 
+{% endblock %}

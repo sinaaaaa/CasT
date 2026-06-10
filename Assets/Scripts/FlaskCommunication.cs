@@ -1,11 +1,13 @@
-using UnityEngine;
-using UnityEngine.Networking;
-using System.Collections;
 using System;
+using System.Collections;
+using UnityEngine;
 
+/// <summary>
+/// Legacy name kept for existing scenes. All calls forward to the Next.js platform (port 3000).
+/// </summary>
+[Obsolete("Use PlatformCommunication instead. This class only forwards calls.")]
 public class FlaskCommunication : MonoBehaviour
 {
-    private const string FLASK_URL = "https://web-production-db15b.up.railway.app";
     private static FlaskCommunication instance;
 
     public static FlaskCommunication Instance
@@ -14,7 +16,7 @@ public class FlaskCommunication : MonoBehaviour
         {
             if (instance == null)
             {
-                GameObject go = new GameObject("FlaskCommunication");
+                var go = new GameObject("FlaskCommunication");
                 instance = go.AddComponent<FlaskCommunication>();
                 DontDestroyOnLoad(go);
             }
@@ -29,7 +31,7 @@ public class FlaskCommunication : MonoBehaviour
             instance = this;
             DontDestroyOnLoad(gameObject);
         }
-        else
+        else if (instance != this)
         {
             Destroy(gameObject);
         }
@@ -37,79 +39,17 @@ public class FlaskCommunication : MonoBehaviour
 
     public void SendGameProgress(string userId, string level, int score, string actions)
     {
-        StartCoroutine(SendProgressToFlask(userId, level, score, actions));
-    }
-
-    private IEnumerator SendProgressToFlask(string userId, string level, int score, string actions)
-    {
-        WWWForm form = new WWWForm();
-        form.AddField("user_id", userId);
-        form.AddField("level", level);
-        form.AddField("score", score.ToString());
-        form.AddField("actions", actions);
-
-        using (UnityWebRequest www = UnityWebRequest.Post(FLASK_URL + "/api/game_progress", form))
-        {
-            yield return www.SendWebRequest();
-
-            if (www.result == UnityWebRequest.Result.Success)
-            {
-                Debug.Log("Progress sent successfully to Flask");
-            }
-            else
-            {
-                Debug.LogError("Error sending progress to Flask: " + www.error);
-            }
-        }
+        PlatformCommunication.Instance.SendGameProgress(userId, level, score, actions);
     }
 
     public void GetUserLogs(string userId, Action<string> callback)
     {
-        StartCoroutine(GetLogsFromFlask(userId, callback));
+        Debug.LogWarning("[FlaskCommunication] GetUserLogs is not implemented on the platform yet.");
+        callback?.Invoke(null);
     }
 
     public void CheckOrCreateStudent(string studentId, Action<bool, string> callback)
     {
-        StartCoroutine(CheckStudentFromFlask(studentId, callback));
+        PlatformCommunication.Instance.CheckOrCreateStudent(studentId, callback);
     }
-
-    private IEnumerator CheckStudentFromFlask(string studentId, Action<bool, string> callback)
-    {
-        string url = FLASK_URL + $"/api/check_student/{studentId}";
-        Debug.Log($"[FlaskCommunication] Checking/creating student: {url}");
-
-        using (UnityWebRequest www = UnityWebRequest.Get(url))
-        {
-            yield return www.SendWebRequest();
-
-            if (www.result == UnityWebRequest.Result.Success)
-            {
-                Debug.Log($"[FlaskCommunication] Student check successful: {www.downloadHandler.text}");
-                callback?.Invoke(true, www.downloadHandler.text);
-            }
-            else
-            {
-                Debug.LogError($"[FlaskCommunication] Error checking student: {www.error}");
-                callback?.Invoke(false, www.error);
-            }
-        }
-    }
-
-    private IEnumerator GetLogsFromFlask(string userId, Action<string> callback)
-    {
-        using (UnityWebRequest www = UnityWebRequest.Get(FLASK_URL + $"/api/get_user_logs/{userId}"))
-        {
-            yield return www.SendWebRequest();
-
-            if (www.result == UnityWebRequest.Result.Success)
-            {
-                callback?.Invoke(www.downloadHandler.text);
-            }
-            else
-            {
-                Debug.LogError("Error getting logs from Flask: " + www.error);
-                callback?.Invoke(null);
-            }
-        }
-    }
-} 
+}

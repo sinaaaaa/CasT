@@ -1,16 +1,20 @@
 using UnityEngine;
 using UnityEngine.UI;
-using TMPro;
 using UnityEngine.Networking;
 using System.Collections;
 using System;
+using UnityEngine.EventSystems;
 
 public class LoginManager : MonoBehaviour
 {
-    [SerializeField] private TMP_InputField studentIdInput;
+    [SerializeField] private InputField studentIdInput;
     [SerializeField] private Button loginButton;
-    [SerializeField] private TextMeshProUGUI statusText;
-    [SerializeField] private string flaskUrl = "https://web-production-db15b.up.railway.app";
+    [SerializeField] private Text statusText;
+    [SerializeField] private string platformUrl = "http://localhost:3000";
+
+    private TouchScreenKeyboard mobileKeyboard;
+    private bool isKeyboardOpen = false;
+    private bool wasFocused = false;
 
     private void Start()
     {
@@ -20,44 +24,100 @@ public class LoginManager : MonoBehaviour
         }
         else
         {
-            Debug.LogError("Login button not assigned!");
+            Debug.LogError("[LoginManager] Login button not assigned!");
         }
-        // Ensure keyboard shows on touch devices
+        
+        // Diagnostic check for EventSystem
+        if (FindObjectOfType<EventSystem>() == null)
+        {
+            Debug.LogError("[LoginManager] CRITICAL: No EventSystem found in the scene. UI input will not work!");
+        }
+
         if (studentIdInput != null)
         {
-            studentIdInput.onSelect.AddListener(OnInputFieldSelected);
+            // The Update loop now handles focus detection, so onSelect is not needed.
         }
     }
 
-    private void OnInputFieldSelected(string text)
+    private void OnInputFieldSelected(string currentText)
     {
-        studentIdInput.ActivateInputField();
+        // This is a more reliable entry point for mobile
+        #if (UNITY_ANDROID || UNITY_IOS) && !UNITY_EDITOR
+        if (!isKeyboardOpen)
+        {
+            mobileKeyboard = TouchScreenKeyboard.Open(currentText, TouchScreenKeyboardType.NumberPad, false, false, false, false, "Enter Student ID");
+            isKeyboardOpen = true;
+            Debug.Log("[LoginManager] TouchScreenKeyboard opened via onSelect event.");
+        }
+        #endif
+    }
+
+    private void Update()
+    {
+        // This update loop handles both opening the keyboard and syncing the text
+        if (studentIdInput != null && studentIdInput.isFocused && !wasFocused)
+        {
+            // The input field just gained focus.
+            wasFocused = true;
+            OnInputFieldSelected(studentIdInput.text);
+        }
+
+        if (studentIdInput != null && !studentIdInput.isFocused && wasFocused)
+        {
+            // The input field just lost focus.
+            wasFocused = false;
+        }
+
+        // Sync keyboard text to input field
+        if (isKeyboardOpen && mobileKeyboard != null)
+        {
+            if (mobileKeyboard.status == TouchScreenKeyboard.Status.Done)
+            {
+                studentIdInput.text = mobileKeyboard.text;
+                isKeyboardOpen = false;
+                mobileKeyboard = null;
+                Debug.Log("[LoginManager] Keyboard Done.");
+            }
+            else if (mobileKeyboard.status == TouchScreenKeyboard.Status.Canceled)
+            {
+                isKeyboardOpen = false;
+                mobileKeyboard = null;
+                Debug.Log("[LoginManager] Keyboard Canceled.");
+            }
+            else
+            {
+                // While visible, keep text in sync
+                studentIdInput.text = mobileKeyboard.text;
+            }
+        }
     }
 
     public void OnLoginButtonClicked()
     {
-        if (string.IsNullOrEmpty(studentIdInput.text))
+        if (studentIdInput == null || string.IsNullOrWhiteSpace(studentIdInput.text))
         {
             ShowError("Please enter your student ID");
             return;
         }
 
-        // Unlock audio for WebGL on first user interaction
+        if (loginButton != null) loginButton.interactable = false;
+        ShowSuccess("Logging in…");
+
         AudioInitializer.EnsureAudioUnlocked();
 
-        // Use FlaskCommunication singleton instead of direct API call
-        if (FlaskCommunication.Instance != null)
+        var comm = PlatformCommunication.Instance;
+        if (!string.IsNullOrWhiteSpace(platformUrl))
         {
-            FlaskCommunication.Instance.CheckOrCreateStudent(studentIdInput.text, OnStudentCheckComplete);
+            comm.Configure(platformUrl, null);
         }
-        else
-        {
-            ShowError("FlaskCommunication not available");
-        }
+
+        comm.CheckOrCreateStudent(studentIdInput.text.Trim(), OnStudentCheckComplete);
     }
 
     private void OnStudentCheckComplete(bool success, string response)
     {
+        if (loginButton != null) loginButton.interactable = true;
+
         if (success)
         {
             Debug.Log($"Server response: {response}");
@@ -68,42 +128,7 @@ public class LoginManager : MonoBehaviour
                 
                 if (studentResponse.status == "success")
                 {
-                    // Create a new StudentData instance using the global StudentData class
-                    var studentData = new StudentData();
-                    studentData.id = int.Parse(studentResponse.student.id);
-                    studentData.username = studentResponse.student.username;
-
-                    // Save the user ID to PlayerPrefs
-                    PlayerPrefs.SetString("UserId", studentResponse.student.id);
-                    // Only set to 1 if this is a new user (no saved level yet)
-                    string levelKey = studentResponse.student.id + "_currentLevel";
-                    if (!PlayerPrefs.HasKey(levelKey)) {
-                        PlayerPrefs.SetInt(levelKey, 1);
-                        Debug.Log($"[LoginManager] New user: Set {levelKey} to 1 at login.");
-                    } else {
-                        Debug.Log($"[LoginManager] Existing user: {levelKey} already set to {PlayerPrefs.GetInt(levelKey)}");
-                    }
-                    PlayerPrefs.Save();
-
-                    // Set the current student in StudentDataManager
-                    if (StudentDataManager.Instance != null)
-                    {
-                        StudentDataManager.Instance.SetCurrentStudent(studentData);
-                        ShowSuccess("Login successful!");
-                        // Load the game scene
-                        // UnityEngine.SceneManagement.SceneManager.LoadScene("Level1");
-
-                        // Set the target scene for the loading screen
-                        PlayerPrefs.SetString("SceneToLoadAfterLoading", "Level1");
-                        PlayerPrefs.Save();
-                        
-                        // Load the loading scene
-                        UnityEngine.SceneManagement.SceneManager.LoadScene("LoadingScene"); // Assuming your loading scene is named "LoadingScene"
-                    }
-                    else
-                    {
-                        ShowError("StudentDataManager not found!");
-                    }
+                    ProceedAfterSuccessfulLogin(studentResponse);
                 }
                 else
                 {
@@ -118,9 +143,61 @@ public class LoginManager : MonoBehaviour
         }
         else
         {
-            Debug.LogError($"Error: {response}");
-            ShowError("Connection error. Please try again.");
+            Debug.LogError($"[LoginManager] Platform error: {response}");
+            if (response != null && (response.Contains("database") || response.Contains("503")))
+            {
+                ShowError("Platform database is offline. Start PostgreSQL, then npm run db:push && npm run db:seed");
+            }
+            else if (response != null && response.Contains("401"))
+            {
+                ShowError("Invalid API key. Match Game Api Key with GAME_API_KEY in platform/.env");
+            }
+            else
+            {
+                ShowError("Cannot reach platform. Is npm run dev running on http://localhost:3000 ?");
+            }
         }
+    }
+
+    private void ProceedAfterSuccessfulLogin(StudentResponse studentResponse)
+    {
+        var studentData = new StudentData();
+        var externalId = studentResponse.student.id;
+        studentData.id = int.TryParse(externalId.Replace("STU-", ""), out var numericId)
+            ? numericId
+            : externalId.GetHashCode();
+        studentData.username = string.IsNullOrEmpty(studentResponse.student.username)
+            ? externalId
+            : studentResponse.student.username;
+
+        PlayerPrefs.SetString("UserId", externalId);
+
+        string levelSlotKey = externalId + "_currentLevel";
+        string levelIdKey = externalId + "_currentLevelKey";
+        if (!PlayerPrefs.HasKey(levelSlotKey))
+        {
+            PlayerPrefs.SetInt(levelSlotKey, 1);
+            PlayerPrefs.SetString(levelIdKey, "level_0");
+            Debug.Log($"[LoginManager] New user: starting at level_0 (intro).");
+        }
+        else
+        {
+            Debug.Log($"[LoginManager] Returning user: slot={PlayerPrefs.GetInt(levelSlotKey)}, " +
+                      $"key='{PlayerPrefs.GetString(levelIdKey, "")}'");
+        }
+
+        PlayerPrefs.SetString("SceneToLoadAfterLoading", "Level1");
+        PlayerPrefs.Save();
+
+        if (StudentDataManager.Instance == null)
+        {
+            var go = new GameObject("StudentDataManager");
+            go.AddComponent<StudentDataManager>();
+        }
+        StudentDataManager.Instance?.SetCurrentStudent(studentData);
+
+        ShowSuccess("Login successful!");
+        UnityEngine.SceneManagement.SceneManager.LoadScene("LoadingScene");
     }
 
     private IEnumerator LoginStudent(string studentId)

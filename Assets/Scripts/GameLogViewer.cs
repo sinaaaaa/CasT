@@ -140,7 +140,13 @@ public class LogEntryUI : MonoBehaviour
 
     public void SetLogData(GameLog log)
     {
-        if (levelText != null) levelText.text = $"Level: {log.level}";
+        if (levelText != null)
+        {
+            string displayLevel = string.IsNullOrEmpty(log.level)
+                ? log.level
+                : log.level.Replace("Level", "Item").Replace("level", "item");
+            levelText.text = $"Item: {displayLevel}";
+        }
         if (scoreText != null) scoreText.text = $"Score: {log.score}";
         if (actionsText != null) actionsText.text = $"Actions: {log.actions}";
         if (timestampText != null) timestampText.text = $"Time: {log.timestamp}";

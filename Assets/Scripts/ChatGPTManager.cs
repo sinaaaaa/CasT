@@ -314,7 +314,7 @@ public class ChatGPTManager : MonoBehaviour
         {
             responseText.text = text;
         }
-        Speak(text);
+        // Speak(text); // Commented out to disable text-to-speech
     }
 
     #if UNITY_WEBGL && !UNITY_EDITOR

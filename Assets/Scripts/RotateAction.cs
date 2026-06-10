@@ -14,7 +14,9 @@ namespace CharacterActions
 
         public override IEnumerator Execute(CharacterMove characterMove)
         {
+            Debug.Log($"[RotateAction] Executing rotation of {Angle} degrees");
             yield return characterMove.RotateCoroutine(Angle);
+            Debug.Log($"[RotateAction] Rotation of {Angle} degrees completed");
         }
     }
 }

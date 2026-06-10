@@ -38,16 +38,11 @@ public class AppleCluster : MonoBehaviour
         // Snap to nearest grid cell
         if (characterMove != null)
         {
-            float gridSize = characterMove.gridSize;
-            Vector3 robotStartWorldPos = characterMove.robotStartWorldPos;
-            // Calculate grid cell
-            Vector3 local = transform.position - robotStartWorldPos;
-            int x = Mathf.RoundToInt(local.x / gridSize);
-            int y = Mathf.RoundToInt(local.z / gridSize);
-            Vector3 snapped = robotStartWorldPos + new Vector3(x * gridSize, 0, y * gridSize);
+            Vector2Int cell = characterMove.WorldToGridCell(transform.position);
+            Vector3 snapped = characterMove.GridCellToWorld(cell);
             transform.position = new Vector3(snapped.x, transform.position.y, snapped.z);
             // Update logical apple position in CharacterMove
-            characterMove.UpdateDraggedApplePosition(transform.position);
+            characterMove.UpdateDraggedGridObjectPosition(transform.position, gameObject);
         }
     }
 

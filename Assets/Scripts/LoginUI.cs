@@ -1,13 +1,12 @@
 using UnityEngine;
 using UnityEngine.UI;
-using TMPro;
 
 public class LoginUI : MonoBehaviour
 {
     [SerializeField] private GameObject loginPanel;
-    [SerializeField] private TMP_InputField studentIdInput;
+    [SerializeField] private InputField studentIdInput;
     [SerializeField] private Button loginButton;
-    [SerializeField] private TextMeshProUGUI statusText;
+    [SerializeField] private Text statusText;
     [SerializeField] private LoginManager loginManager;
 
     private void Start()
@@ -33,14 +32,7 @@ public class LoginUI : MonoBehaviour
                     studentIdInput.text = value.Substring(0, value.Length - 1);
                 }
             });
-            // Ensure keyboard shows on touch devices
-            studentIdInput.onSelect.AddListener(OnInputFieldSelected);
         }
-    }
-
-    private void OnInputFieldSelected(string text)
-    {
-        studentIdInput.ActivateInputField();
     }
 
     public void ShowError(string message)
