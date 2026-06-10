@@ -65,7 +65,7 @@ export function LoginForm() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="teacher@sparc.edu"
+              placeholder="you@school.edu"
               required
             />
           </div>
@@ -94,9 +94,6 @@ export function LoginForm() {
             {loading ? "Signing in…" : "Sign in"}
           </Button>
         </form>
-        <p className="mt-4 text-xs text-muted-foreground">
-          Demo: admin@sparc.edu, teacher@sparc.edu, or alex@student.sparc.edu — password123
-        </p>
       </CardContent>
     </Card>
   );
