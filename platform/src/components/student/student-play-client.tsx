@@ -42,6 +42,46 @@ function isDocumentFullscreen(): boolean {
   return !!(document.fullscreenElement ?? document.webkitFullscreenElement);
 }
 
+function isPortraitMobileViewport(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia("(orientation: portrait) and (max-width: 1024px)").matches;
+}
+
+function applyPortraitGameFrame(iframe: HTMLIFrameElement | null) {
+  if (!iframe) return;
+
+  if (isPortraitMobileViewport()) {
+    const width = window.innerHeight;
+    const height = window.innerWidth;
+    Object.assign(iframe.style, {
+      position: "fixed",
+      top: "50%",
+      left: "50%",
+      width: `${width}px`,
+      height: `${height}px`,
+      maxWidth: "none",
+      border: "0",
+      transform: "translate(-50%, -50%) rotate(90deg)",
+      transformOrigin: "center center",
+      zIndex: "10",
+      background: "#000",
+    });
+    return;
+  }
+
+  iframe.style.position = "";
+  iframe.style.top = "";
+  iframe.style.left = "";
+  iframe.style.width = "";
+  iframe.style.height = "";
+  iframe.style.maxWidth = "";
+  iframe.style.border = "";
+  iframe.style.transform = "";
+  iframe.style.transformOrigin = "";
+  iframe.style.zIndex = "";
+  iframe.style.background = "";
+}
+
 export function StudentPlayClient({
   config,
   unityGameUrl,
@@ -75,6 +115,35 @@ export function StudentPlayClient({
     };
   }, []);
 
+  useEffect(() => {
+    if (status !== "ready") return;
+
+    const iframe = iframeRef.current;
+    const syncLayout = () => applyPortraitGameFrame(iframe);
+
+    syncLayout();
+    window.addEventListener("resize", syncLayout);
+    window.addEventListener("orientationchange", syncLayout);
+
+    return () => {
+      window.removeEventListener("resize", syncLayout);
+      window.removeEventListener("orientationchange", syncLayout);
+      if (iframe) {
+        iframe.style.position = "";
+        iframe.style.top = "";
+        iframe.style.left = "";
+        iframe.style.width = "";
+        iframe.style.height = "";
+        iframe.style.maxWidth = "";
+        iframe.style.border = "";
+        iframe.style.transform = "";
+        iframe.style.transformOrigin = "";
+        iframe.style.zIndex = "";
+        iframe.style.background = "";
+      }
+    };
+  }, [status]);
+
   const toggleFullscreen = useCallback(async () => {
     const shell = gameShellRef.current;
     if (!shell) return;
@@ -100,7 +169,7 @@ export function StudentPlayClient({
 
   return (
     <div className="student-zone min-h-dvh bg-black text-white">
-      <div ref={gameShellRef} className="relative flex min-h-dvh flex-col bg-black">
+      <div ref={gameShellRef} className="relative min-h-dvh overflow-hidden bg-black">
         {status === "ready" && (
           <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-3 p-3">
             <Link href={homeHref} className={`${controlButtonClass} pointer-events-auto`}>
@@ -169,7 +238,7 @@ export function StudentPlayClient({
             ref={iframeRef}
             src={iframeSrc}
             title="Robot Coding Game"
-            className="min-h-dvh w-full flex-1 border-0 bg-black"
+            className="block min-h-dvh w-full border-0 bg-black"
             allow="autoplay; fullscreen"
             allowFullScreen
           />

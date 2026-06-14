@@ -117,7 +117,7 @@ public static class WebGLBuildScript
     }
 
     /// <summary>
-    /// On portrait phones/tablets, rotates the game canvas so it always appears horizontal (no rotate prompt).
+    /// Standalone /unity loads rotate the canvas in portrait; iframe embeds rely on the play page wrapper.
     /// </summary>
     private static void InjectForceHorizontalLayout(string outputDir)
     {
@@ -133,10 +133,22 @@ public static class WebGLBuildScript
         const string snippet =
             "<style>/* sparc-force-horizontal */" +
             "html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#000;}" +
-            "@media (orientation:portrait) and (max-width:1024px){" +
-            "#unity-container{position:fixed;top:50%;left:50%;width:100vh;height:100vw;" +
-            "transform:translate(-50%,-50%) rotate(90deg);transform-origin:center center;}" +
-            "}</style>";
+            "#unity-container.unity-mobile,#unity-container.unity-mobile #unity-canvas{width:100%;height:100%;}" +
+            "</style>" +
+            "<script>/* sparc-force-horizontal */" +
+            "(function(){function inIframe(){try{return window.self!==window.top;}catch(e){return true;}}" +
+            "function apply(){var c=document.getElementById('unity-container');if(!c)return;" +
+            "if(inIframe()){c.style.position='';c.style.top='';c.style.left='';c.style.width='';c.style.height='';" +
+            "c.style.transform='';c.style.transformOrigin='';c.style.zIndex='';return;}" +
+            "var portrait=window.matchMedia('(orientation: portrait) and (max-width: 1024px)').matches;" +
+            "if(portrait){var w=window.innerHeight,h=window.innerWidth;" +
+            "c.style.position='fixed';c.style.top='50%';c.style.left='50%';c.style.width=w+'px';c.style.height=h+'px';" +
+            "c.style.transform='translate(-50%, -50%) rotate(90deg)';c.style.transformOrigin='center center';c.style.zIndex='1';}" +
+            "else{c.style.position='';c.style.top='';c.style.left='';c.style.width='';c.style.height='';" +
+            "c.style.transform='';c.style.transformOrigin='';c.style.zIndex='';}}" +
+            "window.addEventListener('resize',apply);window.addEventListener('orientationchange',apply);" +
+            "if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',apply);else apply();})();" +
+            "</script>";
 
         if (html.Contains("</head>"))
             html = html.Replace("</head>", snippet + "</head>");
