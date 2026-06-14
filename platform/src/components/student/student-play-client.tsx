@@ -1,13 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ArrowLeft, Loader2, Maximize2, Minimize2 } from "lucide-react";
 import type { StudentGameConfig } from "@/lib/student-session";
 
 declare global {
   interface Window {
     StudentGameConfig?: StudentGameConfig;
+  }
+
+  interface Document {
+    webkitFullscreenElement?: Element | null;
+  }
+
+  interface HTMLElement {
+    webkitRequestFullscreen?: () => Promise<void>;
   }
 }
 
@@ -30,15 +38,20 @@ function buildUnityUrl(baseUrl: string, config: StudentGameConfig): string {
   return url.pathname + url.search;
 }
 
+function isDocumentFullscreen(): boolean {
+  return !!(document.fullscreenElement ?? document.webkitFullscreenElement);
+}
+
 export function StudentPlayClient({
   config,
   unityGameUrl,
-  displayName,
   homeHref = "/student/home",
 }: Props) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const gameShellRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "missing">("loading");
   const [iframeSrc, setIframeSrc] = useState(unityGameUrl);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
     window.StudentGameConfig = config;
@@ -52,39 +65,79 @@ export function StudentPlayClient({
       .catch(() => setStatus("missing"));
   }, [config, unityGameUrl]);
 
-  return (
-    <div className="student-zone flex min-h-screen flex-col bg-slate-950 text-white">
-      <header className="flex shrink-0 items-center justify-between border-b border-indigo-500/20 bg-gradient-to-r from-[#312E81] to-[#1E1B4B] px-4 py-3 backdrop-blur">
-        <div className="flex items-center gap-3">
-          <Link
-            href={homeHref}
-            className="inline-flex items-center gap-2 rounded-xl px-3 py-1.5 text-sm font-semibold text-indigo-100 hover:bg-white/10"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Home
-          </Link>
-          <div className="hidden items-center gap-2 sm:flex">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#4F46E5] text-xs font-black">
-              L
-            </div>
-            <span className="font-bold text-white">Little Logic Adventure</span>
-          </div>
-        </div>
-        <p className="truncate text-sm text-indigo-200">
-          <span className="text-white">{displayName}</span>
-        </p>
-      </header>
+  useEffect(() => {
+    const syncFullscreen = () => setIsFullscreen(isDocumentFullscreen());
+    document.addEventListener("fullscreenchange", syncFullscreen);
+    document.addEventListener("webkitfullscreenchange", syncFullscreen);
+    return () => {
+      document.removeEventListener("fullscreenchange", syncFullscreen);
+      document.removeEventListener("webkitfullscreenchange", syncFullscreen);
+    };
+  }, []);
 
-      <div className="relative flex flex-1 flex-col">
+  const toggleFullscreen = useCallback(async () => {
+    const shell = gameShellRef.current;
+    if (!shell) return;
+
+    try {
+      if (isDocumentFullscreen()) {
+        await document.exitFullscreen();
+        return;
+      }
+
+      if (shell.requestFullscreen) {
+        await shell.requestFullscreen();
+      } else if (shell.webkitRequestFullscreen) {
+        await shell.webkitRequestFullscreen();
+      }
+    } catch {
+      // Some mobile browsers block fullscreen inside iframes — game still fills the viewport.
+    }
+  }, []);
+
+  const controlButtonClass =
+    "inline-flex items-center gap-2 rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2 text-sm font-semibold text-white shadow-lg backdrop-blur transition hover:bg-slate-900/90";
+
+  return (
+    <div className="student-zone min-h-dvh bg-black text-white">
+      <div ref={gameShellRef} className="relative flex min-h-dvh flex-col bg-black">
+        {status === "ready" && (
+          <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-3 p-3">
+            <Link href={homeHref} className={`${controlButtonClass} pointer-events-auto`}>
+              <ArrowLeft className="h-4 w-4" />
+              <span className="hidden sm:inline">Home</span>
+            </Link>
+            <button
+              type="button"
+              onClick={toggleFullscreen}
+              className={`${controlButtonClass} pointer-events-auto`}
+              aria-pressed={isFullscreen}
+              aria-label={isFullscreen ? "Exit full screen" : "Enter full screen"}
+            >
+              {isFullscreen ? (
+                <>
+                  <Minimize2 className="h-4 w-4" />
+                  <span className="hidden sm:inline">Exit full screen</span>
+                </>
+              ) : (
+                <>
+                  <Maximize2 className="h-4 w-4" />
+                  <span className="hidden sm:inline">Full screen</span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
+
         {status === "loading" && (
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-slate-950">
+          <div className="absolute inset-0 z-10 flex min-h-dvh flex-col items-center justify-center gap-3 bg-slate-950">
             <Loader2 className="h-10 w-10 animate-spin text-sky-400" />
             <p className="text-slate-300">Loading game…</p>
           </div>
         )}
 
         {status === "missing" ? (
-          <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
+          <div className="flex min-h-dvh flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
             <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#4F46E5] text-2xl font-black">
               L
             </div>
@@ -116,12 +169,12 @@ export function StudentPlayClient({
             ref={iframeRef}
             src={iframeSrc}
             title="Robot Coding Game"
-            className="h-[calc(100vh-57px)] w-full flex-1 border-0 bg-black"
+            className="min-h-dvh w-full flex-1 border-0 bg-black"
             allow="autoplay; fullscreen"
+            allowFullScreen
           />
         )}
       </div>
-
     </div>
   );
 }
