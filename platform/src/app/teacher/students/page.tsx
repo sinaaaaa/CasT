@@ -3,9 +3,8 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { TeacherShell } from "@/components/teacher/teacher-shell";
 import { StudentsHub, type StudentRow } from "@/components/teacher/students-hub";
-import { AttemptStatus } from "@prisma/client";
-import { studentScopeWhere, classScopeWhere, resolveTeacherScope, assertClassAccess } from "@/lib/class-access";
-import { studentNeedsCheckIn } from "@/lib/analytics";
+import { studentScopeWhere, classScopeWhere, resolveTeacherScope } from "@/lib/class-access";
+import { getStudentsListSummaries, studentNeedsCheckIn } from "@/lib/analytics";
 
 export default async function TeacherStudentsPage({
   searchParams,
@@ -37,46 +36,62 @@ export default async function TeacherStudentsPage({
     include: {
       user: { select: { email: true } },
       classMemberships: { include: { class: true } },
-      levelAttempts: {
-        orderBy: { startedAt: "desc" },
-        take: 3,
-        select: { passed: true, status: true, score: true, endedAt: true },
-      },
       assignedLevels: { where: { isActive: true }, select: { id: true } },
     },
     orderBy: { displayName: "asc" },
   });
+
+  const studentIds = students.map((s) => s.id);
+  const [summaries, recentAttemptsByStudent] = await Promise.all([
+    getStudentsListSummaries(studentIds),
+    prisma.levelAttempt.findMany({
+      where: { studentId: { in: studentIds } },
+      select: { studentId: true, passed: true, endedAt: true, startedAt: true },
+      orderBy: { startedAt: "desc" },
+    }),
+  ]);
+
+  const checkInAttemptsByStudent = new Map<
+    string,
+    { passed: boolean; endedAt: Date | null; startedAt: Date }[]
+  >();
+  for (const attempt of recentAttemptsByStudent) {
+    const list = checkInAttemptsByStudent.get(attempt.studentId) ?? [];
+    if (list.length < 3) list.push(attempt);
+    checkInAttemptsByStudent.set(attempt.studentId, list);
+  }
 
   const classes = await prisma.class.findMany({
     where: classScopeWhere(scope),
     orderBy: { name: "asc" },
   });
 
-  const filteredStudents =
-    needsHelp === "1"
-      ? students.filter((s) => studentNeedsCheckIn(s.levelAttempts))
-      : students;
-
-  const rows: StudentRow[] = filteredStudents.map((s) => {
-    const passed = s.levelAttempts.filter((a) => a.passed).length;
-    const failed = s.levelAttempts.filter((a) => a.status === AttemptStatus.INCORRECT).length;
-    const avg =
-      s.levelAttempts.length > 0
-        ? Math.round(s.levelAttempts.reduce((sum, a) => sum + (a.score ?? 0), 0) / s.levelAttempts.length)
-        : 0;
-    return {
-      id: s.id,
-      displayName: s.displayName,
-      externalId: s.externalId,
-      email: s.user.email,
-      classes: s.classMemberships.map((c) => c.class.name).join(", "),
-      passed,
-      failed,
-      avg,
-      assignedLevelCount: s.assignedLevels.length,
-      needsHelp: studentNeedsCheckIn(s.levelAttempts),
-    };
-  });
+  const rows: StudentRow[] = students
+    .map((s) => {
+      const summary = summaries.get(s.id) ?? {
+        passed: 0,
+        failed: 0,
+        incomplete: 0,
+        totalLevels: 0,
+        completionPercent: 0,
+        avgScore: 0,
+      };
+      const checkInAttempts = checkInAttemptsByStudent.get(s.id) ?? [];
+      return {
+        id: s.id,
+        displayName: s.displayName,
+        externalId: s.externalId,
+        email: s.user.email,
+        classes: s.classMemberships.map((c) => c.class.name).join(", "),
+        passed: summary.passed,
+        failed: summary.failed,
+        avg: summary.avgScore,
+        completionPercent: summary.completionPercent,
+        assignedLevelCount: s.assignedLevels.length,
+        needsHelp: studentNeedsCheckIn(checkInAttempts),
+      };
+    })
+    .filter((row) => (needsHelp === "1" ? row.needsHelp : true));
 
   return (
     <TeacherShell title="Students" userName={session?.user.name}>

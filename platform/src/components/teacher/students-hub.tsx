@@ -18,6 +18,7 @@ export type StudentRow = {
   passed: number;
   failed: number;
   avg: number;
+  completionPercent: number;
   assignedLevelCount: number;
   needsHelp?: boolean;
 };

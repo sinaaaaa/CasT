@@ -37,10 +37,126 @@ function routePreviewFromComparison(
 
 /** Two or more of the last three finished attempts did not pass. */
 export function studentNeedsCheckIn(
-  attempts: { passed: boolean; endedAt: Date | null }[]
+  attempts: { passed: boolean; endedAt: Date | null; startedAt?: Date }[]
 ): boolean {
-  const recent = attempts.slice(0, 3);
+  const recent = [...attempts]
+    .sort((a, b) => {
+      const aTime = a.startedAt?.getTime() ?? 0;
+      const bTime = b.startedAt?.getTime() ?? 0;
+      return bTime - aTime;
+    })
+    .slice(0, 3);
   return recent.filter((a) => !a.passed && a.endedAt).length >= 2;
+}
+
+export type StudentListSummary = {
+  passed: number;
+  failed: number;
+  incomplete: number;
+  totalLevels: number;
+  completionPercent: number;
+  avgScore: number;
+};
+
+type StudentLevelAttemptSlice = {
+  levelId: string;
+  passed: boolean;
+  status: AttemptStatus;
+  score: number | null;
+  endedAt: Date | null;
+  startedAt: Date;
+};
+
+/** Mirrors student profile pass / needs-work / avg score (per item, not last N attempts). */
+export function summarizeStudentListProgress(
+  levelIds: string[],
+  attempts: StudentLevelAttemptSlice[]
+): StudentListSummary {
+  const byLevel = new Map<string, StudentLevelAttemptSlice[]>();
+  for (const a of attempts) {
+    const list = byLevel.get(a.levelId) ?? [];
+    list.push(a);
+    byLevel.set(a.levelId, list);
+  }
+
+  let passed = 0;
+  let failed = 0;
+  let scoreSum = 0;
+  let scoreCount = 0;
+
+  for (const levelId of levelIds) {
+    const levelAttempts = byLevel.get(levelId) ?? [];
+    if (levelAttempts.length === 0) continue;
+
+    const endedAttempts = levelAttempts.filter((a) => a.endedAt != null);
+    const statusAttempts = endedAttempts.length > 0 ? endedAttempts : levelAttempts;
+    const best = statusAttempts.find((a) => a.passed) ?? statusAttempts[0];
+    const levelPassed = levelAttempts.some((a) => a.passed);
+
+    if (levelPassed) passed += 1;
+    else if (best?.status === AttemptStatus.INCORRECT) failed += 1;
+
+    if (best?.score != null) {
+      scoreSum += best.score;
+      scoreCount += 1;
+    }
+  }
+
+  const totalLevels = levelIds.length;
+  const incomplete = Math.max(0, totalLevels - passed - failed);
+
+  return {
+    passed,
+    failed,
+    incomplete,
+    totalLevels,
+    completionPercent: totalLevels ? Math.round((passed / totalLevels) * 100) : 0,
+    avgScore: scoreCount ? Math.round(scoreSum / scoreCount) : 0,
+  };
+}
+
+/** Batch pass / needs-work / avg for the teacher students list (same rules as getStudentProgress). */
+export async function getStudentsListSummaries(
+  studentIds: string[]
+): Promise<Map<string, StudentListSummary>> {
+  const summaries = new Map<string, StudentListSummary>();
+  if (studentIds.length === 0) return summaries;
+
+  const levels = await prisma.level.findMany({
+    orderBy: { orderIndex: "asc" },
+    select: { id: true },
+  });
+  const levelIds = levels.map((l) => l.id);
+
+  const attempts = await prisma.levelAttempt.findMany({
+    where: { studentId: { in: studentIds } },
+    select: {
+      studentId: true,
+      levelId: true,
+      passed: true,
+      status: true,
+      score: true,
+      endedAt: true,
+      startedAt: true,
+    },
+    orderBy: { startedAt: "desc" },
+  });
+
+  const attemptsByStudent = new Map<string, StudentLevelAttemptSlice[]>();
+  for (const a of attempts) {
+    const list = attemptsByStudent.get(a.studentId) ?? [];
+    list.push(a);
+    attemptsByStudent.set(a.studentId, list);
+  }
+
+  for (const studentId of studentIds) {
+    summaries.set(
+      studentId,
+      summarizeStudentListProgress(levelIds, attemptsByStudent.get(studentId) ?? [])
+    );
+  }
+
+  return summaries;
 }
 
 function extractRoutePreview(
@@ -379,18 +495,25 @@ export async function getStudentProgress(studentProfileId: string) {
     };
   });
 
-  const passed = levelProgress.filter((l) => l.passed).length;
-  const failed = levelProgress.filter(
-    (l) => l.attempts > 0 && !l.passed && l.status === AttemptStatus.INCORRECT
-  ).length;
+  const summary = summarizeStudentListProgress(
+    levels.map((l) => l.id),
+    attempts.map((a) => ({
+      levelId: a.levelId,
+      passed: a.passed,
+      status: a.status,
+      score: a.score,
+      endedAt: a.endedAt,
+      startedAt: a.startedAt,
+    }))
+  );
 
   return {
     summary: {
-      totalLevels: levels.length,
-      passed,
-      failed,
-      incomplete: levels.length - passed - failed,
-      completionPercent: levels.length ? Math.round((passed / levels.length) * 100) : 0,
+      totalLevels: summary.totalLevels,
+      passed: summary.passed,
+      failed: summary.failed,
+      incomplete: summary.incomplete,
+      completionPercent: summary.completionPercent,
     },
     levels: levelProgress,
     history: attempts.map((a) => ({

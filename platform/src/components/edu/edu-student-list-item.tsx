@@ -14,6 +14,7 @@ export type EduStudentListItemProps = {
   passed: number;
   failed: number;
   avg: number;
+  completionPercent: number;
   assignedLevelCount: number;
   needsHelp?: boolean;
   selected?: boolean;
@@ -52,6 +53,7 @@ export function EduStudentListItem({
   passed,
   failed,
   avg,
+  completionPercent,
   assignedLevelCount,
   needsHelp,
   selected,
@@ -59,8 +61,7 @@ export function EduStudentListItem({
   onEdit,
   id,
 }: EduStudentListItemProps) {
-  const total = passed + failed;
-  const progressPct = total > 0 ? Math.round((passed / total) * 100) : 0;
+  const progressPct = completionPercent;
 
   return (
     <motion.div
