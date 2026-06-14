@@ -15,6 +15,11 @@ $logDir = Join-Path $projectRoot "BuildLogs"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $logFile = Join-Path $logDir "webgl-build.log"
 
+$lockFile = Join-Path $projectRoot "Temp\UnityLockfile"
+if (Test-Path $lockFile) {
+    Write-Error "Close the Unity Editor for this project, then run this script again. (UnityLockfile is present.)"
+}
+
 Write-Host "Building WebGL -> platform/public/unity ..."
 Write-Host "Log: $logFile"
 

@@ -16,31 +16,49 @@ public static class WebGLBuildScript
         "Assets/level1.unity",
     };
 
+    public static void BuildFromEditor()
+    {
+        Build(exitWhenDone: false);
+    }
+
     public static void Build()
     {
+        Build(exitWhenDone: true);
+    }
+
+    private static void Build(bool exitWhenDone)
+    {
+        WebGLBuildCacheUtility.ClearScriptAndPlayerCaches(log: true);
+
         var outputDir = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "platform", "public", "unity"));
-        if (!Directory.Exists(outputDir))
-            Directory.CreateDirectory(outputDir);
+        if (Directory.Exists(outputDir))
+        {
+            Debug.Log("[WebGLBuildScript] Removing previous WebGL output: " + outputDir);
+            FileUtil.DeleteFileOrDirectory(outputDir);
+        }
+        Directory.CreateDirectory(outputDir);
 
         var options = new BuildPlayerOptions
         {
             scenes = ScenePaths,
             locationPathName = outputDir,
             target = BuildTarget.WebGL,
-            options = BuildOptions.None,
+            options = BuildOptions.CleanBuildCache,
         };
 
         BuildReport report = BuildPipeline.BuildPlayer(options);
         if (report.summary.result != BuildResult.Succeeded)
         {
             Debug.LogError("[WebGLBuildScript] Build failed: " + report.summary.result);
-            EditorApplication.Exit(1);
+            if (exitWhenDone)
+                EditorApplication.Exit(1);
             return;
         }
 
         InjectStudentConfigBridge(outputDir);
         Debug.Log("[WebGLBuildScript] Build succeeded: " + outputDir);
-        EditorApplication.Exit(0);
+        if (exitWhenDone)
+            EditorApplication.Exit(0);
     }
 
     /// <summary>

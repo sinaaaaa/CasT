@@ -4,21 +4,24 @@ Get-Process -Name "bee_backend" -ErrorAction SilentlyContinue | Stop-Process -Fo
 Get-Process -Name "Unity" -ErrorAction SilentlyContinue | Stop-Process -Force
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
-$bee = Join-Path $projectRoot "Library\Bee"
-$logs = Join-Path $projectRoot "Logs"
-$temp = Join-Path $projectRoot "Temp"
+$paths = @(
+    "Library\Bee",
+    "Library\PlayerDataCache\WebGL",
+    "Library\BuildPlayerData\WebGL",
+    "Library\Il2cppBuildCache\WebGL",
+    "Library\Il2cppBuildCache\WebGLSupport",
+    "Logs",
+    "Temp",
+    "BuildLogs"
+)
 
-if (Test-Path $bee) {
-    Write-Host "Removing Library\Bee ..."
-    Remove-Item -Recurse -Force $bee
-}
-if (Test-Path $logs) {
-    Write-Host "Removing Logs ..."
-    Remove-Item -Recurse -Force $logs
-}
-if (Test-Path $temp) {
-    Write-Host "Removing Temp ..."
-    Remove-Item -Recurse -Force $temp
+foreach ($rel in $paths) {
+    $full = Join-Path $projectRoot $rel
+    if (Test-Path $full) {
+        Write-Host "Removing $rel ..."
+        Remove-Item -Recurse -Force $full
+    }
 }
 
 Write-Host "Done. Reopen the project in Unity Hub (one editor window only)."
+Write-Host "Then use menu: SPARC -> Build WebGL (Clean Export)"
