@@ -111,9 +111,7 @@ public class DragDropTutorialController : MonoBehaviour
     /// <summary>One-time copy from scene fields into <see cref="GameInteractionSoundsSettings"/>.</summary>
     public void MigrateSoundClipsTo(GameInteractionSoundsSettings target)
     {
-        if (target == null) return;
-        if (target.queueSnapPopClip == null && popSound != null)
-            target.queueSnapPopClip = popSound;
+        // Legacy popSound was often a tutorial voice clip — use Resources/GameInteraction/queue-snap-pop instead.
     }
 
     private void OnEnable()

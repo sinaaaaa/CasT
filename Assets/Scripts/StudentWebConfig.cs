@@ -127,10 +127,32 @@ public static class StudentWebConfig
     public static Payload Load()
     {
         var fromJs = LoadFromJsBridge();
-        if (fromJs != null && !string.IsNullOrWhiteSpace(fromJs.studentCode))
-            return fromJs;
+        var fromQuery = LoadFromQueryString();
 
-        return LoadFromQueryString();
+        if (fromJs != null && !string.IsNullOrWhiteSpace(fromJs.studentCode))
+        {
+            MergeResumeFields(fromJs, fromQuery);
+            return fromJs;
+        }
+
+        return fromQuery;
+    }
+
+    private static void MergeResumeFields(Payload target, Payload query)
+    {
+        if (target == null || query == null) return;
+        if (query.resumeSlot > 0)
+            target.resumeSlot = query.resumeSlot;
+        if (!string.IsNullOrWhiteSpace(query.resumeLevelKey))
+            target.resumeLevelKey = query.resumeLevelKey;
+        if (string.IsNullOrWhiteSpace(target.studentCode) && !string.IsNullOrWhiteSpace(query.studentCode))
+            target.studentCode = query.studentCode;
+        if (string.IsNullOrWhiteSpace(target.sessionToken) && !string.IsNullOrWhiteSpace(query.sessionToken))
+            target.sessionToken = query.sessionToken;
+        if (string.IsNullOrWhiteSpace(target.apiBaseUrl) && !string.IsNullOrWhiteSpace(query.apiBaseUrl))
+            target.apiBaseUrl = query.apiBaseUrl;
+        if (string.IsNullOrWhiteSpace(target.gameApiKey) && !string.IsNullOrWhiteSpace(query.gameApiKey))
+            target.gameApiKey = query.gameApiKey;
     }
 
     private static Payload LoadFromJsBridge()

@@ -56,6 +56,10 @@ function isDesktopPointer(): boolean {
   return window.matchMedia("(pointer: fine)").matches;
 }
 
+function postUnityFullscreen(iframe: HTMLIFrameElement | null, enter: boolean) {
+  iframe?.contentWindow?.postMessage(enter ? "sparc-enter-fullscreen" : "sparc-exit-fullscreen", "*");
+}
+
 export function StudentPlayClient({
   config,
   unityGameUrl,
@@ -89,7 +93,11 @@ export function StudentPlayClient({
   }, []);
 
   useEffect(() => {
-    const syncFullscreen = () => setIsFullscreen(isDocumentFullscreen());
+    const syncFullscreen = () => {
+      const active = isDocumentFullscreen();
+      setIsFullscreen(active);
+      if (!active) postUnityFullscreen(iframeRef.current, false);
+    };
     document.addEventListener("fullscreenchange", syncFullscreen);
     document.addEventListener("webkitfullscreenchange", syncFullscreen);
     return () => {
@@ -99,20 +107,25 @@ export function StudentPlayClient({
   }, []);
 
   const toggleFullscreen = useCallback(async () => {
-    const shell = gameShellRef.current;
-    if (!shell) return;
+    const iframe = iframeRef.current;
+    if (!iframe) return;
 
     try {
       if (isDocumentFullscreen()) {
+        postUnityFullscreen(iframe, false);
         if (document.exitFullscreen) await document.exitFullscreen();
         else if (document.webkitExitFullscreen) await document.webkitExitFullscreen();
         return;
       }
 
-      if (shell.requestFullscreen) await shell.requestFullscreen();
-      else if (shell.webkitRequestFullscreen) await shell.webkitRequestFullscreen();
+      postUnityFullscreen(iframe, true);
+
+      const target = iframe as HTMLElement & { webkitRequestFullscreen?: () => Promise<void> };
+      if (target.requestFullscreen) await target.requestFullscreen();
+      else if (target.webkitRequestFullscreen) await target.webkitRequestFullscreen();
+      else if (gameShellRef.current?.requestFullscreen) await gameShellRef.current.requestFullscreen();
     } catch {
-      // Fullscreen API is limited on mobile Safari.
+      // Fullscreen API is limited on some browsers — Unity may still expand via postMessage.
     }
   }, []);
 
@@ -172,6 +185,7 @@ export function StudentPlayClient({
                 {
                   studentCode: config.studentCode,
                   apiBaseUrl: config.apiBaseUrl,
+                  resumeSlot: config.resumeSlot,
                 },
                 null,
                 2
@@ -189,7 +203,7 @@ export function StudentPlayClient({
             ref={iframeRef}
             src={iframeSrc}
             title="Robot Coding Game"
-            className="block min-h-dvh w-full border-0 bg-black"
+            className="block min-h-dvh w-full border-0 bg-black [&:fullscreen]:h-screen [&:fullscreen]:min-h-0 [&:fullscreen]:w-screen"
             allow="autoplay; fullscreen"
             allowFullScreen
           />

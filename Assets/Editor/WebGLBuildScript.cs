@@ -58,6 +58,7 @@ public static class WebGLBuildScript
         InjectStudentConfigBridge(outputDir);
         InjectTouchGestureGuards(outputDir);
         InjectWebGlBrowserGuards(outputDir);
+        InjectFullscreenBridge(outputDir);
         Debug.Log("[WebGLBuildScript] Build succeeded: " + outputDir);
         if (exitWhenDone)
             EditorApplication.Exit(0);
@@ -142,6 +143,39 @@ public static class WebGLBuildScript
             html = html.Replace("</head>", snippet + "</head>");
         else
             html = snippet + html;
+
+        File.WriteAllText(indexPath, html);
+    }
+
+    /// <summary>
+    /// Lets the parent /play page trigger Unity's canvas fullscreen via postMessage.
+    /// </summary>
+    private static void InjectFullscreenBridge(string outputDir)
+    {
+        var indexPath = Path.Combine(outputDir, "index.html");
+        if (!File.Exists(indexPath))
+            return;
+
+        const string marker = "sparc-fullscreen-bridge";
+        var html = File.ReadAllText(indexPath);
+        if (html.Contains(marker))
+            return;
+
+        const string snippet =
+            "<script>/* sparc-fullscreen-bridge */" +
+            "window.addEventListener('message',function(e){" +
+            "var u=window.unityInstance;if(!u)return;" +
+            "if(e.data==='sparc-enter-fullscreen')u.SetFullscreen(1);" +
+            "if(e.data==='sparc-exit-fullscreen')u.SetFullscreen(0);});</script>";
+
+        if (html.Contains("</body>"))
+            html = html.Replace("</body>", snippet + "</body>");
+        else
+            html = html + snippet;
+
+        html = html.Replace(
+            "}).then((unityInstance) => {",
+            "}).then((unityInstance) => {window.unityInstance=unityInstance;");
 
         File.WriteAllText(indexPath, html);
     }

@@ -1221,15 +1221,29 @@ public class CharacterMove : MonoBehaviour
         Vector2Int from = robotGridPosition;
         if (from == cell)
         {
+            if (ld != null && cell == ld.robotStartPosition)
+                ApplyLevelStartFacing(ld);
             SnapRobotToLogicalGridCell();
             return true;
         }
 
         robotGridPosition = cell;
+        if (ld != null && cell == ld.robotStartPosition)
+            ApplyLevelStartFacing(ld);
         SnapRobotToLogicalGridCell();
         OnRobotMovedInMatrix(from, cell);
         Debug.Log($"[CharacterMove] Robot dragged to cell {cell}");
         return true;
+    }
+
+    private void ApplyLevelStartFacing(LevelData ld)
+    {
+        if (ld == null) return;
+        facingDirection = ld.robotStartFacing;
+        if (UsesNumberLine(ld))
+            facingDirection = NormalizeNumberLineFacing(facingDirection, ld);
+        ManualOrbitDragActive = false;
+        ApplyRobotFacingRotation();
     }
 
     /// <summary>Snaps the robot back after an invalid drag.</summary>
@@ -2961,19 +2975,19 @@ public class CharacterMove : MonoBehaviour
 
         // Reset robot position and orientation
         robotGridPosition = levelData.robotStartPosition;
-        facingDirection = levelData.robotStartFacing;
-        if (UsesNumberLine(levelData))
-            facingDirection = NormalizeNumberLineFacing(facingDirection, levelData);
+        ManualOrbitDragActive = false;
+        ApplyLevelStartFacing(levelData);
 
         // Re-read origin each time a level loads.
         if (gridOriginTransform != null)
             SyncGridOriginCache();
 
-        ApplyRobotFacingRotation();
         // Position the robot at the correct grid position using the calibrated start position
         Vector3 targetPosition = RobotWorldPositionAtCell(robotGridPosition);
         transform.position = targetPosition;
         lastSafePosition = transform.position;
+        ApplyRobotFacingRotation();
+        SnapRobotToLogicalGridCell();
         if (autoFitRobotToCell) FitRobotToCell();
         Debug.Log($"[CharacterMove] Robot positioned at grid {robotGridPosition} -> world position {targetPosition}");
 
@@ -3833,69 +3847,53 @@ public class CharacterMove : MonoBehaviour
 
         string prefsPrefix = currentUserId;
         string levelListKey = string.Join("|", allLevelsData.ConvertAll(ld => ld.levelKey ?? ""));
-        string savedListKey = PlayerPrefs.GetString(prefsPrefix + "_assignedLevelKeys", "");
-
-        if (savedListKey != levelListKey)
-        {
-            PlayerPrefs.SetString(prefsPrefix + "_assignedLevelKeys", levelListKey);
-            Debug.Log("[CharacterMove] Assigned item list changed; resolving resume from server/local save.");
-        }
+        PlayerPrefs.SetString(prefsPrefix + "_assignedLevelKeys", levelListKey);
 
         var loader = PlatformLevelLoader.Instance;
         if (loader != null && loader.HasServerResume)
         {
-            for (int i = 0; i < allLevelsData.Count; i++)
-            {
-                if (allLevelsData[i]?.levelKey == loader.ResumeLevelKey)
-                {
-                    currentLevel = i + 1;
-                    PlayerPrefs.SetInt(prefsPrefix + "_currentLevel", currentLevel);
-                    PlayerPrefs.SetString(prefsPrefix + "_currentLevelKey", loader.ResumeLevelKey);
-                    PlayerPrefs.Save();
-                    Debug.Log(
-                        $"[CharacterMove] Resuming from server at slot {currentLevel} ({loader.ResumeLevelKey}).");
-                    return;
-                }
-            }
+            if (TryApplyResumeByLevelKey(loader.ResumeLevelKey, prefsPrefix,
+                    $"Resuming from server at slot {{0}} ({loader.ResumeLevelKey})."))
+                return;
 
             currentLevel = Mathf.Clamp(loader.ResumeSlot, 1, allLevelsData.Count);
-            string resumeKey = GetPlatformLevelKey(currentLevel);
-            PlayerPrefs.SetInt(prefsPrefix + "_currentLevel", currentLevel);
-            if (!string.IsNullOrEmpty(resumeKey))
-                PlayerPrefs.SetString(prefsPrefix + "_currentLevelKey", resumeKey);
-            PlayerPrefs.Save();
-            Debug.Log($"[CharacterMove] Resuming from server slot {currentLevel} ({resumeKey}).");
-            return;
-        }
-
-        if (savedListKey != levelListKey)
-        {
-            currentLevel = 1;
-            PlayerPrefs.SetInt(prefsPrefix + "_currentLevel", 1);
-            if (allLevelsData[0] != null && !string.IsNullOrEmpty(allLevelsData[0].levelKey))
-                PlayerPrefs.SetString(prefsPrefix + "_currentLevelKey", allLevelsData[0].levelKey);
-            PlayerPrefs.Save();
-            Debug.Log($"[CharacterMove] Assigned item list changed; starting at first item ({allLevelsData[0]?.levelKey}).");
+            PersistCurrentLevelSlot(prefsPrefix);
+            Debug.Log($"[CharacterMove] Resuming from server slot {currentLevel} ({GetPlatformLevelKey(currentLevel)}).");
             return;
         }
 
         string savedLevelKey = PlayerPrefs.GetString(prefsPrefix + "_currentLevelKey", "");
-        if (!string.IsNullOrEmpty(savedLevelKey))
-        {
-            for (int i = 0; i < allLevelsData.Count; i++)
-            {
-                if (allLevelsData[i]?.levelKey == savedLevelKey)
-                {
-                    currentLevel = i + 1;
-                    Debug.Log($"[CharacterMove] Resuming at {savedLevelKey} (slot {currentLevel}).");
-                    return;
-                }
-            }
-        }
+        if (TryApplyResumeByLevelKey(savedLevelKey, prefsPrefix,
+                $"Resuming at {savedLevelKey} (slot {{0}})."))
+            return;
 
         int slot = PlayerPrefs.GetInt(prefsPrefix + "_currentLevel", 1);
         currentLevel = Mathf.Clamp(slot, 1, allLevelsData.Count);
+        PersistCurrentLevelSlot(prefsPrefix);
         Debug.Log($"[CharacterMove] Resuming at slot {currentLevel} ({GetPlatformLevelKey(currentLevel)}).");
+    }
+
+    private bool TryApplyResumeByLevelKey(string levelKey, string prefsPrefix, string logFormat)
+    {
+        if (string.IsNullOrEmpty(levelKey) || allLevelsData == null) return false;
+        for (int i = 0; i < allLevelsData.Count; i++)
+        {
+            if (allLevelsData[i]?.levelKey != levelKey) continue;
+            currentLevel = i + 1;
+            PersistCurrentLevelSlot(prefsPrefix);
+            Debug.Log(string.Format("[CharacterMove] " + logFormat, currentLevel));
+            return true;
+        }
+        return false;
+    }
+
+    private void PersistCurrentLevelSlot(string prefsPrefix)
+    {
+        PlayerPrefs.SetInt(prefsPrefix + "_currentLevel", currentLevel);
+        string levelKey = GetPlatformLevelKey(currentLevel);
+        if (!string.IsNullOrEmpty(levelKey))
+            PlayerPrefs.SetString(prefsPrefix + "_currentLevelKey", levelKey);
+        PlayerPrefs.Save();
     }
 
     public static bool IsIntroLevel(LevelData ld)

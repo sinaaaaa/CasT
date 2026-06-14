@@ -54,7 +54,7 @@ public class GameInteractionSoundsSettings : MonoBehaviour
 
     [Header("Enable")]
     public bool playActionTap = true;
-    public bool playActionDrag = true;
+    public bool playActionDrag = false;
     public bool playRobotTouch = true;
     public bool playFlagPlace = true;
     public bool playFlagTutorialTap = true;
@@ -81,6 +81,7 @@ public class GameInteractionSoundsSettings : MonoBehaviour
 
     private void Start()
     {
+        StripLegacyTutorialVoiceClips();
         MigrateLegacySceneClipsOnce();
     }
 
@@ -196,5 +197,30 @@ public class GameInteractionSoundsSettings : MonoBehaviour
         var tutorialManager = FindObjectOfType<TutorialManager>(true);
         if (tutorialManager != null)
             tutorialManager.MigrateSoundClipsTo(this);
+
+        StripLegacyTutorialVoiceClips();
+    }
+
+    /// <summary>Scene fields often still point at old tutorial narration — prefer short Resources SFX.</summary>
+    private void StripLegacyTutorialVoiceClips()
+    {
+        actionDragClip = StripIfTutorialVoice(actionDragClip);
+        queueSnapPopClip = StripIfTutorialVoice(queueSnapPopClip);
+        guidedBlankPromptClip = StripIfTutorialVoice(guidedBlankPromptClip);
+    }
+
+    private static AudioClip StripIfTutorialVoice(AudioClip clip)
+    {
+        if (clip == null) return null;
+        string name = clip.name.ToLowerInvariant();
+        if (name.Contains("apple") ||
+            name.Contains("drag the") ||
+            name.Contains("tap the") ||
+            name.Contains("turn the") ||
+            name.Contains("robo") ||
+            name.Contains("mixkit-explainer") ||
+            name.Contains("hint"))
+            return null;
+        return clip;
     }
 }
