@@ -1,7 +1,15 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { withAuth } from "next-auth/middleware";
-import { UserRole } from "@prisma/client";
+import { getToken } from "next-auth/jwt";
+
+/** Mirror Prisma UserRole — do not import @prisma/client here (Edge bundle size). */
+const UserRole = {
+  STUDENT: "STUDENT",
+  TEACHER: "TEACHER",
+  ADMIN: "ADMIN",
+} as const;
+
+type UserRoleValue = (typeof UserRole)[keyof typeof UserRole];
 
 function applySecurityHeaders(response: NextResponse) {
   response.headers.set("X-Frame-Options", "DENY");
@@ -60,65 +68,64 @@ function isPublicStudentApi(path: string): boolean {
   return path === "/api/student/login" || path === "/api/student/logout";
 }
 
-export default withAuth(
-  function middleware(req) {
-    const path = req.nextUrl.pathname;
-
-    if (path.startsWith("/api/game")) {
-      if (req.method === "OPTIONS") {
-        return applySecurityHeaders(
-          new NextResponse(null, { status: 204, headers: gameCorsHeaders(req) })
-        );
-      }
-      const res = NextResponse.next();
-      for (const [key, value] of Object.entries(gameCorsHeaders(req))) {
-        res.headers.set(key, value);
-      }
-      return applySecurityHeaders(res);
-    }
-
-    const role = req.nextauth.token?.role as UserRole | undefined;
-
-    if (path.startsWith("/admin") && role !== UserRole.ADMIN) {
-      return applySecurityHeaders(NextResponse.redirect(new URL("/login", req.url)));
-    }
-
-    if (path.startsWith("/teacher") && role !== UserRole.TEACHER && role !== UserRole.ADMIN) {
-      return applySecurityHeaders(
-        NextResponse.redirect(new URL("/student", req.url))
-      );
-    }
-
-    if (isPublicStudentPath(path)) {
-      return applySecurityHeaders(NextResponse.next());
-    }
-
-    if (path.startsWith("/student") && role !== UserRole.STUDENT) {
-      return applySecurityHeaders(
-        NextResponse.redirect(new URL("/student/login?portal=1", req.url))
-      );
-    }
-
-    return applySecurityHeaders(NextResponse.next());
-  },
-  {
-    callbacks: {
-      authorized: ({ token, req }) => {
-        const path = req.nextUrl.pathname;
-        if (path.startsWith("/api/game")) return true;
-        if (isPublicStudentApi(path)) return true;
-        if (path.startsWith("/api/student")) return true;
-        if (isPublicStudentPath(path)) return true;
-        if (path === "/login" || path === "/forgot-password" || path.startsWith("/reset-password")) {
-          return true;
-        }
-        if (path === "/") return true;
-        if (path.startsWith("/admin")) return token?.role === UserRole.ADMIN;
-        return !!token;
-      },
-    },
+function isPublicPath(path: string): boolean {
+  if (path.startsWith("/api/game")) return true;
+  if (isPublicStudentApi(path)) return true;
+  if (path.startsWith("/api/student")) return true;
+  if (isPublicStudentPath(path)) return true;
+  if (path === "/login" || path === "/forgot-password" || path.startsWith("/reset-password")) {
+    return true;
   }
-);
+  return path === "/";
+}
+
+function redirectToLogin(req: NextRequest) {
+  return applySecurityHeaders(NextResponse.redirect(new URL("/login", req.url)));
+}
+
+export async function middleware(req: NextRequest) {
+  const path = req.nextUrl.pathname;
+
+  if (path.startsWith("/api/game")) {
+    if (req.method === "OPTIONS") {
+      return applySecurityHeaders(
+        new NextResponse(null, { status: 204, headers: gameCorsHeaders(req) })
+      );
+    }
+    const res = NextResponse.next();
+    for (const [key, value] of Object.entries(gameCorsHeaders(req))) {
+      res.headers.set(key, value);
+    }
+    return applySecurityHeaders(res);
+  }
+
+  if (isPublicPath(path)) {
+    return applySecurityHeaders(NextResponse.next());
+  }
+
+  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+  const role = token?.role as UserRoleValue | undefined;
+
+  if (!token) {
+    return redirectToLogin(req);
+  }
+
+  if (path.startsWith("/admin") && role !== UserRole.ADMIN) {
+    return redirectToLogin(req);
+  }
+
+  if (path.startsWith("/teacher") && role !== UserRole.TEACHER && role !== UserRole.ADMIN) {
+    return applySecurityHeaders(NextResponse.redirect(new URL("/student", req.url)));
+  }
+
+  if (path.startsWith("/student") && role !== UserRole.STUDENT) {
+    return applySecurityHeaders(
+      NextResponse.redirect(new URL("/student/login?portal=1", req.url))
+    );
+  }
+
+  return applySecurityHeaders(NextResponse.next());
+}
 
 export const config = {
   matcher: [
