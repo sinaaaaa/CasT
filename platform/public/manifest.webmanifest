@@ -1,0 +1,25 @@
+{
+  "name": "Little Logic Adventure",
+  "short_name": "Logic Game",
+  "description": "Robot coding game — install for fullscreen play on phones and tablets.",
+  "start_url": "/play",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#000000",
+  "theme_color": "#312E81",
+  "icons": [
+    {
+      "src": "/icons/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

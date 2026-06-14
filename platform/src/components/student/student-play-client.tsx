@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, Loader2, Maximize2, Minimize2 } from "lucide-react";
 import type { StudentGameConfig } from "@/lib/student-session";
 import { LandscapeRequiredOverlay } from "@/components/student/landscape-required-overlay";
+import { InstallPlayAppPrompt } from "@/components/student/install-play-app-prompt";
 
 declare global {
   interface Window {
@@ -115,9 +116,10 @@ export function StudentPlayClient({
   return (
     <div className="student-zone min-h-dvh bg-black text-white">
       <LandscapeRequiredOverlay />
+      <InstallPlayAppPrompt gameReady={status === "ready"} />
       <div ref={gameShellRef} className="relative min-h-dvh overflow-hidden bg-black">
         {status === "ready" && (
-          <div className="pointer-events-none absolute bottom-3 left-3 z-20 flex items-center gap-2">
+          <div className="pointer-events-none absolute left-3 top-3 z-20 flex items-center gap-2">
             <Link
               href={homeHref}
               className={controlButtonClass}
