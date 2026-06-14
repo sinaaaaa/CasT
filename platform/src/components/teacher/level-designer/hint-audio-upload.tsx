@@ -32,7 +32,11 @@ export function HintAudioUpload({
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const res = await fetch("/api/teacher/upload-hint-audio", { method: "POST", body: fd });
+      const res = await fetch("/api/teacher/upload-hint-audio", {
+        method: "POST",
+        body: fd,
+        credentials: "same-origin",
+      });
       const data = await res.json();
       if (!res.ok) {
         setErr(data.error ?? "Upload failed");

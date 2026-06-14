@@ -23,7 +23,11 @@ export function HintImageUpload({ imageUrl, onChange, label = "Picture for stude
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const res = await fetch("/api/teacher/upload-hint-image", { method: "POST", body: fd });
+      const res = await fetch("/api/teacher/upload-hint-image", {
+        method: "POST",
+        body: fd,
+        credentials: "same-origin",
+      });
       const data = await res.json();
       if (!res.ok) {
         setErr(data.error ?? "Upload failed");
