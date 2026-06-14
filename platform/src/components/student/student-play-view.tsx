@@ -6,6 +6,8 @@ import {
   getStudentSessionFromCookies,
   STUDENT_SESSION_COOKIE,
 } from "@/lib/student-session";
+import { getPlayableLevelsForStudent } from "@/lib/level-assignments";
+import { resolveGameResumeLevel } from "@/lib/game-resume-level";
 import { resolveUnityGameUrl } from "@/lib/unity-game-url";
 
 type Props = {
@@ -24,7 +26,16 @@ export async function StudentPlayView({
 
   const cookieStore = await cookies();
   const sessionToken = cookieStore.get(STUDENT_SESSION_COOKIE)?.value ?? "";
-  const config = buildStudentGameConfig(session, sessionToken);
+  const playableLevels = await getPlayableLevelsForStudent(session.studentCode);
+  const resume = await resolveGameResumeLevel(
+    session.studentProfileId,
+    playableLevels.map((level) => ({ id: level.id, levelKey: level.levelKey }))
+  );
+  const config = {
+    ...buildStudentGameConfig(session, sessionToken),
+    resumeLevelKey: resume?.resumeLevelKey ?? null,
+    resumeSlot: resume?.resumeSlot ?? null,
+  };
 
   const unityGameUrl = resolveUnityGameUrl();
 

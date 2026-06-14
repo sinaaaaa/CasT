@@ -38,6 +38,12 @@ function buildUnityUrl(baseUrl: string, config: StudentGameConfig): string {
   if (config.gameApiKey) {
     url.searchParams.set("gameApiKey", config.gameApiKey);
   }
+  if (config.resumeLevelKey) {
+    url.searchParams.set("resumeLevelKey", config.resumeLevelKey);
+  }
+  if (config.resumeSlot != null && config.resumeSlot > 0) {
+    url.searchParams.set("resumeSlot", String(config.resumeSlot));
+  }
   return url.pathname + url.search;
 }
 

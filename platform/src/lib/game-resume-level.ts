@@ -1,4 +1,8 @@
 import { prisma } from "@/lib/prisma";
+import {
+  pickNextPlayableLevel,
+  type PlayableLevelProgress,
+} from "@/lib/resolve-next-playable-level";
 
 type PlayableLevelRef = {
   id: string;
@@ -10,15 +14,11 @@ export type GameResumeLevel = {
   resumeSlot: number;
 };
 
-/**
- * First assigned item the student should play next (1-based slot in the ordered list).
- * Matches the student dashboard "up next" logic: in-progress, then new, then first item.
- */
-export async function resolveGameResumeLevel(
+export async function buildPlayableLevelProgress(
   studentProfileId: string,
   orderedLevels: PlayableLevelRef[]
-): Promise<GameResumeLevel | null> {
-  if (orderedLevels.length === 0) return null;
+): Promise<PlayableLevelProgress[]> {
+  if (orderedLevels.length === 0) return [];
 
   const passedRows = await prisma.levelAttempt.findMany({
     where: { studentId: studentProfileId, passed: true },
@@ -36,22 +36,22 @@ export async function resolveGameResumeLevel(
     attemptCounts.map((row) => [row.levelId, row._count._all])
   );
 
-  const levels = orderedLevels.map((level, index) => {
-    const attempts = attemptsByLevelId.get(level.id) ?? 0;
-    const passed = passedLevelIds.has(level.id);
-    return {
-      ...level,
-      slot: index + 1,
-      attempts,
-      passed,
-      status: passed ? ("completed" as const) : attempts > 0 ? ("in_progress" as const) : ("new" as const),
-    };
-  });
+  return orderedLevels.map((level, index) => ({
+    id: level.id,
+    levelKey: level.levelKey,
+    slot: index + 1,
+    attempts: attemptsByLevelId.get(level.id) ?? 0,
+    passed: passedLevelIds.has(level.id),
+  }));
+}
 
-  const next =
-    levels.find((level) => level.status === "in_progress") ??
-    levels.find((level) => level.status === "new") ??
-    levels[0];
+export async function resolveGameResumeLevel(
+  studentProfileId: string,
+  orderedLevels: PlayableLevelRef[]
+): Promise<GameResumeLevel | null> {
+  const progress = await buildPlayableLevelProgress(studentProfileId, orderedLevels);
+  const next = pickNextPlayableLevel(progress);
+  if (!next) return null;
 
   return {
     resumeLevelKey: next.levelKey,

@@ -108,6 +108,8 @@ export type StudentGameConfig = {
   sessionToken: string;
   apiBaseUrl: string;
   gameApiKey: string;
+  resumeLevelKey?: string | null;
+  resumeSlot?: number | null;
 };
 
 export function buildStudentGameConfig(

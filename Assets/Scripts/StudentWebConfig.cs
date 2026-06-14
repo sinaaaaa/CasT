@@ -19,6 +19,8 @@ public static class StudentWebConfig
         public string sessionToken;
         public string apiBaseUrl;
         public string gameApiKey;
+        public string resumeLevelKey;
+        public int resumeSlot;
     }
 
 #if UNITY_WEBGL && !UNITY_EDITOR
@@ -34,6 +36,7 @@ public static class StudentWebConfig
 
         var studentCode = PlatformCommunication.NormalizeExternalId(payload.studentCode.Trim());
         PlayerPrefs.SetString("UserId", studentCode);
+        ApplyResumeProgress(studentCode, payload);
         PlayerPrefs.Save();
 
         var comm = PlatformCommunication.Instance;
@@ -74,6 +77,8 @@ public static class StudentWebConfig
 
         var studentCode = PlatformCommunication.NormalizeExternalId(payload.studentCode.Trim());
 
+        ApplyResumeProgress(studentCode, payload);
+
         string levelSlotKey = studentCode + "_currentLevel";
         string levelIdKey = studentCode + "_currentLevelKey";
         if (!PlayerPrefs.HasKey(levelSlotKey))
@@ -85,8 +90,31 @@ public static class StudentWebConfig
         PlayerPrefs.SetString("SceneToLoadAfterLoading", "level1");
         PlayerPrefs.Save();
 
-        Debug.Log($"[StudentWebConfig] Web login — skipping ID screen for {studentCode}");
+        Debug.Log($"[StudentWebConfig] Web login — skipping ID screen for {studentCode} (slot {PlayerPrefs.GetInt(levelSlotKey, 1)})");
         SceneManager.LoadScene("LoadingScene");
+    }
+
+    private static void ApplyResumeProgress(string studentCode, Payload payload)
+    {
+        if (payload == null || string.IsNullOrWhiteSpace(studentCode)) return;
+
+        bool changed = false;
+        if (payload.resumeSlot > 0)
+        {
+            PlayerPrefs.SetInt(studentCode + "_currentLevel", payload.resumeSlot);
+            changed = true;
+            Debug.Log($"[StudentWebConfig] Resume slot from play page: {payload.resumeSlot}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(payload.resumeLevelKey))
+        {
+            PlayerPrefs.SetString(studentCode + "_currentLevelKey", payload.resumeLevelKey.Trim());
+            changed = true;
+            Debug.Log($"[StudentWebConfig] Resume level key from play page: {payload.resumeLevelKey}");
+        }
+
+        if (changed)
+            PlayerPrefs.Save();
     }
 
     /// <summary>True when the page URL or parent iframe injected a student session.</summary>
@@ -149,6 +177,10 @@ public static class StudentWebConfig
                     case "token": payload.sessionToken = value; break;
                     case "apiBaseUrl": payload.apiBaseUrl = value; break;
                     case "gameApiKey": payload.gameApiKey = value; break;
+                    case "resumeLevelKey": payload.resumeLevelKey = value; break;
+                    case "resumeSlot":
+                        if (int.TryParse(value, out var slot)) payload.resumeSlot = slot;
+                        break;
                 }
             }
 

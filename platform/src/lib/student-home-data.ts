@@ -10,6 +10,8 @@ import {
   resolveLevelTaskLabel,
   resolvePlayStatus,
 } from "@/lib/student-ui";
+import { buildPlayableLevelProgress } from "@/lib/game-resume-level";
+import { pickNextPlayableLevel } from "@/lib/resolve-next-playable-level";
 import type { LevelType } from "@prisma/client";
 
 function computeStreak(attemptDates: Date[]): number {
@@ -60,6 +62,12 @@ export async function getStudentHomeData(studentProfileId: string, studentCode: 
 
   const progressByLevelId = new Map(progress.levels.map((l) => [l.levelId, l]));
 
+  const playableProgress = await buildPlayableLevelProgress(
+    studentProfileId,
+    playableLevels.map((level) => ({ id: level.id, levelKey: level.levelKey }))
+  );
+  const nextPlayable = pickNextPlayableLevel(playableProgress);
+
   const levels = playableLevels.map((level, index) => {
     const cfg = levelGameplayConfigSchema.safeParse(level.config);
     const layoutMode = cfg.success
@@ -106,10 +114,9 @@ export async function getStudentHomeData(studentProfileId: string, studentCode: 
   }));
 
   const nextLevel =
-    levels.find((l) => l.status === "in_progress") ??
-    levels.find((l) => l.status === "new") ??
-    levels[0] ??
-    null;
+    nextPlayable != null
+      ? levels.find((level) => level.id === nextPlayable.id) ?? null
+      : null;
 
   return {
     stats: {

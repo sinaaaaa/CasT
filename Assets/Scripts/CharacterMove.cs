@@ -3916,16 +3916,18 @@ public class CharacterMove : MonoBehaviour
     {
         if (allLevelsData == null || allLevelsData.Count == 0) return;
 
-        var first = allLevelsData[0];
-        if (!IsIntroLevel(first) || !IsIntroCompleted(first)) return;
+        LevelData current = GetCurrentLevelData();
+        if (current == null || !IsIntroLevel(current)) return;
+        if (!IsIntroCompleted(current)) return;
 
-        for (int i = 1; i < allLevelsData.Count; i++)
+        for (int i = currentLevel; i < allLevelsData.Count; i++)
         {
             if (!IsIntroLevel(allLevelsData[i]))
             {
                 currentLevel = i + 1;
+                SavePlayerLevel();
                 Debug.Log(
-                    $"[CharacterMove] Introduction already completed for {currentUserId} — starting at slot {currentLevel} ({allLevelsData[i]?.levelKey}).");
+                    $"[CharacterMove] Introduction already completed for {currentUserId} — advancing from intro to slot {currentLevel} ({allLevelsData[i]?.levelKey}).");
                 return;
             }
         }
