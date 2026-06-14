@@ -16,7 +16,7 @@ using UnityEngine.EventSystems;
 ///   - Leave rootCanvas empty to auto-detect, or assign explicitly if multiple canvases exist.
 /// </summary>
 [RequireComponent(typeof(RectTransform))]
-public class DraggableActionBlock : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
+public class DraggableActionBlock : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerDownHandler
 {
     public enum ActionKind
     {
@@ -77,6 +77,12 @@ public class DraggableActionBlock : MonoBehaviour, IBeginDragHandler, IDragHandl
         return null;
     }
 
+    public void OnPointerDown(PointerEventData eventData)
+    {
+        if (cachedButton != null && !cachedButton.interactable) return;
+        GameInteractionSounds.PlayActionTap();
+    }
+
     public void OnBeginDrag(PointerEventData eventData)
     {
         if (characterMove == null)
@@ -108,6 +114,7 @@ public class DraggableActionBlock : MonoBehaviour, IBeginDragHandler, IDragHandl
 
         isDragging = true;
         UiDragState.BeginDrag();
+        GameInteractionSounds.PlayActionDrag();
         DragDropTutorialController.NotifyStudentDragStarted();
 
         ghostInstance = new GameObject("ActionDragGhost", typeof(RectTransform), typeof(CanvasGroup), typeof(Image));

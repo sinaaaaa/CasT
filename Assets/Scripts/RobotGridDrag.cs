@@ -141,6 +141,7 @@ public class RobotGridDrag : MonoBehaviour
         if (_camera == null) return;
 
         characterMove.NotifyRobotManipulationStarted();
+        GameInteractionSounds.PlayRobotTouch();
 
         if (characterMove.tangibleSideTapRotate &&
             TryGetLateralHitOnRobot(screenPos, out float lateral))

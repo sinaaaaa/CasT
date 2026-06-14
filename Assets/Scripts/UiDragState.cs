@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
-using UnityEngine.UI;
 
 /// <summary>
 /// Tracks active UI drag-and-drop (action palette, yellow strip reorder) and
@@ -51,7 +50,6 @@ public static class UiDragState
             if (go.GetComponentInParent<DraggableActionBlock>() != null) return true;
             if (go.GetComponentInParent<DraggableQueuedBlock>() != null) return true;
             if (go.GetComponentInParent<ActionQueueDropZone>() != null) return true;
-            if (go.GetComponentInParent<Button>() != null) return true;
         }
 
         return false;

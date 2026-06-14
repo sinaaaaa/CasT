@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, Loader2, Maximize2, Minimize2 } from "lucide-react";
 import type { StudentGameConfig } from "@/lib/student-session";
+import { LandscapeRequiredOverlay } from "@/components/student/landscape-required-overlay";
 
 declare global {
   interface Window {
@@ -12,6 +13,7 @@ declare global {
 
   interface Document {
     webkitFullscreenElement?: Element | null;
+    webkitExitFullscreen?: () => Promise<void>;
   }
 
   interface HTMLElement {
@@ -42,44 +44,9 @@ function isDocumentFullscreen(): boolean {
   return !!(document.fullscreenElement ?? document.webkitFullscreenElement);
 }
 
-function isPortraitMobileViewport(): boolean {
-  if (typeof window === "undefined") return false;
-  return window.matchMedia("(orientation: portrait) and (max-width: 1024px)").matches;
-}
-
-function applyPortraitGameFrame(iframe: HTMLIFrameElement | null) {
-  if (!iframe) return;
-
-  if (isPortraitMobileViewport()) {
-    const width = window.innerHeight;
-    const height = window.innerWidth;
-    Object.assign(iframe.style, {
-      position: "fixed",
-      top: "50%",
-      left: "50%",
-      width: `${width}px`,
-      height: `${height}px`,
-      maxWidth: "none",
-      border: "0",
-      transform: "translate(-50%, -50%) rotate(90deg)",
-      transformOrigin: "center center",
-      zIndex: "10",
-      background: "#000",
-    });
-    return;
-  }
-
-  iframe.style.position = "";
-  iframe.style.top = "";
-  iframe.style.left = "";
-  iframe.style.width = "";
-  iframe.style.height = "";
-  iframe.style.maxWidth = "";
-  iframe.style.border = "";
-  iframe.style.transform = "";
-  iframe.style.transformOrigin = "";
-  iframe.style.zIndex = "";
-  iframe.style.background = "";
+function isDesktopPointer(): boolean {
+  if (typeof window === "undefined") return true;
+  return window.matchMedia("(pointer: fine)").matches;
 }
 
 export function StudentPlayClient({
@@ -92,6 +59,7 @@ export function StudentPlayClient({
   const [status, setStatus] = useState<"loading" | "ready" | "missing">("loading");
   const [iframeSrc, setIframeSrc] = useState(unityGameUrl);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showFullscreenControl, setShowFullscreenControl] = useState(false);
 
   useEffect(() => {
     window.StudentGameConfig = config;
@@ -106,6 +74,14 @@ export function StudentPlayClient({
   }, [config, unityGameUrl]);
 
   useEffect(() => {
+    const syncFullscreenControl = () => setShowFullscreenControl(isDesktopPointer());
+    syncFullscreenControl();
+    const mq = window.matchMedia("(pointer: fine)");
+    mq.addEventListener("change", syncFullscreenControl);
+    return () => mq.removeEventListener("change", syncFullscreenControl);
+  }, []);
+
+  useEffect(() => {
     const syncFullscreen = () => setIsFullscreen(isDocumentFullscreen());
     document.addEventListener("fullscreenchange", syncFullscreen);
     document.addEventListener("webkitfullscreenchange", syncFullscreen);
@@ -115,86 +91,53 @@ export function StudentPlayClient({
     };
   }, []);
 
-  useEffect(() => {
-    if (status !== "ready") return;
-
-    const iframe = iframeRef.current;
-    const syncLayout = () => applyPortraitGameFrame(iframe);
-
-    syncLayout();
-    window.addEventListener("resize", syncLayout);
-    window.addEventListener("orientationchange", syncLayout);
-
-    return () => {
-      window.removeEventListener("resize", syncLayout);
-      window.removeEventListener("orientationchange", syncLayout);
-      if (iframe) {
-        iframe.style.position = "";
-        iframe.style.top = "";
-        iframe.style.left = "";
-        iframe.style.width = "";
-        iframe.style.height = "";
-        iframe.style.maxWidth = "";
-        iframe.style.border = "";
-        iframe.style.transform = "";
-        iframe.style.transformOrigin = "";
-        iframe.style.zIndex = "";
-        iframe.style.background = "";
-      }
-    };
-  }, [status]);
-
   const toggleFullscreen = useCallback(async () => {
     const shell = gameShellRef.current;
     if (!shell) return;
 
     try {
       if (isDocumentFullscreen()) {
-        await document.exitFullscreen();
+        if (document.exitFullscreen) await document.exitFullscreen();
+        else if (document.webkitExitFullscreen) await document.webkitExitFullscreen();
         return;
       }
 
-      if (shell.requestFullscreen) {
-        await shell.requestFullscreen();
-      } else if (shell.webkitRequestFullscreen) {
-        await shell.webkitRequestFullscreen();
-      }
+      if (shell.requestFullscreen) await shell.requestFullscreen();
+      else if (shell.webkitRequestFullscreen) await shell.webkitRequestFullscreen();
     } catch {
-      // Some mobile browsers block fullscreen inside iframes — game still fills the viewport.
+      // Fullscreen API is limited on mobile Safari.
     }
   }, []);
 
   const controlButtonClass =
-    "inline-flex items-center gap-2 rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2 text-sm font-semibold text-white shadow-lg backdrop-blur transition hover:bg-slate-900/90";
+    "pointer-events-auto inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-slate-950/75 text-white shadow-lg backdrop-blur transition hover:bg-slate-900/90";
 
   return (
     <div className="student-zone min-h-dvh bg-black text-white">
+      <LandscapeRequiredOverlay />
       <div ref={gameShellRef} className="relative min-h-dvh overflow-hidden bg-black">
         {status === "ready" && (
-          <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-3 p-3">
-            <Link href={homeHref} className={`${controlButtonClass} pointer-events-auto`}>
-              <ArrowLeft className="h-4 w-4" />
-              <span className="hidden sm:inline">Home</span>
-            </Link>
-            <button
-              type="button"
-              onClick={toggleFullscreen}
-              className={`${controlButtonClass} pointer-events-auto`}
-              aria-pressed={isFullscreen}
-              aria-label={isFullscreen ? "Exit full screen" : "Enter full screen"}
+          <div className="pointer-events-none absolute bottom-3 left-3 z-20 flex items-center gap-2">
+            <Link
+              href={homeHref}
+              className={controlButtonClass}
+              aria-label="Back to home"
+              title="Home"
             >
-              {isFullscreen ? (
-                <>
-                  <Minimize2 className="h-4 w-4" />
-                  <span className="hidden sm:inline">Exit full screen</span>
-                </>
-              ) : (
-                <>
-                  <Maximize2 className="h-4 w-4" />
-                  <span className="hidden sm:inline">Full screen</span>
-                </>
-              )}
-            </button>
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
+            {showFullscreenControl && (
+              <button
+                type="button"
+                onClick={toggleFullscreen}
+                className={controlButtonClass}
+                aria-pressed={isFullscreen}
+                aria-label={isFullscreen ? "Exit full screen" : "Enter full screen"}
+                title={isFullscreen ? "Exit full screen" : "Full screen"}
+              >
+                {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+              </button>
+            )}
           </div>
         )}
 

@@ -57,7 +57,7 @@ public static class WebGLBuildScript
 
         InjectStudentConfigBridge(outputDir);
         InjectTouchGestureGuards(outputDir);
-        InjectForceHorizontalLayout(outputDir);
+        InjectWebGlBrowserGuards(outputDir);
         Debug.Log("[WebGLBuildScript] Build succeeded: " + outputDir);
         if (exitWhenDone)
             EditorApplication.Exit(0);
@@ -117,38 +117,26 @@ public static class WebGLBuildScript
     }
 
     /// <summary>
-    /// Standalone /unity loads rotate the canvas in portrait; iframe embeds rely on the play page wrapper.
+    /// Prevents iOS Safari crashes from Unity calling screen.orientation.lock, and keeps mobile layout simple.
     /// </summary>
-    private static void InjectForceHorizontalLayout(string outputDir)
+    private static void InjectWebGlBrowserGuards(string outputDir)
     {
         var indexPath = Path.Combine(outputDir, "index.html");
         if (!File.Exists(indexPath))
             return;
 
-        const string marker = "sparc-force-horizontal";
+        const string marker = "sparc-webgl-guards";
         var html = File.ReadAllText(indexPath);
         if (html.Contains(marker))
             return;
 
         const string snippet =
-            "<style>/* sparc-force-horizontal */" +
-            "html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#000;}" +
-            "#unity-container.unity-mobile,#unity-container.unity-mobile #unity-canvas{width:100%;height:100%;}" +
-            "</style>" +
-            "<script>/* sparc-force-horizontal */" +
-            "(function(){function inIframe(){try{return window.self!==window.top;}catch(e){return true;}}" +
-            "function apply(){var c=document.getElementById('unity-container');if(!c)return;" +
-            "if(inIframe()){c.style.position='';c.style.top='';c.style.left='';c.style.width='';c.style.height='';" +
-            "c.style.transform='';c.style.transformOrigin='';c.style.zIndex='';return;}" +
-            "var portrait=window.matchMedia('(orientation: portrait) and (max-width: 1024px)').matches;" +
-            "if(portrait){var w=window.innerHeight,h=window.innerWidth;" +
-            "c.style.position='fixed';c.style.top='50%';c.style.left='50%';c.style.width=w+'px';c.style.height=h+'px';" +
-            "c.style.transform='translate(-50%, -50%) rotate(90deg)';c.style.transformOrigin='center center';c.style.zIndex='1';}" +
-            "else{c.style.position='';c.style.top='';c.style.left='';c.style.width='';c.style.height='';" +
-            "c.style.transform='';c.style.transformOrigin='';c.style.zIndex='';}}" +
-            "window.addEventListener('resize',apply);window.addEventListener('orientationchange',apply);" +
-            "if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',apply);else apply();})();" +
-            "</script>";
+            "<script>/* sparc-webgl-guards */" +
+            "(function(){try{var o=screen.orientation;if(!o)screen.orientation=o={};" +
+            "if(typeof o.lock!=='function')o.lock=function(){return Promise.resolve();};}catch(e){}})();" +
+            "</script>" +
+            "<style>/* sparc-webgl-guards */html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#000;}" +
+            "#unity-container.unity-mobile,#unity-container.unity-mobile #unity-canvas{width:100%;height:100%;}</style>";
 
         if (html.Contains("</head>"))
             html = html.Replace("</head>", snippet + "</head>");

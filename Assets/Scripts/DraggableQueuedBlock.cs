@@ -30,7 +30,7 @@ using UnityEngine.UI;
 ///     "click vs drag" disambiguation and matches Scratch-style block UX.
 /// </summary>
 [RequireComponent(typeof(RectTransform))]
-public class DraggableQueuedBlock : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
+public class DraggableQueuedBlock : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerDownHandler
 {
     [Header("References")]
     public CharacterMove characterMove;
@@ -74,6 +74,12 @@ public class DraggableQueuedBlock : MonoBehaviour, IBeginDragHandler, IDragHandl
         return refComp == null || refComp.deletable;
     }
 
+    public void OnPointerDown(PointerEventData eventData)
+    {
+        if (!CanReorder()) return;
+        GameInteractionSounds.PlayActionTap();
+    }
+
     public void OnBeginDrag(PointerEventData eventData)
     {
         if (!CanReorder()) return;
@@ -113,6 +119,7 @@ public class DraggableQueuedBlock : MonoBehaviour, IBeginDragHandler, IDragHandl
 
         isDragging = true;
         UiDragState.BeginDrag();
+        GameInteractionSounds.PlayActionDrag();
         DragDropTutorialController.NotifyStudentDragStarted();
         hoveredZone = FindDropZoneUnderPointer(eventData);
         if (hoveredZone != null)

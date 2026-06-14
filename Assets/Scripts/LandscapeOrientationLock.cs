@@ -2,7 +2,8 @@ using System.Runtime.InteropServices;
 using UnityEngine;
 
 /// <summary>
-/// Keeps the game in landscape on phones/tablets (native + WebGL).
+/// Keeps the game in landscape on native builds. WebGL relies on the play page rotate overlay
+/// because Screen.orientation triggers screen.orientation.lock (unsupported on iOS Safari).
 /// </summary>
 [DefaultExecutionOrder(-200)]
 public class LandscapeOrientationLock : MonoBehaviour
@@ -26,6 +27,10 @@ public class LandscapeOrientationLock : MonoBehaviour
 
     public static void ApplyLandscapeOnly()
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        // Do not touch Screen.orientation on WebGL — Unity calls screen.orientation.lock and crashes on iOS.
+        return;
+#else
         Screen.autorotateToPortrait = false;
         Screen.autorotateToPortraitUpsideDown = false;
         Screen.autorotateToLandscapeLeft = true;
@@ -36,6 +41,7 @@ public class LandscapeOrientationLock : MonoBehaviour
         {
             Screen.orientation = ScreenOrientation.LandscapeLeft;
         }
+#endif
     }
 
     public static void RequestBrowserLandscapeLock()
@@ -47,7 +53,7 @@ public class LandscapeOrientationLock : MonoBehaviour
         }
         catch
         {
-            // Optional browser API — ignore when unavailable (desktop, iOS Safari, etc.).
+            // Optional browser API — ignore when unavailable.
         }
 #endif
     }
