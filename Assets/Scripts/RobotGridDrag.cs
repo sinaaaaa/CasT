@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.EventSystems;
 
 /// <summary>
 /// Drag the robot on the grid before RUN. Toy-style: center = move; left/right sides = rotate.
@@ -72,14 +73,35 @@ public class RobotGridDrag : MonoBehaviour
             return;
         }
 
+        // Ignore pinch / multi-touch so accidental zoom gestures do not move the robot.
+        if (Input.touchCount > 1)
+        {
+            if (_activeTouchFingerId >= 0 && (_mode != InteractionMode.None || _moveDragging))
+                EndPointerInteraction();
+            return;
+        }
+
         Touch t = Input.GetTouch(0);
         if (_activeTouchFingerId < 0)
             _activeTouchFingerId = t.fingerId;
 
         if (t.fingerId != _activeTouchFingerId) return;
 
+        if (UiDragState.IsDragging)
+        {
+            if (t.phase == TouchPhase.Ended || t.phase == TouchPhase.Canceled)
+                EndPointerInteraction();
+            return;
+        }
+
         if (t.phase == TouchPhase.Began)
+        {
+            if (UiDragState.ShouldBlockWorldPointer(t.position, t.fingerId))
+                return;
+            if (!DoesPointerHitRobot(t.position))
+                return;
             BeginPointerInteraction(t.position);
+        }
         else if (t.phase == TouchPhase.Moved)
             ContinuePointerInteraction(t.position);
         else if (t.phase == TouchPhase.Ended || t.phase == TouchPhase.Canceled)
@@ -89,6 +111,8 @@ public class RobotGridDrag : MonoBehaviour
     private void OnMouseDown()
     {
         if (Input.touchCount > 0) return;
+        if (UiDragState.ShouldBlockWorldPointer(Input.mousePosition)) return;
+        if (!DoesPointerHitRobot(Input.mousePosition)) return;
         BeginPointerInteraction(Input.mousePosition);
     }
 
@@ -286,6 +310,11 @@ public class RobotGridDrag : MonoBehaviour
         }
         _mode = InteractionMode.None;
         _moveDragging = false;
+    }
+
+    private bool DoesPointerHitRobot(Vector2 screenPos)
+    {
+        return TryGetLateralHitOnRobot(screenPos, out _);
     }
 
     /// <summary>Lateral offset of the ray hit on the robot, along robot's flattened right axis (+ = right).</summary>

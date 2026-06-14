@@ -16,7 +16,7 @@ using UnityEngine.EventSystems;
 ///   - Leave rootCanvas empty to auto-detect, or assign explicitly if multiple canvases exist.
 /// </summary>
 [RequireComponent(typeof(RectTransform))]
-public class DraggableActionBlock : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
+public class DraggableActionBlock : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerDownHandler, IPointerUpHandler
 {
     public enum ActionKind
     {
@@ -75,6 +75,19 @@ public class DraggableActionBlock : MonoBehaviour, IBeginDragHandler, IDragHandl
             case ActionKind.TurnRight: return characterMove.rotateRightSprite;
         }
         return null;
+    }
+
+    public void OnPointerDown(PointerEventData eventData)
+    {
+        if (characterMove == null) return;
+        if (cachedButton != null && !cachedButton.interactable) return;
+        if (!characterMove.CanDragPaletteBlockToQueue(actionKind)) return;
+        UiDragState.BeginDrag();
+    }
+
+    public void OnPointerUp(PointerEventData eventData)
+    {
+        UiDragState.EndDrag();
     }
 
     public void OnBeginDrag(PointerEventData eventData)

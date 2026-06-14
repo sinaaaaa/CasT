@@ -28,7 +28,7 @@ public class FlagPlacement : MonoBehaviour
     public float maxTapDragPixels = 28f;
     [Tooltip("If true, taps over UI (buttons, panels) are ignored. " +
              "Turn OFF if the grid never receives taps (fullscreen UI blocking).")]
-    public bool ignoreClicksOverUI = false;
+    public bool ignoreClicksOverUI = true;
 
     [Header("Optional Hover Preview (world flags only; off by default)")]
     [Tooltip("If true, a ghost is shown under the desktop cursor — only works for non-UI flag prefabs. " +

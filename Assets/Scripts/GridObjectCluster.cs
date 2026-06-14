@@ -75,6 +75,9 @@ public class GridObjectCluster : MonoBehaviour
     // Legacy mouse support (for backward compatibility)
     void OnMouseDown()
     {
+        if (Input.touchCount > 0) return;
+        if (UiDragState.ShouldBlockWorldPointer(Input.mousePosition)) return;
+
         Debug.Log($"[GridObjectCluster] OnMouseDown called on {gameObject.name} - allowDrag={allowDrag}");
         
         if (!allowDrag) 
@@ -117,6 +120,8 @@ public class GridObjectCluster : MonoBehaviour
     // Mouse drag support (for world objects)
     void OnMouseDrag()
     {
+        if (UiDragState.IsDragging) return;
+
         Debug.Log($"[GridObjectCluster] OnMouseDrag called on {gameObject.name} - allowDrag={allowDrag}, isDragging={isDragging}");
         
         if (!allowDrag || !isDragging) 

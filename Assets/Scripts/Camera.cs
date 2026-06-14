@@ -161,6 +161,8 @@ public class MultiTargetCamera : MonoBehaviour
     {
         if (characterMove == null) characterMove = FindObjectOfType<CharacterMove>();
         SyncGridFromCharacterMove();
+        // Keep the grid/camera stable while the student drags action blocks on touch devices.
+        if (UiDragState.IsDragging) return;
         TickCamera(Time.deltaTime);
     }
 

@@ -1162,6 +1162,7 @@ public class CharacterMove : MonoBehaviour
     /// <summary>True when the player may drag the robot (global + level flags, not while running).</summary>
     public bool CanDragRobot()
     {
+        if (UiDragState.IsDragging) return false;
         if (!allowRobotDrag || isProcessing || ManualRobotRotationAnimating) return false;
         LevelData ld = GetCurrentLevelData();
         return ld == null || ld.allowRobotDrag;

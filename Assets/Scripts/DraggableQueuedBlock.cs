@@ -30,7 +30,7 @@ using UnityEngine.UI;
 ///     "click vs drag" disambiguation and matches Scratch-style block UX.
 /// </summary>
 [RequireComponent(typeof(RectTransform))]
-public class DraggableQueuedBlock : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
+public class DraggableQueuedBlock : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerDownHandler, IPointerUpHandler
 {
     [Header("References")]
     public CharacterMove characterMove;
@@ -72,6 +72,17 @@ public class DraggableQueuedBlock : MonoBehaviour, IBeginDragHandler, IDragHandl
         if (characterMove.IsActionQueueLocked()) return false;
         var refComp = GetComponent<QueuedActionRef>();
         return refComp == null || refComp.deletable;
+    }
+
+    public void OnPointerDown(PointerEventData eventData)
+    {
+        if (!CanReorder()) return;
+        UiDragState.BeginDrag();
+    }
+
+    public void OnPointerUp(PointerEventData eventData)
+    {
+        UiDragState.EndDrag();
     }
 
     public void OnBeginDrag(PointerEventData eventData)

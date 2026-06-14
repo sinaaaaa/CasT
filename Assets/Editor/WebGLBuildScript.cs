@@ -56,6 +56,7 @@ public static class WebGLBuildScript
         }
 
         InjectStudentConfigBridge(outputDir);
+        InjectTouchGestureGuards(outputDir);
         Debug.Log("[WebGLBuildScript] Build succeeded: " + outputDir);
         if (exitWhenDone)
             EditorApplication.Exit(0);
@@ -79,6 +80,32 @@ public static class WebGLBuildScript
             "<script>/* StudentGameConfig bridge */" +
             "try{if(window.parent&&window.parent.StudentGameConfig&&!window.StudentGameConfig)" +
             "window.StudentGameConfig=window.parent.StudentGameConfig;}catch(e){}</script>";
+
+        if (html.Contains("</head>"))
+            html = html.Replace("</head>", snippet + "</head>");
+        else
+            html = snippet + html;
+
+        File.WriteAllText(indexPath, html);
+    }
+
+    /// <summary>
+    /// Prevents browser pinch-zoom and stray touch scrolling while dragging action blocks on phones/tablets.
+    /// </summary>
+    private static void InjectTouchGestureGuards(string outputDir)
+    {
+        var indexPath = Path.Combine(outputDir, "index.html");
+        if (!File.Exists(indexPath))
+            return;
+
+        const string marker = "touch-action: none";
+        var html = File.ReadAllText(indexPath);
+        if (html.Contains(marker))
+            return;
+
+        const string snippet =
+            "<style>canvas,#unity-container,#unity-canvas{touch-action:none;-ms-touch-action:none;}</style>" +
+            "<script>document.addEventListener('touchmove',function(e){if(e.touches.length>1)e.preventDefault();},{passive:false});</script>";
 
         if (html.Contains("</head>"))
             html = html.Replace("</head>", snippet + "</head>");
