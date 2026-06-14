@@ -84,8 +84,22 @@ function redirectToLogin(req: NextRequest) {
   return applySecurityHeaders(NextResponse.redirect(new URL("/login", req.url)));
 }
 
+function redirectToStudentLogin(req: NextRequest, nextPath: string) {
+  const url = new URL("/student/login", req.url);
+  url.searchParams.set("next", nextPath);
+  return applySecurityHeaders(NextResponse.redirect(url));
+}
+
 export async function middleware(req: NextRequest) {
   const path = req.nextUrl.pathname;
+
+  if (path === "/play") {
+    const hasStudentSession = Boolean(req.cookies.get("sparc_student_session")?.value);
+    if (!hasStudentSession) {
+      return redirectToStudentLogin(req, "/play");
+    }
+    return applySecurityHeaders(NextResponse.next());
+  }
 
   if (path.startsWith("/api/game")) {
     if (req.method === "OPTIONS") {
@@ -130,6 +144,7 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
+    "/play",
     "/admin/:path*",
     "/teacher/:path*",
     "/student/:path*",

@@ -74,9 +74,15 @@ export function StudentLoginForm() {
             <div className="mb-6 text-center">
               <h1 className="text-3xl font-extrabold text-slate-900">Let&apos;s Get Started!</h1>
               <p className="mt-2 text-lg text-slate-600">Enter your Student ID</p>
-              <p className="mt-3 rounded-xl bg-teal-50 px-4 py-2 text-sm font-medium text-teal-800">
-                Your teacher gave you a Student ID.
-              </p>
+              {next === "/play" ? (
+                <p className="mt-3 rounded-xl bg-indigo-50 px-4 py-2 text-sm font-medium text-indigo-800">
+                  Sign in to open the robot coding game.
+                </p>
+              ) : (
+                <p className="mt-3 rounded-xl bg-teal-50 px-4 py-2 text-sm font-medium text-teal-800">
+                  Your teacher gave you a Student ID.
+                </p>
+              )}
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-5">
