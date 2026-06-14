@@ -96,11 +96,16 @@ public class RobotGridDrag : MonoBehaviour
 
         if (t.phase == TouchPhase.Began)
         {
+            EnsureInteractionCamera();
+            if (UiDragState.IsDragging)
+                return;
+            if (DoesPointerHitRobot(t.position))
+            {
+                BeginPointerInteraction(t.position);
+                return;
+            }
             if (UiDragState.ShouldBlockWorldPointer(t.position, t.fingerId))
                 return;
-            if (!DoesPointerHitRobot(t.position))
-                return;
-            BeginPointerInteraction(t.position);
         }
         else if (t.phase == TouchPhase.Moved)
             ContinuePointerInteraction(t.position);
@@ -111,9 +116,20 @@ public class RobotGridDrag : MonoBehaviour
     private void OnMouseDown()
     {
         if (Input.touchCount > 0) return;
+        EnsureInteractionCamera();
+        if (UiDragState.IsDragging) return;
+        if (DoesPointerHitRobot(Input.mousePosition))
+        {
+            BeginPointerInteraction(Input.mousePosition);
+            return;
+        }
         if (UiDragState.ShouldBlockWorldPointer(Input.mousePosition)) return;
-        if (!DoesPointerHitRobot(Input.mousePosition)) return;
-        BeginPointerInteraction(Input.mousePosition);
+    }
+
+    private void EnsureInteractionCamera()
+    {
+        if (_camera == null && characterMove != null)
+            _camera = characterMove.GetGridInteractionCamera();
     }
 
     private void BeginPointerInteraction(Vector2 screenPos)
@@ -314,6 +330,7 @@ public class RobotGridDrag : MonoBehaviour
 
     private bool DoesPointerHitRobot(Vector2 screenPos)
     {
+        EnsureInteractionCamera();
         return TryGetLateralHitOnRobot(screenPos, out _);
     }
 
@@ -321,6 +338,7 @@ public class RobotGridDrag : MonoBehaviour
     private bool TryGetLateralHitOnRobot(Vector2 screenPos, out float lateral)
     {
         lateral = 0f;
+        EnsureInteractionCamera();
         if (_camera == null) return false;
 
         Ray ray = _camera.ScreenPointToRay(screenPos);

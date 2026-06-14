@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.UI;
 
 /// <summary>
 /// Tracks active UI drag-and-drop (action palette, yellow strip reorder) and
@@ -22,15 +23,19 @@ public static class UiDragState
         if (_activeDragCount > 0) _activeDragCount--;
     }
 
+    public static bool ShouldBlockWorldPointer(Vector2 screenPos, int pointerId = -1)
+    {
+        if (IsDragging) return true;
+        return IsScreenPointOverActionUi(screenPos, pointerId);
+    }
+
     /// <summary>
-    /// True when the pointer is over any UI canvas (buttons, yellow strip, etc.).
+    /// True when the pointer is over action palette, queue strip, or other gameplay UI —
+    /// not the 3D game view.
     /// </summary>
-    public static bool IsScreenPointOverUi(Vector2 screenPos, int pointerId = -1)
+    public static bool IsScreenPointOverActionUi(Vector2 screenPos, int pointerId = -1)
     {
         if (EventSystem.current == null) return false;
-
-        if (pointerId >= 0 && EventSystem.current.IsPointerOverGameObject(pointerId))
-            return true;
 
         var ped = new PointerEventData(EventSystem.current)
         {
@@ -41,16 +46,14 @@ public static class UiDragState
         EventSystem.current.RaycastAll(ped, results);
         for (int i = 0; i < results.Count; i++)
         {
-            if (results[i].gameObject == null) continue;
-            if (results[i].gameObject.GetComponentInParent<Canvas>() != null)
-                return true;
+            var go = results[i].gameObject;
+            if (go == null) continue;
+            if (go.GetComponentInParent<DraggableActionBlock>() != null) return true;
+            if (go.GetComponentInParent<DraggableQueuedBlock>() != null) return true;
+            if (go.GetComponentInParent<ActionQueueDropZone>() != null) return true;
+            if (go.GetComponentInParent<Button>() != null) return true;
         }
 
         return false;
-    }
-
-    public static bool ShouldBlockWorldPointer(Vector2 screenPos, int pointerId = -1)
-    {
-        return IsDragging || IsScreenPointOverUi(screenPos, pointerId);
     }
 }

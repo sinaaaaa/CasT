@@ -16,7 +16,7 @@ using UnityEngine.EventSystems;
 ///   - Leave rootCanvas empty to auto-detect, or assign explicitly if multiple canvases exist.
 /// </summary>
 [RequireComponent(typeof(RectTransform))]
-public class DraggableActionBlock : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerDownHandler, IPointerUpHandler
+public class DraggableActionBlock : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
 {
     public enum ActionKind
     {
@@ -77,19 +77,6 @@ public class DraggableActionBlock : MonoBehaviour, IBeginDragHandler, IDragHandl
         return null;
     }
 
-    public void OnPointerDown(PointerEventData eventData)
-    {
-        if (characterMove == null) return;
-        if (cachedButton != null && !cachedButton.interactable) return;
-        if (!characterMove.CanDragPaletteBlockToQueue(actionKind)) return;
-        UiDragState.BeginDrag();
-    }
-
-    public void OnPointerUp(PointerEventData eventData)
-    {
-        UiDragState.EndDrag();
-    }
-
     public void OnBeginDrag(PointerEventData eventData)
     {
         if (characterMove == null)
@@ -120,6 +107,7 @@ public class DraggableActionBlock : MonoBehaviour, IBeginDragHandler, IDragHandl
         }
 
         isDragging = true;
+        UiDragState.BeginDrag();
         DragDropTutorialController.NotifyStudentDragStarted();
 
         ghostInstance = new GameObject("ActionDragGhost", typeof(RectTransform), typeof(CanvasGroup), typeof(Image));
@@ -162,6 +150,7 @@ public class DraggableActionBlock : MonoBehaviour, IBeginDragHandler, IDragHandl
     public void OnEndDrag(PointerEventData eventData)
     {
         isDragging = false;
+        UiDragState.EndDrag();
 
         ActionQueueDropZone zone = ResolveDropZone(eventData);
         if (zone != null)

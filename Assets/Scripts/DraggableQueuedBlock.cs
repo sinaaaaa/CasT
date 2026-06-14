@@ -30,7 +30,7 @@ using UnityEngine.UI;
 ///     "click vs drag" disambiguation and matches Scratch-style block UX.
 /// </summary>
 [RequireComponent(typeof(RectTransform))]
-public class DraggableQueuedBlock : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerDownHandler, IPointerUpHandler
+public class DraggableQueuedBlock : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
 {
     [Header("References")]
     public CharacterMove characterMove;
@@ -74,17 +74,6 @@ public class DraggableQueuedBlock : MonoBehaviour, IBeginDragHandler, IDragHandl
         return refComp == null || refComp.deletable;
     }
 
-    public void OnPointerDown(PointerEventData eventData)
-    {
-        if (!CanReorder()) return;
-        UiDragState.BeginDrag();
-    }
-
-    public void OnPointerUp(PointerEventData eventData)
-    {
-        UiDragState.EndDrag();
-    }
-
     public void OnBeginDrag(PointerEventData eventData)
     {
         if (!CanReorder()) return;
@@ -123,6 +112,7 @@ public class DraggableQueuedBlock : MonoBehaviour, IBeginDragHandler, IDragHandl
         characterMove.OnQueuedBlockPickedUp();
 
         isDragging = true;
+        UiDragState.BeginDrag();
         DragDropTutorialController.NotifyStudentDragStarted();
         hoveredZone = FindDropZoneUnderPointer(eventData);
         if (hoveredZone != null)
@@ -161,6 +151,7 @@ public class DraggableQueuedBlock : MonoBehaviour, IBeginDragHandler, IDragHandl
         // If the drop zone already handled this via AcceptReorderedDrop, isDragging is false.
         if (!isDragging) return;
         isDragging = false;
+        UiDragState.EndDrag();
 
         var finalZone = FindDropZoneUnderPointer(eventData);
         if (finalZone == null && characterMove != null)
@@ -202,6 +193,7 @@ public class DraggableQueuedBlock : MonoBehaviour, IBeginDragHandler, IDragHandl
     {
         if (!isDragging) return;
         isDragging = false;
+        UiDragState.EndDrag();
 
         if (originalParent == null) return;
 
