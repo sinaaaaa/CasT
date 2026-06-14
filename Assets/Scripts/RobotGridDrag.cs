@@ -240,7 +240,7 @@ public class RobotGridDrag : MonoBehaviour
             transform.position = world + _offset;
         }
 
-        if (characterMove.orientRobotTowardDrag)
+        if (characterMove.orientRobotTowardDrag && !characterMove.IsLevelStartFacingLocked)
             ApplyFacingTowardPointer(world);
     }
 
@@ -260,6 +260,10 @@ public class RobotGridDrag : MonoBehaviour
 
     private void ApplyFacingTowardPointer(Vector3 pointerOnFloor)
     {
+        LevelData ld = characterMove.GetCurrentLevelData();
+        if (ld != null && characterMove.RobotGridPosition == ld.robotStartPosition)
+            return;
+
         Vector3 delta = pointerOnFloor - transform.position;
         delta.y = 0f;
         if (delta.sqrMagnitude < 1e-4f)
@@ -267,7 +271,10 @@ public class RobotGridDrag : MonoBehaviour
 
         float ax = Mathf.Abs(delta.x);
         float az = Mathf.Abs(delta.z);
-        Vector2Int fd = (ax >= az)
+        Vector2Int fd;
+        if (Mathf.Approximately(ax, az))
+            return;
+        fd = (ax > az)
             ? (delta.x >= 0f ? Vector2Int.right : Vector2Int.left)
             : (delta.z >= 0f ? Vector2Int.up : Vector2Int.down);
 

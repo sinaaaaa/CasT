@@ -886,6 +886,8 @@ public class CharacterMove : MonoBehaviour
     private Vector2Int _introBaselineRobotFacing;
     private List<GridObjectData> _introBaselineGridObjects = new List<GridObjectData>();
     private bool _introPlayfieldBaselineCached;
+    private Coroutine _levelStartFacingRoutine;
+    private int _levelStartFacingLockFrames;
 
     /// <summary>Last loaded level used for playfield layout (NUMBER_LINE offset/size work even if GetCurrentLevelData is briefly null).</summary>
     private LevelData _playfieldLevelData;
@@ -1239,11 +1241,57 @@ public class CharacterMove : MonoBehaviour
     private void ApplyLevelStartFacing(LevelData ld)
     {
         if (ld == null) return;
+        StopManualRobotRotationIfAny();
         facingDirection = ld.robotStartFacing;
         if (UsesNumberLine(ld))
             facingDirection = NormalizeNumberLineFacing(facingDirection, ld);
         ManualOrbitDragActive = false;
         ApplyRobotFacingRotation();
+    }
+
+    private void StopManualRobotRotationIfAny()
+    {
+        if (_manualRobotRotationCoroutine != null)
+        {
+            StopCoroutine(_manualRobotRotationCoroutine);
+            _manualRobotRotationCoroutine = null;
+        }
+        ManualRobotRotationAnimating = false;
+    }
+
+    private void StopLevelStartFacingRoutine()
+    {
+        if (_levelStartFacingRoutine == null) return;
+        StopCoroutine(_levelStartFacingRoutine);
+        _levelStartFacingRoutine = null;
+    }
+
+    private void BeginLevelStartFacingLock(int frames = 3)
+    {
+        _levelStartFacingLockFrames = Mathf.Max(frames, 1);
+        StopLevelStartFacingRoutine();
+        _levelStartFacingRoutine = StartCoroutine(LevelStartFacingLockRoutine());
+    }
+
+    private IEnumerator LevelStartFacingLockRoutine()
+    {
+        int levelWhenStarted = currentLevel;
+        while (_levelStartFacingLockFrames > 0)
+        {
+            _levelStartFacingLockFrames--;
+            yield return null;
+        }
+
+        // Re-apply once after intro/camera settle unless intro is actively teaching a custom step.
+        if (currentLevel != levelWhenStarted) yield break;
+        if (IsActionBlockIntroActive) yield break;
+
+        LevelData ld = GetCurrentLevelData();
+        if (ld == null) yield break;
+        ApplyLevelStartFacing(ld);
+        SnapRobotToLogicalGridCell();
+        RestoreAnimatorAfterOrbitIfIdle();
+        _levelStartFacingRoutine = null;
     }
 
     /// <summary>Snaps the robot back after an invalid drag.</summary>
@@ -1574,8 +1622,7 @@ public class CharacterMove : MonoBehaviour
 
         Vector2Int from = robotGridPosition;
         robotGridPosition = ld.robotStartPosition;
-        facingDirection = ld.robotStartFacing;
-        ApplyRobotFacingRotation();
+        ApplyLevelStartFacing(ld);
 
         Vector3 target = GridCellToWorld(robotGridPosition);
         transform.position = target;
@@ -1672,18 +1719,30 @@ public class CharacterMove : MonoBehaviour
 
     private void ApplyRobotFacingRotation()
     {
-        if (facingDirection == Vector2Int.up)
-            transform.rotation = Quaternion.identity;
-        else if (facingDirection == Vector2Int.right)
-            transform.rotation = Quaternion.Euler(0f, 90f, 0f);
-        else if (facingDirection == Vector2Int.down)
-            transform.rotation = Quaternion.Euler(0f, 180f, 0f);
-        else if (facingDirection == Vector2Int.left)
-            transform.rotation = Quaternion.Euler(0f, 270f, 0f);
+        transform.rotation = Quaternion.Euler(0f, FacingDirectionToYawDegrees(facingDirection), 0f);
+    }
+
+    private static float FacingDirectionToYawDegrees(Vector2Int dir)
+    {
+        if (dir == Vector2Int.right) return 90f;
+        if (dir == Vector2Int.down) return 180f;
+        if (dir == Vector2Int.left) return 270f;
+        return 0f;
+    }
+
+    private static int FacingDirectionToCardinalIndex(Vector2Int dir)
+    {
+        if (dir == Vector2Int.right) return 1;
+        if (dir == Vector2Int.down) return 2;
+        if (dir == Vector2Int.left) return 3;
+        return 0;
     }
 
     /// <summary>Logical forward on the grid (before RUN / drag). Up = +row / +Z.</summary>
     public Vector2Int RobotFacing => facingDirection;
+
+    /// <summary>True for a few frames after level load while start facing is being applied (blocks drag-orient).</summary>
+    public bool IsLevelStartFacingLocked => _levelStartFacingLockFrames > 0;
 
     /// <summary>True while the user is orbit-spinning the robot with finger/mouse (before RUN).</summary>
     public bool ManualOrbitDragActive { get; private set; }
@@ -1718,8 +1777,17 @@ public class CharacterMove : MonoBehaviour
 
         float yNorm = transform.eulerAngles.y;
         yNorm = (yNorm % 360f + 360f) % 360f;
-        int q = Mathf.RoundToInt(yNorm / 90f) % 4;
-        if (q < 0) q += 4;
+        // Bias toward the current logical facing near 45° boundaries so tiny euler jitter does not flip N/E/S/W.
+        float expectedYaw = FacingDirectionToYawDegrees(facingDirection);
+        float delta = Mathf.DeltaAngle(expectedYaw, yNorm);
+        int q;
+        if (Mathf.Abs(delta) <= 45f)
+            q = FacingDirectionToCardinalIndex(facingDirection);
+        else
+        {
+            q = Mathf.FloorToInt((yNorm + 45f) / 90f) % 4;
+            if (q < 0) q += 4;
+        }
         switch (q)
         {
             case 0: facingDirection = Vector2Int.up; break;
@@ -1778,8 +1846,7 @@ public class CharacterMove : MonoBehaviour
         if (ManualRobotRotationAnimating)
             return;
 
-        if (_manualRobotRotationCoroutine != null)
-            StopCoroutine(_manualRobotRotationCoroutine);
+        StopManualRobotRotationIfAny();
         _manualRobotRotationCoroutine = StartCoroutine(ManualRobotRotationRoutine(clockwise));
     }
 
@@ -1820,12 +1887,9 @@ public class CharacterMove : MonoBehaviour
 
     private void OnDisable()
     {
-        if (_manualRobotRotationCoroutine != null)
-        {
-            StopCoroutine(_manualRobotRotationCoroutine);
-            _manualRobotRotationCoroutine = null;
-        }
-        ManualRobotRotationAnimating = false;
+        StopManualRobotRotationIfAny();
+        StopLevelStartFacingRoutine();
+        _levelStartFacingLockFrames = 0;
         ManualOrbitDragActive = false;
     }
 
@@ -2972,11 +3036,13 @@ public class CharacterMove : MonoBehaviour
         hasAssessedLevel = false;
 
         ResetLevelTelemetry();
+        _introPlayfieldBaselineCached = false;
 
         // Reset robot position and orientation
         robotGridPosition = levelData.robotStartPosition;
         ManualOrbitDragActive = false;
         ApplyLevelStartFacing(levelData);
+        BeginLevelStartFacingLock();
 
         // Re-read origin each time a level loads.
         if (gridOriginTransform != null)
