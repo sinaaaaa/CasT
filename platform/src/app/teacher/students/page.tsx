@@ -9,10 +9,17 @@ import { getStudentsListSummaries, studentNeedsCheckIn } from "@/lib/analytics";
 export default async function TeacherStudentsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; classId?: string; assignment?: string; needsHelp?: string }>;
+  searchParams: Promise<{
+    q?: string;
+    classId?: string;
+    assignment?: string;
+    needsHelp?: string;
+    sort?: string;
+  }>;
 }) {
   const session = await getServerSession(authOptions);
-  const { q, classId, assignment, needsHelp } = await searchParams;
+  const { q, classId, assignment, needsHelp, sort } = await searchParams;
+  const sortByRecent = sort === "recent";
   const scope = await resolveTeacherScope(session!.user);
 
   const students = await prisma.studentProfile.findMany({
@@ -55,7 +62,11 @@ export default async function TeacherStudentsPage({
     string,
     { passed: boolean; endedAt: Date | null; startedAt: Date }[]
   >();
+  const lastActivityByStudent = new Map<string, Date>();
   for (const attempt of recentAttemptsByStudent) {
+    if (!lastActivityByStudent.has(attempt.studentId)) {
+      lastActivityByStudent.set(attempt.studentId, attempt.startedAt);
+    }
     const list = checkInAttemptsByStudent.get(attempt.studentId) ?? [];
     if (list.length < 3) list.push(attempt);
     checkInAttemptsByStudent.set(attempt.studentId, list);
@@ -66,7 +77,7 @@ export default async function TeacherStudentsPage({
     orderBy: { name: "asc" },
   });
 
-  const rows: StudentRow[] = students
+  let rows: StudentRow[] = students
     .map((s) => {
       const summary = summaries.get(s.id) ?? {
         passed: 0,
@@ -77,6 +88,7 @@ export default async function TeacherStudentsPage({
         avgScore: 0,
       };
       const checkInAttempts = checkInAttemptsByStudent.get(s.id) ?? [];
+      const lastActivityAt = lastActivityByStudent.get(s.id);
       return {
         id: s.id,
         displayName: s.displayName,
@@ -89,9 +101,19 @@ export default async function TeacherStudentsPage({
         completionPercent: summary.completionPercent,
         assignedLevelCount: s.assignedLevels.length,
         needsHelp: studentNeedsCheckIn(checkInAttempts),
+        lastActivityAt: lastActivityAt?.toISOString() ?? null,
       };
     })
     .filter((row) => (needsHelp === "1" ? row.needsHelp : true));
+
+  if (sortByRecent) {
+    rows.sort((a, b) => {
+      const aTime = a.lastActivityAt ? Date.parse(a.lastActivityAt) : 0;
+      const bTime = b.lastActivityAt ? Date.parse(b.lastActivityAt) : 0;
+      if (bTime !== aTime) return bTime - aTime;
+      return a.displayName.localeCompare(b.displayName, undefined, { sensitivity: "base" });
+    });
+  }
 
   return (
     <TeacherShell title="Students" userName={session?.user.name}>
@@ -102,6 +124,7 @@ export default async function TeacherStudentsPage({
         initialClassId={classId}
         initialAssignment={assignment}
         initialNeedsHelp={needsHelp === "1"}
+        initialSort={sortByRecent ? "recent" : "name"}
       />
     </TeacherShell>
   );

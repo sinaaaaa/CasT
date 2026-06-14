@@ -21,6 +21,7 @@ export type StudentRow = {
   completionPercent: number;
   assignedLevelCount: number;
   needsHelp?: boolean;
+  lastActivityAt: string | null;
 };
 
 export function StudentsHub({
@@ -30,6 +31,7 @@ export function StudentsHub({
   initialClassId,
   initialAssignment,
   initialNeedsHelp,
+  initialSort = "name",
 }: {
   students: StudentRow[];
   classes: { id: string; name: string }[];
@@ -37,6 +39,7 @@ export function StudentsHub({
   initialClassId?: string;
   initialAssignment?: string;
   initialNeedsHelp?: boolean;
+  initialSort?: "name" | "recent";
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -235,6 +238,15 @@ export function StudentsHub({
             <option value="">All students</option>
             <option value="custom">Custom assignments only</option>
             <option value="none">No custom assignments</option>
+          </select>
+          <select
+            name="sort"
+            defaultValue={initialSort}
+            className="h-10 rounded-xl border border-slate-200 px-3 text-sm"
+            aria-label="Sort students"
+          >
+            <option value="name">Name (A–Z)</option>
+            <option value="recent">Recent activity</option>
           </select>
           <Button type="submit" className="rounded-xl bg-[#4F46E5] hover:bg-[#4338CA]">
             Apply filters

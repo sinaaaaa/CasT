@@ -17,10 +17,24 @@ export type EduStudentListItemProps = {
   completionPercent: number;
   assignedLevelCount: number;
   needsHelp?: boolean;
+  lastActivityAt?: string | null;
   selected?: boolean;
   onToggleSelect?: () => void;
   onEdit?: () => void;
 };
+
+function formatRelativeTime(iso: string): string {
+  const date = new Date(iso);
+  const diffMs = Date.now() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60_000);
+  if (diffMins < 1) return "Just now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
 
 function ProgressRing({ percent, size = 44 }: { percent: number; size?: number }) {
   const stroke = 4;
@@ -56,6 +70,7 @@ export function EduStudentListItem({
   completionPercent,
   assignedLevelCount,
   needsHelp,
+  lastActivityAt,
   selected,
   onToggleSelect,
   onEdit,
@@ -106,6 +121,7 @@ export function EduStudentListItem({
           </div>
           <p className="text-xs text-slate-500">
             {externalId ?? "No ID"} · {classes || "No class"}
+            {lastActivityAt ? ` · Active ${formatRelativeTime(lastActivityAt)}` : " · No activity yet"}
           </p>
           <p className="mt-1 text-xs font-medium text-slate-600">
             {passed} passed · {failed} needs work · avg {avg}%
