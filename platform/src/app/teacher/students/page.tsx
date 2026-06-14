@@ -97,7 +97,6 @@ export default async function TeacherStudentsPage({
         classes: s.classMemberships.map((c) => c.class.name).join(", "),
         passed: summary.passed,
         failed: summary.failed,
-        avg: summary.avgScore,
         completionPercent: summary.completionPercent,
         assignedLevelCount: s.assignedLevels.length,
         needsHelp: studentNeedsCheckIn(checkInAttempts),

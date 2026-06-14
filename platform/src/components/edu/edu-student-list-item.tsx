@@ -13,7 +13,6 @@ export type EduStudentListItemProps = {
   classes: string;
   passed: number;
   failed: number;
-  avg: number;
   completionPercent: number;
   assignedLevelCount: number;
   needsHelp?: boolean;
@@ -66,7 +65,6 @@ export function EduStudentListItem({
   classes,
   passed,
   failed,
-  avg,
   completionPercent,
   assignedLevelCount,
   needsHelp,
@@ -124,7 +122,7 @@ export function EduStudentListItem({
             {lastActivityAt ? ` · Active ${formatRelativeTime(lastActivityAt)}` : " · No activity yet"}
           </p>
           <p className="mt-1 text-xs font-medium text-slate-600">
-            {passed} passed · {failed} needs work · avg {avg}%
+            {passed} correct · {failed} incorrect
             {assignedLevelCount > 0 && (
               <span className="text-indigo-600"> · {assignedLevelCount} assigned items</span>
             )}
