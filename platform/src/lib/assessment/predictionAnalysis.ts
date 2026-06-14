@@ -256,75 +256,37 @@ function scoreFromDiagnosis(
   return 40;
 }
 
-/** Core diagnosis: given commands + flag → score and mistake type. */
-export function analyzePrediction(input: PredictionAnalysisInput): PredictionAnalysisResult {
-  const cols = input.gridSize?.cols ?? GRID_COLS;
-  const rows = input.gridSize?.rows ?? GRID_ROWS;
-  const blocked = blockedSet(input.obstacles);
-  const givenCommands = input.givenCommands;
-  const start = input.startPosition;
-  const defaultFacing = normalizeFacing(input.startDirection);
-
-  const expected = simulateWithModel(start, defaultFacing, givenCommands, "correct", blocked, cols, rows);
-
-  const emptyMatches: MisconceptionMatch[] = [];
-
-  if (!input.studentFlagPosition) {
-    return {
-      available: false,
-      isCorrect: false,
-      score: 0,
-      level: masteryFromScore(0),
-      expectedFinalPosition: expected,
-      studentFlagPosition: null,
-      distanceFromExpected: 99,
-      detectedMistakeType: "unclear",
-      matchQuality: "weak",
-      teacherExplanation: PREDICTION_TEACHER_COPY.unclear,
-      recommendation: RECOMMENDATIONS.unclear,
-      misconceptionMatches: emptyMatches,
-      givenCommands,
-      predictionComplete: false,
-    };
-  }
-
-  const flag = input.studentFlagPosition;
-
-  if (!inGrid(flag, cols, rows)) {
-    return {
-      available: true,
-      isCorrect: false,
-      score: 15,
-      level: masteryFromScore(15),
-      expectedFinalPosition: expected,
-      studentFlagPosition: flag,
-      distanceFromExpected: 99,
-      detectedMistakeType: "invalidFlagPosition",
-      matchQuality: "weak",
-      teacherExplanation: PREDICTION_TEACHER_COPY.invalidFlagPosition,
-      recommendation: RECOMMENDATIONS.invalidFlagPosition,
-      misconceptionMatches: emptyMatches,
-      givenCommands,
-      predictionComplete: false,
-    };
-  }
-
+function buildMisconceptionMatches(params: {
+  start: Vec2;
+  defaultFacing: Vec2;
+  givenCommands: RobotCommand[];
+  blocked: Set<string>;
+  cols: number;
+  rows: number;
+  studentFlag?: Vec2 | null;
+}): MisconceptionMatch[] {
+  const { start, defaultFacing, givenCommands, blocked, cols, rows, studentFlag } = params;
   const misconceptionMatches: MisconceptionMatch[] = [];
 
-  const addMatch = (
-    modelId: MisconceptionModelId,
-    label: string,
-    pos: Vec2
-  ) => {
+  const addMatch = (modelId: MisconceptionModelId, label: string, pos: Vec2) => {
     misconceptionMatches.push({
       modelId,
       label,
       finalPosition: pos,
-      distance: manhattan(flag, pos),
-      exactMatch: vecEqual(flag, pos),
+      distance: studentFlag ? manhattan(studentFlag, pos) : 0,
+      exactMatch: studentFlag ? vecEqual(studentFlag, pos) : false,
     });
   };
 
+  const expected = simulateWithModel(
+    start,
+    defaultFacing,
+    givenCommands,
+    "correct",
+    blocked,
+    cols,
+    rows
+  );
   addMatch("correct", "Correct rules", expected);
 
   if (hasTurnCommands(givenCommands)) {
@@ -349,12 +311,28 @@ export function analyzePrediction(input: PredictionAnalysisInput): PredictionAna
     addMatch(
       "forwardBackwardSwapped",
       "Forward/backward swapped",
-      simulateWithModel(start, defaultFacing, givenCommands, "forwardBackwardSwapped", blocked, cols, rows)
+      simulateWithModel(
+        start,
+        defaultFacing,
+        givenCommands,
+        "forwardBackwardSwapped",
+        blocked,
+        cols,
+        rows
+      )
     );
     addMatch(
       "oppositeMovement",
       "Opposite movement",
-      simulateWithModel(start, defaultFacing, givenCommands, "oppositeMovement", blocked, cols, rows)
+      simulateWithModel(
+        start,
+        defaultFacing,
+        givenCommands,
+        "oppositeMovement",
+        blocked,
+        cols,
+        rows
+      )
     );
   }
 
@@ -367,6 +345,90 @@ export function analyzePrediction(input: PredictionAnalysisInput): PredictionAna
       simulateWithModel(start, sd.facing, givenCommands, "correct", blocked, cols, rows)
     );
   }
+
+  return misconceptionMatches;
+}
+
+/** Core diagnosis: given commands + flag → score and mistake type. */
+export function analyzePrediction(input: PredictionAnalysisInput): PredictionAnalysisResult {
+  const cols = input.gridSize?.cols ?? GRID_COLS;
+  const rows = input.gridSize?.rows ?? GRID_ROWS;
+  const blocked = blockedSet(input.obstacles);
+  const givenCommands = input.givenCommands;
+  const start = input.startPosition;
+  const defaultFacing = normalizeFacing(input.startDirection);
+
+  const expected = simulateWithModel(start, defaultFacing, givenCommands, "correct", blocked, cols, rows);
+
+  if (!input.studentFlagPosition) {
+    const misconceptionMatches = buildMisconceptionMatches({
+      start,
+      defaultFacing,
+      givenCommands,
+      blocked,
+      cols,
+      rows,
+    });
+    return {
+      available: givenCommands.length > 0,
+      isCorrect: false,
+      score: 0,
+      level: masteryFromScore(0),
+      expectedFinalPosition: expected,
+      studentFlagPosition: null,
+      distanceFromExpected: 99,
+      detectedMistakeType: "unclear",
+      matchQuality: "weak",
+      teacherExplanation:
+        givenCommands.length > 0
+          ? "The student's flag cell was not saved for this attempt (often caused by Unity sending -1,-1). Use the misconception models below to see where the robot would stop under each rule set."
+          : PREDICTION_TEACHER_COPY.unclear,
+      recommendation: RECOMMENDATIONS.unclear,
+      misconceptionMatches,
+      givenCommands,
+      predictionComplete: false,
+    };
+  }
+
+  const flag = input.studentFlagPosition;
+
+  if (!inGrid(flag, cols, rows)) {
+    const misconceptionMatches = buildMisconceptionMatches({
+      start,
+      defaultFacing,
+      givenCommands,
+      blocked,
+      cols,
+      rows,
+      studentFlag: flag,
+    });
+    return {
+      available: givenCommands.length > 0,
+      isCorrect: false,
+      score: 15,
+      level: masteryFromScore(15),
+      expectedFinalPosition: expected,
+      studentFlagPosition: flag,
+      distanceFromExpected: 99,
+      detectedMistakeType: "invalidFlagPosition",
+      matchQuality: "weak",
+      teacherExplanation: PREDICTION_TEACHER_COPY.invalidFlagPosition,
+      recommendation: RECOMMENDATIONS.invalidFlagPosition,
+      misconceptionMatches,
+      givenCommands,
+      predictionComplete: false,
+    };
+  }
+
+  const misconceptionMatches = buildMisconceptionMatches({
+    start,
+    defaultFacing,
+    givenCommands,
+    blocked,
+    cols,
+    rows,
+    studentFlag: flag,
+  });
 
   const distCorrect = manhattan(flag, expected);
 

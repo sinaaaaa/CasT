@@ -1852,7 +1852,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &42100521
 RectTransform:
   m_ObjectHideFlags: 0
@@ -13027,7 +13027,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &605733036
 RectTransform:
   m_ObjectHideFlags: 0
@@ -13044,7 +13044,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 26.18, y: -184.9}
+  m_AnchoredPosition: {x: 5.46, y: -184.9}
   m_SizeDelta: {x: 200, y: 50}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &605733037
@@ -13102,7 +13102,7 @@ MonoBehaviour:
   m_fontSizeMax: 72
   m_fontStyle: 1
   m_HorizontalAlignment: 2
-  m_VerticalAlignment: 2048
+  m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: 0
   m_wordSpacing: 0
@@ -14800,7 +14800,7 @@ Transform:
   m_GameObject: {fileID: 709925816}
   serializedVersion: 2
   m_LocalRotation: {x: 0.7071068, y: -0, z: -0, w: 0.7071068}
-  m_LocalPosition: {x: 1250, y: -0.01, z: 1250}
+  m_LocalPosition: {x: 0, y: 0, z: -99}
   m_LocalScale: {x: 308.61243, y: 308.61243, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -14936,6 +14936,7 @@ MonoBehaviour:
   rotateRightSprite: {fileID: 21300000, guid: 9e3af85eca3fe7b429cda25ada4fb596, type: 3}
   gridOriginTransform: {fileID: 1980675908}
   gridWorldOffset: {x: 0, y: 0, z: 0}
+  gridAutoCenterOnOrigin: 1
   syncGridOriginEveryFrame: 1
   gridSize: 500
   numberLineGridSize: 0
@@ -14961,6 +14962,8 @@ MonoBehaviour:
   gridImageSortingOrder: -10
   gridImageTint: {r: 1, g: 1, b: 1, a: 1}
   gridImageScaleMultiplier: 1.29
+  gridImageStretchedOverride: {fileID: 0}
+  preserveManualGridImageTransform: 1
   useMeshGridFloorFor3D: 1
   gridFloorMeshMaterial: {fileID: 0}
   presentation3DObjectYaw: 45
@@ -25389,7 +25392,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &1250526351
 RectTransform:
   m_ObjectHideFlags: 0
@@ -29122,7 +29125,7 @@ Transform:
   m_GameObject: {fileID: 1434242980}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: -100}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:

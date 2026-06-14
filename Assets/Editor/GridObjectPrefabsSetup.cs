@@ -21,6 +21,7 @@ public static class GridObjectPrefabsSetup
         ("home", "Assets/Image/home.png", "homePrefab"),
         ("school", "Assets/Image/school.png", "schoolPrefab"),
         ("tree", "Assets/Image/tree.png", "treePrefab"),
+        ("backpack", "Assets/Image/bag1.png", "bagPrefab"),
     };
 
     [MenuItem("SPARC/Grid Objects/Recreate Mail Prefab")]

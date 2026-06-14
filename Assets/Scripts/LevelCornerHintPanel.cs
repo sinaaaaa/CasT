@@ -130,9 +130,24 @@ public class LevelCornerHintPanel : MonoBehaviour
 #endif
     }
 
+    /// <summary>
+    /// Loads and plays corner-hint audio without showing the panel (e.g. intro welcome popup).
+    /// </summary>
+    public void PlayHintAudioOnly(LevelCornerHint hint)
+    {
+        if (hint == null || !hint.enabled || string.IsNullOrEmpty(hint.audioUrl))
+            return;
+
+        EnsureBuilt();
+        EnsureHintAudioSource();
+        _currentHint = hint;
+        ApplyHintAudio(hint);
+    }
+
     public void Show(LevelCornerHint hint, bool introMode)
     {
         EnsureBuilt();
+        EnsureHintAudioSource();
         if (panelRoot == null) return;
 
         if (hint == null || !hint.enabled)
@@ -522,8 +537,26 @@ public class LevelCornerHintPanel : MonoBehaviour
         _imageLoadRoutine = null;
     }
 
+    private void EnsureHintAudioSource()
+    {
+        if (hintAudioSource != null && hintAudioSource.gameObject == gameObject)
+        {
+            hintAudioSource.playOnAwake = false;
+            hintAudioSource.spatialBlend = 0f;
+            return;
+        }
+
+        hintAudioSource = GetComponent<AudioSource>();
+        if (hintAudioSource == null)
+            hintAudioSource = gameObject.AddComponent<AudioSource>();
+        hintAudioSource.playOnAwake = false;
+        hintAudioSource.spatialBlend = 0f;
+    }
+
     private void ApplyHintAudio(LevelCornerHint hint)
     {
+        EnsureHintAudioSource();
+
         if (playAudioButton != null)
             playAudioButton.gameObject.SetActive(!string.IsNullOrEmpty(hint?.audioUrl));
 
@@ -739,12 +772,7 @@ public class LevelCornerHintPanel : MonoBehaviour
         playAudioButton = CreatePlayAudioButton(rootGo.transform, out _listenLayoutElement, out playAudioButtonImage, out playAudioButtonLabel);
         playAudioButton.onClick.AddListener(PlayTipAudio);
 
-        if (hintAudioSource == null)
-        {
-            hintAudioSource = rootGo.AddComponent<AudioSource>();
-            hintAudioSource.playOnAwake = false;
-            hintAudioSource.spatialBlend = 0f;
-        }
+        EnsureHintAudioSource();
 
         panelBackground = CreateBackgroundLayer(rootGo.transform);
         ApplyAllTypography(defaultLayout, introMode: false);

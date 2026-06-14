@@ -52,7 +52,8 @@ export function buildItemReportWorkbook(report: ItemProgressReport) {
       rows: [
         [
           "Student ID",
-          "Attempt #",
+          "Try",
+          "Session attempt #",
           "Status",
           "Passed",
           "Score",
@@ -66,6 +67,7 @@ export function buildItemReportWorkbook(report: ItemProgressReport) {
         ],
         ...report.attempts.map((a) => [
           exportStudentId(a.externalId, a.studentId),
+          a.attemptLabel,
           a.attemptNumber,
           a.status,
           a.passed ? "Yes" : "No",

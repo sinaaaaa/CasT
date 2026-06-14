@@ -101,6 +101,30 @@ export function computeAttemptLiveAssessment(params: {
     };
   }
 
+  if (taskEnvironmentType === "number-line") {
+    task.compareWithOptimalRoute = false;
+    const evidence = extractEvidence(task, params.attempt, params.levelType);
+    const nl = evidence.numberLineEvidence;
+    return {
+      taskEnvironmentType: "number-line",
+      interpretation: buildNumberLineInterpretation(nl, evidence.passed),
+      supported: true,
+      routeComparison: null,
+      numberLineEvidence: nl,
+      predictionResult: null,
+      choiceActionResult: null,
+      debuggingResult: null,
+      pathBuildingResult: null,
+      routeStartPosition: resolveRouteStartCell(parsed.data).position,
+      starterPath: [],
+      starterPathStates: [],
+      studentPath: evidence.simulation.path,
+      optimalPath: [],
+      commandCount: evidence.commandCount,
+      optimalCommandCount: nl?.optimalMoveCount ?? 0,
+    };
+  }
+
   if (isPathBuildingLevel(parsed.data, params.levelType)) {
     task.compareWithOptimalRoute = true;
     const pathBuildingResult = buildPathBuildingFromAttempt({
@@ -184,30 +208,6 @@ export function computeAttemptLiveAssessment(params: {
       optimalPath: [],
       commandCount: choiceActionResult.programCommands.length,
       optimalCommandCount: 0,
-    };
-  }
-
-  if (taskEnvironmentType === "number-line") {
-    task.compareWithOptimalRoute = false;
-    const evidence = extractEvidence(task, params.attempt, params.levelType);
-    const nl = evidence.numberLineEvidence;
-    return {
-      taskEnvironmentType: "number-line",
-      interpretation: buildNumberLineInterpretation(nl, evidence.passed),
-      supported: true,
-      routeComparison: null,
-      numberLineEvidence: nl,
-      predictionResult: null,
-      choiceActionResult: null,
-      debuggingResult: null,
-      pathBuildingResult: null,
-      routeStartPosition: resolveRouteStartCell(parsed.data).position,
-      starterPath: [],
-      starterPathStates: [],
-      studentPath: evidence.simulation.path,
-      optimalPath: [],
-      commandCount: evidence.commandCount,
-      optimalCommandCount: nl?.optimalMoveCount ?? 0,
     };
   }
 

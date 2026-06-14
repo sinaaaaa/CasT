@@ -177,8 +177,8 @@ public class LoginManager : MonoBehaviour
         if (!PlayerPrefs.HasKey(levelSlotKey))
         {
             PlayerPrefs.SetInt(levelSlotKey, 1);
-            PlayerPrefs.SetString(levelIdKey, "level_0");
-            Debug.Log($"[LoginManager] New user: starting at level_0 (intro).");
+            PlayerPrefs.DeleteKey(levelIdKey);
+            Debug.Log($"[LoginManager] New user: will load first assigned item from dashboard.");
         }
         else
         {

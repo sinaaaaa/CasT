@@ -1,10 +1,10 @@
 "use client";
 
 import type { DebuggingAnalysisResult } from "@/lib/assessment/debuggingAnalysis";
+import { DiagnosticScoreInfo } from "@/components/assessment/diagnostic-score-info";
 import { RepairQualityBadge } from "@/components/assessment/debugging/repair-quality-badge";
 import {
   REPAIR_QUALITY_META,
-  goalOutcomeHeadline,
   programsEqual,
   repairQualityExplanation,
   resolveRepairQuality,
@@ -29,14 +29,6 @@ export function RepairQualityCard({ result }: { result: DebuggingAnalysisResult 
   });
 
   const meta = REPAIR_QUALITY_META[level];
-  const goal = goalOutcomeHeadline({
-    bugFixed: result.bugFixed,
-    passedThroughGoal: result.passedThroughGoal,
-    stoppedBeforeGoal: result.stoppedBeforeGoal,
-    distanceFromGoal: result.distanceFromGoal,
-    repairStatus: result.repairStatus,
-    goalLabel: result.goalLabel,
-  });
 
   const explanation = repairQualityExplanation(level, {
     bugFixed: result.bugFixed,
@@ -44,12 +36,6 @@ export function RepairQualityCard({ result }: { result: DebuggingAnalysisResult 
     stoppedBeforeGoal: result.stoppedBeforeGoal,
     repairStatus: result.repairStatus,
   });
-
-  const goalToneIcon = {
-    success: "text-green-600",
-    warning: "text-amber-600",
-    danger: "text-red-600",
-  }[goal.tone];
 
   return (
     <div
@@ -78,23 +64,12 @@ export function RepairQualityCard({ result }: { result: DebuggingAnalysisResult 
             </p>
           </div>
         </div>
-        <RepairQualityBadge level={level} showScore score={result.score} />
-      </div>
-
-      <div
-        className={cn(
-          "mt-4 flex items-start gap-2 rounded-xl border bg-white/55 px-3 py-2.5 text-sm backdrop-blur-sm",
-          goal.tone === "success" && "border-green-200/60",
-          goal.tone === "warning" && "border-amber-200/60",
-          goal.tone === "danger" && "border-red-200/50"
-        )}
-      >
-        <span className={cn("font-semibold", goalToneIcon)} aria-hidden>
-          {goal.tone === "success" ? "✓" : "⚠"}
-        </span>
-        <div>
-          <span className="font-semibold text-slate-900">{goal.label}</span>
-          <span className="text-slate-600"> — {goal.detail}</span>
+        <div className="flex flex-col items-start gap-2 sm:items-end">
+          <RepairQualityBadge level={level} showScore score={result.score} />
+          <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+            Diagnostic score
+            <DiagnosticScoreInfo variant="debugging" />
+          </span>
         </div>
       </div>
     </div>

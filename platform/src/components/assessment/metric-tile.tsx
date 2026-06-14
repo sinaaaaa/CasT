@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { LucideIcon } from "lucide-react";
+import { MetricInfo } from "@/components/assessment/metric-info";
+import type { GlossaryKey } from "@/lib/assessment/assessmentGlossary";
 import { cn } from "@/lib/utils";
 import { resolveEduIcon, type EduIconName } from "@/components/edu/edu-icons";
 
@@ -15,6 +17,7 @@ export function MetricTile({
   tone = "default",
   href,
   index = 0,
+  info,
 }: {
   label: string;
   value: React.ReactNode;
@@ -24,6 +27,7 @@ export function MetricTile({
   tone?: "default" | "success" | "danger" | "warning" | "info";
   href?: string;
   index?: number;
+  info?: GlossaryKey;
 }) {
   const Icon = icon ?? (iconName ? resolveEduIcon(iconName) : undefined);
   const tones = {
@@ -50,7 +54,10 @@ export function MetricTile({
   const content = (
     <>
       <div className="flex items-start justify-between gap-2">
-        <p className="text-xs font-bold uppercase tracking-wider text-slate-500">{label}</p>
+        <p className="flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-slate-500">
+          {label}
+          {info && <MetricInfo metric={info} />}
+        </p>
         {Icon && (
           <span className={cn("flex h-10 w-10 items-center justify-center rounded-xl shadow-md", iconTones[tone])}>
             <Icon className="h-4 w-4" />

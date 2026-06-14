@@ -36,6 +36,12 @@ public class LevelConfigDto
     public bool showStudentResetButton = true;
     /** When false, RUN validates the program without animating Robo. */
     public bool runRobotOnSubmit = true;
+    /** Success popup text. Supports {levelName}. */
+    public string attemptSuccessMessage;
+    /** Wrong-answer popup text. Supports {attempt}, {maxAttempts}, {reason}. */
+    public string attemptFailureMessage;
+    /** Max-attempts popup text. Supports {levelName}, {maxAttempts}. */
+    public string maxAttemptsMessage;
     /// <summary>Palette buttons students may use: forward, backward, turn left, turn right. Empty = all four (grid) or number-line defaults.</summary>
     public string[] enabledActionButtons;
 }
@@ -177,6 +183,9 @@ public static class LevelConfigMapper
             commandHistoryScale = dto.commandHistoryScale > 0 ? dto.commandHistoryScale : 0.45f,
             showStudentResetButton = dto.showStudentResetButton,
             runRobotOnSubmit = dto.runRobotOnSubmit,
+            attemptSuccessMessage = dto.attemptSuccessMessage,
+            attemptFailureMessage = dto.attemptFailureMessage,
+            maxAttemptsMessage = dto.maxAttemptsMessage,
         };
 
         if (dto.numberLine != null)

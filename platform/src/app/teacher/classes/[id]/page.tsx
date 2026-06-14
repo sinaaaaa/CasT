@@ -9,7 +9,7 @@ import {
 } from "@/lib/class-access";
 import { prisma } from "@/lib/prisma";
 import { TeacherShell } from "@/components/teacher/teacher-shell";
-import { LevelAssignmentEditor } from "@/components/teacher/level-assignment-editor";
+import { LevelAssignmentEditorLoader } from "@/components/teacher/level-assignment-editor-loader";
 import { ClassDetailActions } from "@/components/teacher/class-detail-actions";
 import { ClassStudentsPanel } from "@/components/teacher/class-students-panel";
 import { ClassReportSection } from "@/components/teacher/class-report-section";
@@ -60,7 +60,7 @@ export default async function ClassDetailPage({ params }: { params: Promise<{ id
       <ClassReportSection report={classReport} />
 
       <div className="mb-8">
-        <LevelAssignmentEditor target="class" targetId={cls.id} targetName={cls.name} />
+        <LevelAssignmentEditorLoader target="class" targetId={cls.id} targetName={cls.name} />
       </div>
 
       <ClassStudentsPanel

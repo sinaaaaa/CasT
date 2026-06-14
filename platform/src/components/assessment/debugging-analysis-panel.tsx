@@ -1,12 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { Bug, Lightbulb } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Bug, Stethoscope, PlayCircle, Map } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AssessmentPanelHeader } from "@/components/assessment/assessment-panel-header";
+import { PanelRecommendation } from "@/components/assessment/panel-recommendation";
 import { DebuggingPathSection } from "@/components/assessment/debugging/debugging-path-section";
 import { DebuggingRouteCompare } from "@/components/assessment/debugging/debugging-route-compare";
 import { ProgramDiffVisualizer } from "@/components/assessment/debugging/program-diff-visualizer";
 import { RepairOutcomeBanner } from "@/components/assessment/debugging/repair-outcome-banner";
+import { RouteReplayPlayer } from "@/components/assessment/route-replay-player";
 import type { DebuggingAnalysisResult } from "@/lib/assessment/debuggingAnalysis";
 
 export function DebuggingAnalysisPanel({
@@ -22,47 +26,85 @@ export function DebuggingAnalysisPanel({
       result.studentPath.length > 1 ||
       result.correctPath.length > 1);
 
-  return (
-    <Card className="overflow-hidden border-amber-200/50 shadow-lg shadow-amber-900/5">
-      <CardHeader className="border-b border-amber-100/80 bg-gradient-to-br from-amber-50/90 via-white to-orange-50/40 px-6 py-4 backdrop-blur-sm">
-        <CardTitle className="flex items-center gap-2 text-lg font-semibold tracking-tight text-slate-900">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/15">
-            <Bug className="h-4 w-4 text-amber-800" />
-          </span>
-          Edit starter program — debugging assessment
-        </CardTitle>
-      </CardHeader>
+  const hasRouteCompare =
+    result.correctPath.length > 1 || result.optimalPath.length > 1;
+  const hasMaps = hasRouteCompare || hasPaths;
+  const canReplay = result.studentPath.length > 1;
 
-      <CardContent className="space-y-6 bg-gradient-to-b from-slate-50/30 to-white pt-6">
+  return (
+    <Card className="overflow-hidden border-slate-200/70 shadow-sm">
+      <AssessmentPanelHeader
+        icon={Bug}
+        title="Fixing the program"
+        subtitle="How the student's repair compares with a correct fix."
+      />
+
+      <CardContent className="space-y-6 pt-6">
         <RepairOutcomeBanner result={result} />
 
-        <ProgramDiffVisualizer
-          result={result}
-          activeStep={activeStep}
-          onStepHover={setActiveStep}
-        />
+        <Tabs defaultValue="diagnosis" className="w-full">
+          <TabsList>
+            <TabsTrigger value="diagnosis" className="gap-1.5">
+              <Stethoscope className="h-4 w-4" />
+              What happened
+            </TabsTrigger>
+            {canReplay && (
+              <TabsTrigger value="replay" className="gap-1.5">
+                <PlayCircle className="h-4 w-4" />
+                Replay
+              </TabsTrigger>
+            )}
+            {hasMaps && (
+              <TabsTrigger value="maps" className="gap-1.5">
+                <Map className="h-4 w-4" />
+                Maps
+              </TabsTrigger>
+            )}
+          </TabsList>
 
-        {(result.correctPath.length > 1 || result.optimalPath.length > 1) && (
-          <DebuggingRouteCompare result={result} activeStep={activeStep} />
-        )}
+          <TabsContent value="diagnosis" className="space-y-6">
+            <ProgramDiffVisualizer
+              result={result}
+              activeStep={activeStep}
+              onStepHover={setActiveStep}
+            />
+          </TabsContent>
 
-        {hasPaths && (
-          <DebuggingPathSection
-            result={result}
-            activeStep={activeStep}
-            defaultOpen={false}
-          />
-        )}
+          {canReplay && (
+            <TabsContent value="replay">
+              <RouteReplayPlayer
+                path={result.studentPath}
+                pathStates={result.studentPathStates}
+                commands={result.studentProgram}
+                routeStartPosition={result.routeStartPosition}
+                routeGoalPosition={result.routeGoalPosition}
+                goalLabel={result.goalLabel}
+                studentEndPosition={result.studentEndPosition}
+                objectMarkers={result.objectMarkers}
+                collisions={result.attemptedObstacleCells}
+                attemptedObstacleCell={result.attemptedObstacleCells[0] ?? null}
+                title="Replay the student's repair"
+              />
+            </TabsContent>
+          )}
 
-        <footer className="flex gap-3 rounded-xl border border-amber-100/80 bg-amber-50/25 p-4 backdrop-blur-sm">
-          <Lightbulb className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-amber-900/70">
-              Recommended next
-            </p>
-            <p className="mt-1 text-sm leading-relaxed text-slate-700">{result.recommendation}</p>
-          </div>
-        </footer>
+          {hasMaps && (
+            <TabsContent value="maps" className="space-y-6">
+              {hasRouteCompare && (
+                <DebuggingRouteCompare result={result} activeStep={activeStep} />
+              )}
+              {hasPaths && (
+                <DebuggingPathSection
+                  result={result}
+                  activeStep={activeStep}
+                  defaultOpen
+                />
+              )}
+            </TabsContent>
+          )}
+        </Tabs>
+
+        <PanelRecommendation>{result.recommendation}</PanelRecommendation>
       </CardContent>
     </Card>
   );

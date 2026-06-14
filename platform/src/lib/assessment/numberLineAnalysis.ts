@@ -112,9 +112,11 @@ function activeTargetTick(
 }
 
 function expectedDelta(cmd: RobotCommand, facing: Vec2): Vec2 {
-  if (cmd === "forward") return { x: facing.x, y: facing.y };
-  if (cmd === "backward") return { x: -facing.x, y: -facing.y };
-  return { x: 0, y: 0 };
+  if (cmd !== "forward" && cmd !== "backward") return { x: 0, y: 0 };
+  const fx = facing.x;
+  if (fx === 0) return { x: 0, y: 0 };
+  const sign = cmd === "forward" ? fx : -fx;
+  return { x: sign, y: 0 };
 }
 
 function isMovementCommand(cmd: RobotCommand): boolean {
@@ -124,6 +126,105 @@ function isMovementCommand(cmd: RobotCommand): boolean {
 /** Minimum forward/backward steps to reach the goal tick from start. */
 export function numberLineOptimalMoveCount(startTick: number, goalTick: number): number {
   return Math.abs(goalTick - startTick);
+}
+
+/** Shortest forward/backward command list along the number line (no turns). */
+export function buildNumberLineOptimalCommands(
+  startTick: number,
+  visit1Tick: number | null,
+  visit2Tick: number | null,
+  goalTick: number | null,
+  startFacing: Vec2
+): RobotCommand[] {
+  const targets: number[] = [];
+  if (visit1Tick != null && visit2Tick != null) {
+    targets.push(visit1Tick, visit2Tick);
+  } else {
+    const g = goalTick ?? visit2Tick ?? visit1Tick;
+    if (g != null) targets.push(g);
+  }
+  if (targets.length === 0) return [];
+
+  let facingX = normalizeFacing(startFacing).x;
+  if (facingX === 0) {
+    const first = targets[0]!;
+    facingX = first === startTick ? 1 : first > startTick ? 1 : -1;
+  }
+
+  let current = startTick;
+  const commands: RobotCommand[] = [];
+  for (const target of targets) {
+    while (current !== target) {
+      const needIncrease = target > current;
+      const forwardIncreases = facingX > 0;
+      commands.push(needIncrease === forwardIncreases ? "forward" : "backward");
+      current += needIncrease ? 1 : -1;
+    }
+  }
+  return commands;
+}
+
+/** Tick positions visited by simulating optimal commands from start. */
+export function buildNumberLineOptimalPathTicks(
+  startTick: number,
+  commands: RobotCommand[],
+  startFacing: Vec2
+): number[] {
+  const ticks = [startTick];
+  let current = startTick;
+  let facingX = normalizeFacing(startFacing).x;
+  if (facingX === 0) facingX = 1;
+  for (const cmd of commands) {
+    if (cmd === "forward") current += facingX;
+    else if (cmd === "backward") current -= facingX;
+    ticks.push(current);
+  }
+  return ticks;
+}
+
+function findNumberLineFirstMistakeStep(
+  student: RobotCommand[],
+  optimal: RobotCommand[],
+  endTick: number,
+  finalGoalTick: number | null,
+  startTick: number
+): number | null {
+  const maxLen = Math.max(student.length, optimal.length);
+  for (let i = 0; i < maxLen; i++) {
+    if (student[i] !== optimal[i]) return i + 1;
+  }
+  if (finalGoalTick != null && endTick !== finalGoalTick) {
+    const outcome = resolveNumberLineGoalOutcome(startTick, endTick, finalGoalTick);
+    if (outcome === "overshot" && student.length > optimal.length) {
+      return optimal.length + 1;
+    }
+    return student.length > 0 ? student.length : 1;
+  }
+  return null;
+}
+
+/** Did the robot stop on, before, or past the goal tick? */
+export function resolveNumberLineGoalOutcome(
+  startTick: number,
+  endTick: number,
+  finalGoalTick: number | null
+): NumberLineEvidence["goalOutcome"] {
+  if (finalGoalTick == null) {
+    return endTick === startTick ? "reached" : "wrong_path";
+  }
+  if (endTick === finalGoalTick) return "reached";
+  if (finalGoalTick === startTick) {
+    return endTick === startTick ? "reached" : "wrong_path";
+  }
+  const goalIsRight = finalGoalTick > startTick;
+  if (goalIsRight) {
+    if (endTick < finalGoalTick) return "stopped_early";
+    if (endTick > finalGoalTick) return "overshot";
+  } else {
+    if (endTick > finalGoalTick) return "stopped_early";
+    if (endTick < finalGoalTick) return "overshot";
+  }
+  return "wrong_path";
 }
 
 export function buildNumberLineEvidence(
@@ -253,6 +354,29 @@ export function buildNumberLineEvidence(
     goalTick
   );
 
+  const finalGoalTick = visit2?.tick ?? visit1?.tick ?? goalTick;
+  const goalOutcome = resolveNumberLineGoalOutcome(startTick, endTick, finalGoalTick);
+  const startFacingVec = normalizeFacing(config.robotStartFacing);
+  const optimalCommands = buildNumberLineOptimalCommands(
+    startTick,
+    visit1?.tick ?? null,
+    visit2?.tick ?? null,
+    goalTick,
+    startFacingVec
+  );
+  const optimalPathTicks = buildNumberLineOptimalPathTicks(
+    startTick,
+    optimalCommands,
+    startFacingVec
+  );
+  const firstMistakeStep = findNumberLineFirstMistakeStep(
+    simulation.commands,
+    optimalCommands,
+    endTick,
+    finalGoalTick,
+    startTick
+  );
+
   const startPositionRecognition =
     simulation.pathStates[0]?.position.x === startTick ? 100 : 40;
 
@@ -268,7 +392,6 @@ export function buildNumberLineEvidence(
       (100 - simulation.wrongTurns * 22 - simulation.collisions.length * 15) * 0.3
   );
 
-  const finalGoalTick = visit2?.tick ?? visit1?.tick ?? goalTick;
   const atFinalGoal = finalGoalTick != null && endTick === finalGoalTick;
   let stepCountingAccuracy = 100;
   if (optimalMoveCount > 0) {
@@ -313,10 +436,18 @@ export function buildNumberLineEvidence(
     (startOrientationOk ? 55 : 25) + directionAccuracy * 0.45
   );
 
+  const visitPassed =
+    !visitObjectSequence ||
+    !visit1 ||
+    !visit2 ||
+    (correctVisitOrder && reachedVisit2 && visit2.reached);
+  const passed = goalOutcome === "reached" && visitPassed;
+
   const teacherNotes = buildNumberLineTeacherNotes({
     startTick,
     endTick,
     goalTick: finalGoalTick,
+    goalOutcome,
     visitObjectSequence,
     visit1,
     visit2,
@@ -330,7 +461,7 @@ export function buildNumberLineEvidence(
     arrowToMovementCorrespondence,
     movementSequencing,
     orientationUnderstanding,
-    passed: attemptPassed || simulation.passed || atFinalGoal,
+    passed,
     wrongTurns: simulation.wrongTurns,
     collisions: simulation.collisions.length,
   });
@@ -355,7 +486,11 @@ export function buildNumberLineEvidence(
     orientationUnderstanding,
     optimalMoveCount,
     studentMoveCount,
-    passed: attemptPassed || simulation.passed || atFinalGoal,
+    optimalCommands,
+    optimalPathTicks,
+    firstMistakeStep,
+    goalOutcome,
+    passed,
     teacherNotes,
   };
 }
@@ -364,6 +499,7 @@ function buildNumberLineTeacherNotes(params: {
   startTick: number;
   endTick: number;
   goalTick: number | null;
+  goalOutcome: NumberLineEvidence["goalOutcome"];
   visitObjectSequence: boolean;
   visit1: NumberLineVisitTarget | null;
   visit2: NumberLineVisitTarget | null;
@@ -413,11 +549,16 @@ function buildNumberLineTeacherNotes(params: {
         : params.goalTick != null
           ? `${tickLabel(params.startTick)} → ${tickLabel(params.goalTick)}`
           : "the goal";
-    notes.countingErrors =
-      extra > 0
-        ? `Counting / distance: used ${params.studentMoveCount} moves along the line; about ${params.optimalMoveCount} steps for ${pathDesc} (${extra} extra).`
-        : `Counting / distance: only ${params.studentMoveCount} move step${params.studentMoveCount === 1 ? "" : "s"} — may have stopped short (${pathDesc}).`;
-  } else {
+    if (params.goalOutcome === "overshot" && params.goalTick != null) {
+      notes.countingErrors = `Went past the goal: ended at ${tickLabel(params.endTick)} but the goal is ${tickLabel(params.goalTick)} (${extra} extra step${extra === 1 ? "" : "s"}).`;
+    } else if (params.goalOutcome === "stopped_early" && params.goalTick != null) {
+      notes.countingErrors = `Stopped before the goal: ended at ${tickLabel(params.endTick)} but the goal is ${tickLabel(params.goalTick)}.`;
+    } else if (extra > 0) {
+      notes.countingErrors = `Counting / distance: used ${params.studentMoveCount} moves along the line; about ${params.optimalMoveCount} steps for ${pathDesc} (${extra} extra).`;
+    } else {
+      notes.countingErrors = `Counting / distance: only ${params.studentMoveCount} move step${params.studentMoveCount === 1 ? "" : "s"} — may have stopped short (${pathDesc}).`;
+    }
+  } else if (params.goalOutcome === "reached") {
     const pathDesc =
       params.visitObjectSequence && params.visit1 && params.visit2
         ? `visit ${params.visit1.label} then ${params.visit2.label}`
@@ -446,51 +587,27 @@ function buildNumberLineTeacherNotes(params: {
   return notes;
 }
 
+export function numberLineDiagnosticScore(evidence: NumberLineEvidence): number {
+  return clampScore(
+    evidence.directionAccuracy * 0.25 +
+      evidence.stepCountingAccuracy * 0.3 +
+      evidence.arrowToMovementCorrespondence * 0.2 +
+      evidence.movementSequencing * 0.15 +
+      evidence.orientationUnderstanding * 0.1
+  );
+}
+
 export function buildNumberLineInterpretation(
   evidence: NumberLineEvidence | null,
-  passed: boolean
+  _passed: boolean
 ): string {
   if (!evidence) {
     return "Number-line movement data is not available for this attempt.";
   }
   if (evidence.commands.length === 0) {
-    return "No command program was recorded. Number-line assessment needs the student's final program.";
+    return "No command program was recorded for this attempt.";
   }
-
-  const parts: string[] = [];
-  if (evidence.visitObjectSequence && evidence.visit1 && evidence.visit2) {
-    parts.push(
-      `Visit route: ${tickLabel(evidence.startTick)} → ${evidence.visit1.label} (${tickLabel(evidence.visit1.tick)}) → ${evidence.visit2.label} (${tickLabel(evidence.visit2.tick)}) · ended ${tickLabel(evidence.endTick)} · ${evidence.studentMoveCount} move step${evidence.studentMoveCount === 1 ? "" : "s"}.`
-    );
-    if (evidence.correctVisitOrder && evidence.visit2.reached) {
-      parts.push("Visited both objects in the correct order.");
-    } else if (!evidence.visit1.reached) {
-      parts.push(`Did not reach the first object (${evidence.visit1.label}).`);
-    } else if (!evidence.visit2.reached) {
-      parts.push(`Reached ${evidence.visit1.label} but not the second object (${evidence.visit2.label}).`);
-    } else {
-      parts.push("Visit order was incorrect (object 2 before object 1 or skipped).");
-    }
-  } else {
-    parts.push(
-      `Line journey: ${tickLabel(evidence.startTick)} → ${tickLabel(evidence.endTick)}` +
-        (evidence.goalTick != null ? ` (goal ${tickLabel(evidence.goalTick)})` : "") +
-        ` · ${evidence.studentMoveCount} move step${evidence.studentMoveCount === 1 ? "" : "s"}.`
-    );
-    if (passed || evidence.passed) {
-      parts.push("Reached the level goal on the number line.");
-    } else {
-      parts.push("Did not fully reach the goal tick on the final run.");
-    }
-  }
-
-  if (evidence.stepCountingAccuracy >= 85) {
-    parts.push("Step counting aligns well with the distance along the line.");
-  } else if (evidence.teacherNotes.countingErrors) {
-    parts.push(evidence.teacherNotes.countingErrors);
-  }
-
-  return parts.join(" ");
+  return "";
 }
 
 export function numberLineMetricRows(evidence: NumberLineEvidence): {

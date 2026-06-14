@@ -2,7 +2,7 @@ using UnityEngine;
 
 /// <summary>
 /// Drag this object in the Scene view to move the whole game grid.
-/// Add to an empty GameObject placed at the CENTER of cell (0,0) (bottom-left tile).
+/// Place it at the center of the playfield (Grid Auto Center On Origin on CharacterMove).
 /// </summary>
 [ExecuteAlways]
 [DisallowMultipleComponent]
@@ -50,7 +50,7 @@ public class GridOriginAnchor : MonoBehaviour
         Gizmos.DrawLine(transform.position, transform.position + Vector3.right * gizmoSize);
         Gizmos.DrawLine(transform.position, transform.position + Vector3.forward * gizmoSize);
 #if UNITY_EDITOR
-        UnityEditor.Handles.Label(transform.position + Vector3.up * 0.5f, "Grid (0,0)\nDrag to move");
+        UnityEditor.Handles.Label(transform.position + Vector3.up * 0.5f, "Playfield center\nDrag to move grid");
 #endif
     }
 }

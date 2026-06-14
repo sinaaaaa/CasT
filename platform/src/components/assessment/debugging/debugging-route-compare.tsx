@@ -58,7 +58,7 @@ export function DebuggingRouteCompare({
       <div className={showShortest ? "grid gap-3 md:grid-cols-2" : "max-w-md"}>
         {referencePath.length > 1 && (
           <AssessmentGridMap
-            title="Reference for diagnosis"
+            title="How it should look"
             subtitle={`${referenceCommands.length} commands · ${comparisonTargetLabel(result.comparisonUsed).toLowerCase()}`}
             path={referencePath}
             collisions={[]}
@@ -69,8 +69,8 @@ export function DebuggingRouteCompare({
         )}
         {showShortest && (
           <AssessmentGridMap
-            title="Shortest path (BFS)"
-            subtitle={`${shortestCommands.length} commands · fewest steps from start`}
+            title="Best (shortest) way"
+            subtitle={`${shortestCommands.length} commands · fewest needed`}
             path={shortestPath}
             collisions={[]}
             pathClass="bg-amber-400"

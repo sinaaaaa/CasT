@@ -63,9 +63,10 @@ export function isDebuggingLevel(
 
 /** Drag action blocks only — build a route from scratch (never edit-starter). */
 export function isPathBuildingLevel(
-  _config: LevelGameplayConfig,
+  config: LevelGameplayConfig,
   levelType?: LevelType
 ): boolean {
+  if (config.layoutMode === "NUMBER_LINE") return false;
   return levelType === LevelType.DRAG_ACTIONS;
 }
 

@@ -76,13 +76,17 @@ export function BulkLevelAssignmentPanel({ selectedStudentIds, onComplete }: Pro
     setBusy(true);
     setError(null);
     setMessage(null);
+    const orderedLevelIds = levels
+      .filter((l) => selectedLevels.has(l.id))
+      .sort((a, b) => a.orderIndex - b.orderIndex || a.name.localeCompare(b.name))
+      .map((l) => l.id);
     try {
       const res = await fetch("/api/teacher/level-assignments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           studentIds: selectedStudentIds,
-          levelIds: Array.from(selectedLevels),
+          levelIds: orderedLevelIds,
           mode,
         }),
       });

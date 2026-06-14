@@ -160,8 +160,26 @@ export function buildChoiceActionFromAttempt(params: {
     commandEvents: attempt.commandEvents,
   }) as RobotCommand[];
 
+  const expected =
+    parsed.correct.length > 0
+      ? parsed.correct
+      : (levelConfig.blanks ?? []).map((b) => b.correctAnswer).filter(Boolean);
+
+  const recomputedFromBlanks =
+    parsed.student.length > 0 &&
+    expected.length > 0 &&
+    parsed.student.length >= expected.length &&
+    expected.every(
+      (ans, i) => normalizeChoice(parsed.student[i] ?? "") === normalizeChoice(ans)
+    );
+
   const isCorrect =
-    parsed.isCorrect != null ? parsed.isCorrect : attempt.passed;
+    recomputedFromBlanks ||
+    (parsed.isCorrect === true
+      ? true
+      : parsed.isCorrect === false && attempt.passed
+        ? attempt.passed
+        : (parsed.isCorrect ?? attempt.passed));
 
   return analyzeChoiceAction({
     levelConfig,

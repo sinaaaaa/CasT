@@ -18,6 +18,7 @@ public class PlatformLevelLoader : MonoBehaviour
 
     public bool LoadSucceeded { get; private set; }
     public string LastError { get; private set; }
+    public bool AssignmentRestricted { get; private set; }
 
     private void Awake()
     {
@@ -36,6 +37,7 @@ public class PlatformLevelLoader : MonoBehaviour
     {
         LoadSucceeded = false;
         LastError = null;
+        AssignmentRestricted = false;
 
         if (!usePlatformLevels)
         {
@@ -66,7 +68,7 @@ public class PlatformLevelLoader : MonoBehaviour
             try
             {
                 var root = JObject.Parse(req.downloadHandler.text);
-                bool assignmentRestricted = root["assignmentRestricted"]?.Value<bool>() ?? false;
+                AssignmentRestricted = root["assignmentRestricted"]?.Value<bool>() ?? false;
                 bool filteredForStudent = root["filteredForStudent"]?.Value<bool>() ?? false;
                 var levelsToken = root["levels"] as JArray;
                 if (levelsToken == null || levelsToken.Count == 0)
@@ -76,12 +78,10 @@ public class PlatformLevelLoader : MonoBehaviour
                     yield break;
                 }
 
-                if (assignmentRestricted && !string.IsNullOrEmpty(studentId))
+                if (AssignmentRestricted && !string.IsNullOrEmpty(studentId))
                 {
-                    Debug.LogWarning(
-                        $"[PlatformLevelLoader] Student '{studentId}' has class assignments for fewer levels " +
-                        $"than are published ({levelsToken.Count} loaded). Unity still receives all published levels; " +
-                        "update Class → Level assignments if the student portal should match.");
+                    Debug.Log(
+                        $"[PlatformLevelLoader] Student '{studentId}' has {levelsToken.Count} assigned item(s) from the dashboard.");
                 }
 
                 var result = new List<LevelData>();
@@ -106,11 +106,17 @@ public class PlatformLevelLoader : MonoBehaviour
                     ld.levelKey = levelKey;
                     ld.visible = item["visible"]?.Value<bool>() ?? dto.visible;
                     ld.orderIndex = item["orderIndex"]?.Value<int>() ?? result.Count;
+                    if (!string.IsNullOrEmpty(layoutFromJson))
+                        ld.layoutMode = layoutFromJson;
+                    if (string.IsNullOrEmpty(ld.layoutMode) && dto.numberLine != null)
+                        ld.layoutMode = "NUMBER_LINE";
                     if (string.IsNullOrEmpty(ld.levelName))
                         ld.levelName = item["name"]?.ToString() ?? levelKey;
+                    string program = ld.guidedActions != null ? string.Join(", ", ld.guidedActions) : "";
                     Debug.Log($"[PlatformLevelLoader] {levelKey} type={levelType} layout={ld.layoutMode} " +
                               $"ticks={ld.numberLine?.tickCount ?? 0} orderIndex={ld.orderIndex} " +
-                              $"guided={ld.guidedActions?.Count ?? 0} blanks={ld.blanks?.Count ?? 0}");
+                              $"maxAttempts={ld.maxAttempts} commandHistory={ld.showCommandHistory} " +
+                              $"animateRobot={ld.runRobotOnSubmit} program=[{program}] blanks={ld.blanks?.Count ?? 0}");
                     result.Add(ld);
                 }
 
@@ -120,6 +126,13 @@ public class PlatformLevelLoader : MonoBehaviour
                     onComplete?.Invoke(null);
                     yield break;
                 }
+
+                result.Sort((a, b) =>
+                {
+                    int cmp = a.orderIndex.CompareTo(b.orderIndex);
+                    if (cmp != 0) return cmp;
+                    return string.Compare(a.levelKey, b.levelKey, StringComparison.Ordinal);
+                });
 
                 LoadSucceeded = true;
                 Debug.Log($"[PlatformLevelLoader] Loaded {result.Count} level(s) from platform.");

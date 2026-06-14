@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -44,6 +45,10 @@ public class GameAssessmentClient : MonoBehaviour
 
     private string _currentAttemptId;
     private string _currentLevelId;
+    private int _startRequestGeneration;
+    private bool _startInFlight;
+    private readonly Queue<LevelEndRequest> _endQueue = new Queue<LevelEndRequest>();
+    private bool _processingEndQueue;
 
     private void Awake()
     {
@@ -83,6 +88,8 @@ public class GameAssessmentClient : MonoBehaviour
     {
         _currentLevelId = levelIdOrKey;
         SyncStudentFromPlayerPrefs();
+        int generation = ++_startRequestGeneration;
+        _startInFlight = true;
         var payload = new LevelStartPayload
         {
             studentId = studentId,
@@ -91,6 +98,13 @@ public class GameAssessmentClient : MonoBehaviour
         };
         StartCoroutine(PostJson("/api/game/level-start", payload, (ok, body, code) =>
         {
+            _startInFlight = false;
+            if (generation != _startRequestGeneration)
+            {
+                onComplete?.Invoke(false);
+                return;
+            }
+
             if (ok)
             {
                 var res = JsonUtility.FromJson<LevelStartResponse>(body);
@@ -151,7 +165,7 @@ public class GameAssessmentClient : MonoBehaviour
         StartCoroutine(PostJson("/api/game/save-robot-touch-event", payload, (ok, body, _) => onComplete?.Invoke(ok)));
     }
 
-    /// <summary>Start attempt if needed, then send level-end (for level complete / next level).</summary>
+    /// <summary>Wait for RUN's level-start, then send level-end (for level complete / next level).</summary>
     public void ReportLevelComplete(
         string levelKey,
         string externalStudentId,
@@ -169,20 +183,26 @@ public class GameAssessmentClient : MonoBehaviour
         AssessmentExtrasPayload assessmentExtras = null)
     {
         SetStudent(externalStudentId);
-        if (string.IsNullOrEmpty(_currentAttemptId))
+        _currentLevelId = levelKey;
+        EnqueueEnd(new LevelEndRequest
         {
-            StartLevel(levelKey, initialCommand, ok =>
-            {
-                if (ok)
-                    EndLevel(status, passed, score, finalCommand, totalTimeSeconds, null, null, objectVisit,
-                        robotTouched, robotTouchCount, robotTouchDurationSeconds, resetCount, null, assessmentExtras);
-            });
-        }
-        else
-        {
-            EndLevel(status, passed, score, finalCommand, totalTimeSeconds, null, null, objectVisit,
-                robotTouched, robotTouchCount, robotTouchDurationSeconds, resetCount, null, assessmentExtras);
-        }
+            status = status,
+            passed = passed,
+            score = score,
+            finalCommand = finalCommand,
+            totalTimeSeconds = totalTimeSeconds,
+            mistakes = null,
+            feedback = null,
+            objectVisit = objectVisit,
+            robotTouched = robotTouched,
+            robotTouchCount = robotTouchCount,
+            robotTouchDurationSeconds = robotTouchDurationSeconds,
+            resetCount = resetCount,
+            assessmentExtras = assessmentExtras,
+            initialCommand = initialCommand,
+            levelKey = levelKey,
+            waitForAttemptStart = true
+        });
     }
 
     public void EndLevel(
@@ -201,30 +221,130 @@ public class GameAssessmentClient : MonoBehaviour
         Action<bool> onComplete = null,
         AssessmentExtrasPayload assessmentExtras = null)
     {
-        if (string.IsNullOrEmpty(_currentAttemptId)) return;
-        var payload = new LevelEndPayload
+        EnqueueEnd(new LevelEndRequest
         {
-            attemptId = _currentAttemptId,
             status = status,
             passed = passed,
             score = score,
             finalCommand = finalCommand,
             totalTimeSeconds = totalTimeSeconds,
-            mistakes = mistakes ?? Array.Empty<string>(),
+            mistakes = mistakes,
             feedback = feedback,
             objectVisit = objectVisit,
             robotTouched = robotTouched,
             robotTouchCount = robotTouchCount,
             robotTouchDurationSeconds = robotTouchDurationSeconds,
             resetCount = resetCount,
-            assessmentExtras = assessmentExtras
+            assessmentExtras = assessmentExtras,
+            onComplete = onComplete,
+            waitForAttemptStart = false
+        });
+    }
+
+    private void EnqueueEnd(LevelEndRequest request)
+    {
+        _endQueue.Enqueue(request);
+        if (!_processingEndQueue)
+            StartCoroutine(ProcessEndQueue());
+    }
+
+    private IEnumerator ProcessEndQueue()
+    {
+        _processingEndQueue = true;
+        while (_endQueue.Count > 0)
+        {
+            var request = _endQueue.Dequeue();
+            yield return EndLevelWhenReady(request);
+        }
+        _processingEndQueue = false;
+    }
+
+    private IEnumerator EndLevelWhenReady(LevelEndRequest request)
+    {
+        if (request.waitForAttemptStart)
+        {
+            float elapsed = 0f;
+            while (string.IsNullOrEmpty(_currentAttemptId) && (_startInFlight || elapsed < 15f))
+            {
+                elapsed += Time.unscaledDeltaTime;
+                yield return null;
+            }
+
+            if (string.IsNullOrEmpty(_currentAttemptId))
+            {
+                Debug.LogWarning("[Assessment] No attempt id after waiting — starting level before end.");
+                bool started = false;
+                bool startOk = false;
+                StartLevel(request.levelKey, request.initialCommand, ok =>
+                {
+                    startOk = ok;
+                    started = true;
+                });
+                elapsed = 0f;
+                while (!started && elapsed < 15f)
+                {
+                    elapsed += Time.unscaledDeltaTime;
+                    yield return null;
+                }
+                if (!startOk || string.IsNullOrEmpty(_currentAttemptId))
+                {
+                    Debug.LogError("[Assessment] level-end aborted: could not obtain attempt id.");
+                    request.onComplete?.Invoke(false);
+                    yield break;
+                }
+            }
+        }
+
+        if (string.IsNullOrEmpty(_currentAttemptId))
+        {
+            Debug.LogWarning("[Assessment] level-end skipped: no active attempt.");
+            request.onComplete?.Invoke(false);
+            yield break;
+        }
+
+        var attemptId = _currentAttemptId;
+        var payload = new LevelEndPayload
+        {
+            attemptId = attemptId,
+            status = request.status,
+            passed = request.passed,
+            score = request.score,
+            finalCommand = request.finalCommand,
+            totalTimeSeconds = request.totalTimeSeconds,
+            mistakes = request.mistakes ?? Array.Empty<string>(),
+            feedback = request.feedback,
+            objectVisit = request.objectVisit,
+            robotTouched = request.robotTouched,
+            robotTouchCount = request.robotTouchCount,
+            robotTouchDurationSeconds = request.robotTouchDurationSeconds,
+            resetCount = request.resetCount,
+            assessmentExtras = request.assessmentExtras
         };
+
+        bool done = false;
+        bool success = false;
         StartCoroutine(PostJson("/api/game/level-end", payload, (ok, body, code) =>
         {
-            if (ok) Debug.Log("[Assessment] Level ended successfully");
+            success = ok;
+            if (ok)
+            {
+                Debug.Log("[Assessment] Level ended successfully");
+                if (_currentAttemptId == attemptId)
+                    _currentAttemptId = null;
+                _startRequestGeneration++;
+            }
             else Debug.LogError($"[Assessment] level-end failed (HTTP {code}): {body}");
-            onComplete?.Invoke(ok);
+            done = true;
         }));
+
+        float wait = 0f;
+        while (!done && wait < 20f)
+        {
+            wait += Time.unscaledDeltaTime;
+            yield return null;
+        }
+
+        request.onComplete?.Invoke(success);
     }
 
     private IEnumerator PostJson(string path, object payload, Action<bool, string, long> callback)
@@ -248,6 +368,27 @@ public class GameAssessmentClient : MonoBehaviour
 
         var success = req.result == UnityWebRequest.Result.Success;
         callback?.Invoke(success, responseText ?? "", req.responseCode);
+    }
+
+    private class LevelEndRequest
+    {
+        public string status;
+        public bool passed;
+        public int score;
+        public string finalCommand;
+        public float totalTimeSeconds;
+        public string[] mistakes;
+        public string feedback;
+        public ObjectVisitPayload objectVisit;
+        public bool robotTouched;
+        public int robotTouchCount;
+        public float robotTouchDurationSeconds;
+        public int resetCount;
+        public AssessmentExtrasPayload assessmentExtras;
+        public Action<bool> onComplete;
+        public bool waitForAttemptStart;
+        public string levelKey;
+        public string initialCommand;
     }
 
     [Serializable]
@@ -322,6 +463,10 @@ public class GameAssessmentClient : MonoBehaviour
         public string[] blankAnswers;
         public string[] correctBlankAnswers;
         public bool blankAnswersCorrect;
+        /// <summary>Which in-level RUN this row represents (1 = first try, 2 = second try, …).</summary>
+        public int inLevelRunNumber;
+        /// <summary>maxAttempts configured for this level.</summary>
+        public int maxLevelRuns;
     }
 
     [Serializable]

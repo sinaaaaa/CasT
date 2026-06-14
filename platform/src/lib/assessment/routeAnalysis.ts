@@ -41,6 +41,16 @@ function vecEqual(a: Vec2, b: Vec2): boolean {
   return a.x === b.x && a.y === b.y;
 }
 
+/** Number-line props sit on a different row than the robot; match by tick (x) only. */
+function cellMatchesForLayout(
+  pos: Vec2,
+  goalPos: Vec2,
+  layoutMode: "GRID" | "NUMBER_LINE" = "GRID"
+): boolean {
+  if (layoutMode === "NUMBER_LINE") return pos.x === goalPos.x;
+  return vecEqual(pos, goalPos);
+}
+
 /** Matches Unity CharacterMove: turn left = counter-clockwise (−90°). */
 function rotateLeft(f: Vec2): Vec2 {
   return { x: -f.y, y: f.x };
@@ -179,16 +189,19 @@ export function analyzeGoalRelationship(params: {
   goalPosition: Vec2;
   finalDirection: Vec2;
   requiredFinalDirection?: Vec2;
+  layoutMode?: "GRID" | "NUMBER_LINE";
 }): GoalRelationshipAnalysis {
   const { pathVisited, finalPosition, goalPosition, finalDirection, requiredFinalDirection } =
     params;
-  const finalStoppedOnGoal = vecEqual(finalPosition, goalPosition);
+  const layoutMode = params.layoutMode ?? "GRID";
+  const matches = (a: Vec2, b: Vec2) => cellMatchesForLayout(a, b, layoutMode);
+  const finalStoppedOnGoal = matches(finalPosition, goalPosition);
   const stoppedOnGoal = finalStoppedOnGoal;
-  const goalTouched = pathVisited.some((p) => vecEqual(p, goalPosition));
+  const goalTouched = pathVisited.some((p) => matches(p, goalPosition));
 
   let firstGoalTouchStep: number | null = null;
   for (let i = 0; i < pathVisited.length; i++) {
-    if (vecEqual(pathVisited[i], goalPosition)) {
+    if (matches(pathVisited[i], goalPosition)) {
       firstGoalTouchStep = i;
       break;
     }
@@ -197,7 +210,9 @@ export function analyzeGoalRelationship(params: {
   const passedThroughGoal =
     !stoppedOnGoal && goalTouched;
   const distanceFromGoal =
-    Math.abs(finalPosition.x - goalPosition.x) + Math.abs(finalPosition.y - goalPosition.y);
+    layoutMode === "NUMBER_LINE"
+      ? Math.abs(finalPosition.x - goalPosition.x)
+      : Math.abs(finalPosition.x - goalPosition.x) + Math.abs(finalPosition.y - goalPosition.y);
 
   let overshotGoal = false;
   let movedAfterGoal = false;
@@ -254,6 +269,7 @@ export function programStopsOnGoalStrict(
     goalPosition,
     finalDirection: sim.finalDirection,
     requiredFinalDirection: taskRequiredFinalFacing(task),
+    layoutMode: task.levelConfig.layoutMode ?? "GRID",
   });
   if (!rel.stoppedOnGoal || !rel.finalDirectionCorrect) return false;
   if (sim.collisions.length > 0) return false;
@@ -291,6 +307,40 @@ function applyCommand(
   if (cmd === "turn right") {
     newFacing = rotateRight(newFacing);
     return { pos: newPos, facing: newFacing, collision: false, wrongTurn };
+  }
+
+  if (bounds.layoutMode === "NUMBER_LINE") {
+    const fx = newFacing.x;
+    if (fx === 0) {
+      return { pos: newPos, facing: newFacing, collision: false, wrongTurn: false };
+    }
+    const sign = cmd === "forward" ? fx : -fx;
+    const candidate = { x: newPos.x + sign, y: newPos.y };
+    if (!inBounds(candidate, bounds.layoutMode, bounds.tickCount)) {
+      collision = true;
+      wrongTurn = cmd === "forward" || cmd === "backward";
+      return {
+        pos: newPos,
+        facing: newFacing,
+        collision,
+        wrongTurn,
+        attemptedCell: { ...candidate },
+        obstacleCollision: false,
+      };
+    }
+    if (blocked.has(vecKey(candidate))) {
+      collision = true;
+      return {
+        pos: newPos,
+        facing: newFacing,
+        collision,
+        wrongTurn: false,
+        attemptedCell: { ...candidate },
+        obstacleCollision: true,
+      };
+    }
+    newPos = candidate;
+    return { pos: newPos, facing: newFacing, collision, wrongTurn };
   }
 
   const delta =
@@ -367,9 +417,12 @@ function advanceGoalProgress(
   pos: Vec2,
   facing: Vec2,
   goals: AssessmentGoal[],
-  task: TaskAssessmentConfig
+  task: TaskAssessmentConfig,
+  layoutMode: "GRID" | "NUMBER_LINE" = "GRID"
 ): number {
   if (goals.length === 0) return progress;
+
+  const atGoal = (g: AssessmentGoal) => cellMatchesForLayout(pos, g.position, layoutMode);
 
   if (usesOrderedGoals(task)) {
     if (progress >= goals.length) return progress;
@@ -377,7 +430,7 @@ function advanceGoalProgress(
     const isFinal = progress === goals.length - 1;
     if (
       g &&
-      vecEqual(pos, g.position) &&
+      atGoal(g) &&
       facingMatchesRequirement(facing, goalFacingRequirement(g, isFinal, task))
     ) {
       return progress + 1;
@@ -391,7 +444,7 @@ function advanceGoalProgress(
     if ((mask & bit) !== 0) return;
     const isFinal = i === goals.length - 1;
     if (
-      vecEqual(pos, g.position) &&
+      atGoal(g) &&
       facingMatchesRequirement(facing, goalFacingRequirement(g, isFinal, task))
     ) {
       mask |= bit;
@@ -405,12 +458,13 @@ function isGoalProgressComplete(
   pos: Vec2,
   facing: Vec2,
   goals: AssessmentGoal[],
-  task: TaskAssessmentConfig
+  task: TaskAssessmentConfig,
+  layoutMode: "GRID" | "NUMBER_LINE" = "GRID"
 ): boolean {
   if (goals.length === 0) {
     const gc = task.levelConfig.goalCell;
     if (!gc || gc.x < 0 || gc.y < 0) return false;
-    if (!vecEqual(pos, gc)) return false;
+    if (!cellMatchesForLayout(pos, gc, layoutMode)) return false;
     return facingMatchesRequirement(facing, taskRequiredFinalFacing(task));
   }
 
@@ -422,7 +476,7 @@ function isGoalProgressComplete(
   }
 
   const last = goals[goals.length - 1];
-  if (!vecEqual(pos, last.position)) return false;
+  if (!cellMatchesForLayout(pos, last.position, layoutMode)) return false;
   return facingMatchesRequirement(
     facing,
     goalFacingRequirement(last, true, task)
@@ -438,16 +492,19 @@ function initialGoalProgress(
   pos: Vec2,
   facing: Vec2,
   goals: AssessmentGoal[],
-  task: TaskAssessmentConfig
+  task: TaskAssessmentConfig,
+  layoutMode: "GRID" | "NUMBER_LINE" = "GRID"
 ): number {
   if (goals.length === 0) return 0;
+
+  const atGoal = (g: AssessmentGoal) => cellMatchesForLayout(pos, g.position, layoutMode);
 
   if (usesOrderedGoals(task)) {
     let progress = 0;
     for (let i = 0; i < goals.length; i++) {
       const g = goals[i];
       if (
-        vecEqual(pos, g.position) &&
+        atGoal(g) &&
         facingMatchesRequirement(facing, goalFacingRequirement(g, i === goals.length - 1, task))
       ) {
         progress++;
@@ -461,7 +518,7 @@ function initialGoalProgress(
   let mask = 0;
   goals.forEach((g, i) => {
     if (
-      vecEqual(pos, g.position) &&
+      atGoal(g) &&
       facingMatchesRequirement(facing, goalFacingRequirement(g, i === goals.length - 1, task))
     ) {
       mask |= 1 << i;
@@ -545,7 +602,7 @@ export function simulateProgram(
       const nextGoal = ordered[visitIndex];
       if (
         nextGoal &&
-        vecEqual(pos, nextGoal.position) &&
+        cellMatchesForLayout(pos, nextGoal.position, layoutMode) &&
         facingMatchesRequirement(
           facing,
           task
@@ -558,7 +615,10 @@ export function simulateProgram(
       }
     } else {
       for (const g of goals) {
-        if (vecEqual(pos, g.position) && !reachedGoalIds.includes(g.id)) {
+        if (
+          cellMatchesForLayout(pos, g.position, layoutMode) &&
+          !reachedGoalIds.includes(g.id)
+        ) {
           reachedGoalIds.push(g.id);
         }
       }
@@ -582,9 +642,10 @@ export function simulateProgram(
     goals.length === 0
       ? config.goalCell != null &&
         config.goalCell.x >= 0 &&
-        vecEqual(pos, config.goalCell)
+        cellMatchesForLayout(pos, config.goalCell, layoutMode)
       : finalGoal
-        ? reachedGoalIds.includes(finalGoal.id) || vecEqual(pos, finalGoal.position)
+        ? reachedGoalIds.includes(finalGoal.id) ||
+          cellMatchesForLayout(pos, finalGoal.position, layoutMode)
         : reachedGoalIds.length >= totalGoals;
 
   return {
@@ -721,7 +782,8 @@ export function findOptimalRoute(task: TaskAssessmentConfig): OptimalRouteResult
     startAnchor.position,
     startFacing,
     goals,
-    task
+    task,
+    task.layoutMode
   );
   const start: BfsState = {
     pos: { ...startAnchor.position },
@@ -741,7 +803,7 @@ export function findOptimalRoute(task: TaskAssessmentConfig): OptimalRouteResult
   while (queue.length > 0) {
     const cur = queue.shift()!;
 
-    if (isGoalProgressComplete(cur.goalProgress, cur.pos, cur.facing, goals, task)) {
+    if (isGoalProgressComplete(cur.goalProgress, cur.pos, cur.facing, goals, task, task.layoutMode)) {
       if (minCommandCount === null) minCommandCount = cur.commands.length;
       if (cur.commands.length === minCommandCount) {
         terminal.push(cur);
@@ -760,7 +822,8 @@ export function findOptimalRoute(task: TaskAssessmentConfig): OptimalRouteResult
         nextPos,
         applied.facing,
         goals,
-        task
+        task,
+        task.layoutMode
       );
 
       const next: BfsState = {

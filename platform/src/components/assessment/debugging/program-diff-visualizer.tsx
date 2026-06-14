@@ -1,7 +1,7 @@
-﻿"use client";
+"use client";
 
-import { useMemo } from "react";
-import { AlertTriangle, GitCompareArrows } from "lucide-react";
+import { useMemo, useState } from "react";
+import { AlertTriangle, GitCompareArrows, Plus, Minus } from "lucide-react";
 import type { DebuggingAnalysisResult } from "@/lib/assessment/debuggingAnalysis";
 import { ComparisonUsedBanner } from "@/components/assessment/comparison-used-banner";
 import { ProgramDiffTrack } from "@/components/assessment/debugging/command-diff-chip";
@@ -30,19 +30,27 @@ export function ProgramDiffVisualizer({
       : result.closestWorkingFix?.commands ??
         (result.correctProgram.length > 0 ? result.correctProgram : null);
 
+  const [showAll, setShowAll] = useState(false);
+
   const shortestFix = result.preferredWorkingFix?.commands ?? null;
   const closestFix = result.closestWorkingFix?.commands ?? null;
 
-  const showShortest =
+  const canShowShortest =
     shortestFix &&
     referenceCommands &&
     !programsEqual(shortestFix, referenceCommands);
 
-  const showClosest =
+  const canShowClosest =
     closestFix &&
     referenceCommands &&
     !programsEqual(closestFix, referenceCommands) &&
     (!shortestFix || !programsEqual(closestFix, shortestFix));
+
+  // Default to the essentials (starter · student · how it should look). The extra
+  // reference programs add clutter, so they live behind a toggle.
+  const showShortest = showAll && canShowShortest;
+  const showClosest = showAll && canShowClosest;
+  const hasExtraPrograms = Boolean(canShowShortest || canShowClosest);
 
   const extraColumns = (showShortest ? 1 : 0) + (showClosest ? 1 : 0);
 
@@ -113,9 +121,28 @@ export function ProgramDiffVisualizer({
           <GitCompareArrows className="h-4 w-4 text-amber-700" />
           <h3 className="text-sm font-semibold text-slate-900">Program comparison</h3>
         </div>
-        <p className="text-xs text-muted-foreground">
-          Hover a command to highlight its step on the grid below
-        </p>
+        <div className="flex items-center gap-3">
+          <p className="hidden text-xs text-muted-foreground sm:block">
+            Hover a command to highlight its step
+          </p>
+          {hasExtraPrograms && (
+            <button
+              type="button"
+              onClick={() => setShowAll((v) => !v)}
+              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50"
+            >
+              {showAll ? (
+                <>
+                  <Minus className="h-3 w-3" /> Fewer
+                </>
+              ) : (
+                <>
+                  <Plus className="h-3 w-3" /> Show all programs
+                </>
+              )}
+            </button>
+          )}
+        </div>
       </div>
 
       <ComparisonUsedBanner
@@ -164,7 +191,7 @@ export function ProgramDiffVisualizer({
         {referenceCommands ? (
           <>
             <ProgramDiffTrack
-              label="Reference for diagnosis"
+              label="How it should look"
               sublabel={comparisonTargetLabel(result.comparisonUsed)}
               slots={referenceFixSlots(referenceCommands)}
               onStepHover={onStepHover}
@@ -172,8 +199,8 @@ export function ProgramDiffVisualizer({
             />
             {showClosest && closestFix && (
               <ProgramDiffTrack
-                label="Closest valid route"
-                sublabel="Alternative comparison"
+                label="Closest correct way"
+                sublabel="Another comparison"
                 slots={referenceFixSlots(closestFix)}
                 onStepHover={onStepHover}
                 activeStep={activeStep}
@@ -181,8 +208,8 @@ export function ProgramDiffVisualizer({
             )}
             {showShortest && shortestFix && (
               <ProgramDiffTrack
-                label="Shortest path (BFS)"
-                sublabel={`${shortestFix.length} commands · fewest from start`}
+                label="Best (shortest) way"
+                sublabel={`${shortestFix.length} commands · fewest needed`}
                 slots={referenceFixSlots(shortestFix)}
                 onStepHover={onStepHover}
                 activeStep={activeStep}

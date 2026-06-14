@@ -185,6 +185,12 @@ export const levelGameplayConfigSchema = z.object({
    * When false, RUN checks the student's answer without moving Robo on screen.
    */
   runRobotOnSubmit: z.boolean().default(true),
+  /** Success popup shown when the student completes the level. Placeholders: {levelName} */
+  attemptSuccessMessage: z.string().optional(),
+  /** Wrong-answer popup after a failed RUN. Placeholders: {attempt}, {maxAttempts}, {reason} */
+  attemptFailureMessage: z.string().optional(),
+  /** Popup when the student uses all attempts. Placeholders: {levelName}, {maxAttempts} */
+  maxAttemptsMessage: z.string().optional(),
   /**
    * Action palette buttons visible to students. Omitted = all four on grid;
    * number-line levels also respect numberLine.forwardBackwardOnly when unset.

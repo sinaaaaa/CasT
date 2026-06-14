@@ -1,11 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { Route, Lightbulb } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Route, Stethoscope, PlayCircle, Map } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AssessmentPanelHeader } from "@/components/assessment/assessment-panel-header";
+import { PanelRecommendation } from "@/components/assessment/panel-recommendation";
 import { PathOutcomeBanner } from "@/components/assessment/path-building/path-outcome-banner";
 import { PathProgramCompare } from "@/components/assessment/path-building/path-program-compare";
 import { PathMapSection } from "@/components/assessment/path-building/path-map-section";
+import { RouteReplayPlayer } from "@/components/assessment/route-replay-player";
 import type { PathBuildingAnalysisResult } from "@/lib/assessment/pathBuildingAnalysis";
 
 function taskSubLabels(result: PathBuildingAnalysisResult): string[] {
@@ -24,74 +29,111 @@ export function PathBuildingAnalysisPanel({
   const [activeStep, setActiveStep] = useState<number | null>(null);
   const subLabels = taskSubLabels(result);
 
-  return (
-    <Card className="overflow-hidden border-sky-200/50 shadow-lg shadow-sky-900/5">
-      <CardHeader className="border-b border-sky-100/80 bg-gradient-to-br from-sky-50/90 via-white to-cyan-50/40 px-6 py-4">
-        <CardTitle className="flex flex-wrap items-center gap-2 text-lg font-semibold tracking-tight text-slate-900">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-500/15">
-            <Route className="h-4 w-4 text-sky-800" />
-          </span>
-          Building a Path
-        </CardTitle>
-        {subLabels.length > 0 && (
-          <p className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
-            {subLabels.map((l) => (
-              <span
-                key={l}
-                className="rounded-full border border-sky-200/80 bg-white/80 px-2 py-0.5"
-              >
-                {l}
-              </span>
-            ))}
-          </p>
-        )}
-      </CardHeader>
+  const canReplay = result.studentPath.length > 1;
+  const hasMaps =
+    result.studentPath.length > 1 ||
+    result.closestValidPath.length > 1 ||
+    result.shortestPath.length > 1;
 
-      <CardContent className="space-y-8 bg-gradient-to-b from-slate-50/30 to-white pt-6">
+  return (
+    <Card className="overflow-hidden border-slate-200/70 shadow-sm">
+      <AssessmentPanelHeader
+        icon={Route}
+        title="Building a path"
+        subtitle="The route the student built compared with a correct way to the goal."
+        badges={
+          subLabels.length > 0
+            ? subLabels.map((l) => (
+                <Badge key={l} variant="outline" className="font-normal text-muted-foreground">
+                  {l}
+                </Badge>
+              ))
+            : undefined
+        }
+      />
+
+      <CardContent className="space-y-6 pt-6">
         <PathOutcomeBanner result={result} />
 
-        <PathProgramCompare
-          result={result}
-          activeStep={activeStep}
-          onStepHover={setActiveStep}
-        />
+        <Tabs defaultValue="diagnosis" className="w-full">
+          <TabsList>
+            <TabsTrigger value="diagnosis" className="gap-1.5">
+              <Stethoscope className="h-4 w-4" />
+              What happened
+            </TabsTrigger>
+            {canReplay && (
+              <TabsTrigger value="replay" className="gap-1.5">
+                <PlayCircle className="h-4 w-4" />
+                Replay
+              </TabsTrigger>
+            )}
+            {hasMaps && (
+              <TabsTrigger value="maps" className="gap-1.5">
+                <Map className="h-4 w-4" />
+                Maps
+              </TabsTrigger>
+            )}
+          </TabsList>
 
-        <PathMapSection result={result} activeStep={activeStep} />
+          <TabsContent value="diagnosis" className="space-y-6">
+            <PathProgramCompare
+              result={result}
+              activeStep={activeStep}
+              onStepHover={setActiveStep}
+            />
 
-        {result.stageAnalysis.length > 0 && (
-          <section className="rounded-xl border border-slate-200/60 bg-white/60 p-4">
-            <h3 className="text-sm font-semibold text-slate-900">Stage analysis</h3>
-            <ul className="mt-3 space-y-2">
-              {result.stageAnalysis.map((stage) => (
-                <li
-                  key={stage.stage}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-100 bg-slate-50/50 px-3 py-2 text-sm"
-                >
-                  <span>
-                    Stage {stage.stage}: {stage.from} → {stage.to}
-                  </span>
-                  <span
-                    className={
-                      stage.reached ? "text-emerald-700 font-medium" : "text-amber-800"
-                    }
-                  >
-                    {stage.reached ? "Reached" : stage.exactIssue ?? "Not reached"}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
+            {result.stageAnalysis.length > 0 && (
+              <section className="rounded-xl border border-slate-200/60 bg-white/60 p-4">
+                <h3 className="text-sm font-semibold text-slate-900">Stage analysis</h3>
+                <ul className="mt-3 space-y-2">
+                  {result.stageAnalysis.map((stage) => (
+                    <li
+                      key={stage.stage}
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-100 bg-slate-50/50 px-3 py-2 text-sm"
+                    >
+                      <span>
+                        Stage {stage.stage}: {stage.from} → {stage.to}
+                      </span>
+                      <span
+                        className={
+                          stage.reached ? "text-emerald-700 font-medium" : "text-amber-800"
+                        }
+                      >
+                        {stage.reached ? "Reached" : stage.exactIssue ?? "Not reached"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+          </TabsContent>
 
-        <footer className="flex gap-3 rounded-xl border border-sky-100/80 bg-sky-50/25 p-4">
-          <Lightbulb className="mt-0.5 h-4 w-4 shrink-0 text-sky-700" />
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-sky-900/70">
-              Recommendation
-            </p>
-            <p className="mt-1 text-sm leading-relaxed text-slate-700">{result.recommendation}</p>
-          </div>
-        </footer>
+          {canReplay && (
+            <TabsContent value="replay">
+              <RouteReplayPlayer
+                path={result.studentPath}
+                pathStates={result.studentPathStates}
+                commands={result.studentCommands}
+                routeStartPosition={result.routeStartPosition}
+                routeGoalPosition={result.routeGoalPosition}
+                goalLabel={result.goalLabel}
+                studentEndPosition={result.studentEndPosition}
+                objectMarkers={result.objectMarkers}
+                collisions={result.attemptedObstacleCells}
+                attemptedObstacleCell={result.attemptedObstacleCells[0] ?? null}
+                title="Replay this attempt"
+              />
+            </TabsContent>
+          )}
+
+          {hasMaps && (
+            <TabsContent value="maps">
+              <PathMapSection result={result} activeStep={activeStep} defaultOpen />
+            </TabsContent>
+          )}
+        </Tabs>
+
+        <PanelRecommendation>{result.recommendation}</PanelRecommendation>
       </CardContent>
     </Card>
   );

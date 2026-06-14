@@ -17,6 +17,8 @@ import {
 import { type LevelAttemptRow } from "@/components/assessment/level-attempts-table";
 import { LEVEL_TYPE_LABELS } from "@/lib/level-config";
 import { AttemptStatus } from "@prisma/client";
+import { formatAttemptRunLabel, parseAttemptRunMeta } from "@/lib/attempt-mistakes";
+import { resolveAttemptDurationSeconds } from "@/lib/game/resolve-attempt-duration";
 
 async function LevelDetailContent({ id }: { id: string }) {
   const session = await getServerSession(authOptions);
@@ -49,9 +51,18 @@ async function LevelDetailContent({ id }: { id: string }) {
     scored.length > 0
       ? Math.round(scored.reduce((s, a) => s + (a.score ?? 0), 0) / scored.length)
       : null;
+  const timedAttempts = attempts
+    .map((a) =>
+      resolveAttemptDurationSeconds({
+        totalTimeSeconds: a.totalTimeSeconds,
+        startedAt: a.startedAt,
+        endedAt: a.endedAt,
+      })
+    )
+    .filter((t): t is number => t != null);
   const avgTime =
-    attempts.length > 0
-      ? attempts.reduce((s, a) => s + (a.totalTimeSeconds ?? 0), 0) / attempts.length
+    timedAttempts.length > 0
+      ? timedAttempts.reduce((s, t) => s + t, 0) / timedAttempts.length
       : 0;
 
   const chartData = [
@@ -60,19 +71,29 @@ async function LevelDetailContent({ id }: { id: string }) {
     { name: "Incomplete", value: attempts.filter((a) => a.status === AttemptStatus.INCOMPLETE).length },
   ];
 
-  const rows: LevelAttemptRow[] = attempts.map((a) => ({
-    id: a.id,
-    studentId: a.studentId,
-    studentName: a.student.displayName,
-    attemptNumber: a.attemptNumber,
-    status: a.status,
-    passed: a.passed,
-    score: a.score,
-    totalTimeSeconds: a.totalTimeSeconds,
-    robotTouched: a.robotTouched,
-    robotTouchCount: a.robotTouchCount,
-    startedAt: a.startedAt.toISOString(),
-  }));
+  const rows: LevelAttemptRow[] = attempts.map((a) => {
+    const runMeta = parseAttemptRunMeta(a.mistakes);
+    return {
+      id: a.id,
+      studentId: a.studentId,
+      studentName: a.student.displayName,
+      attemptNumber: a.attemptNumber,
+      inLevelRunNumber: runMeta.inLevelRunNumber,
+      maxLevelRuns: runMeta.maxLevelRuns,
+      attemptLabel: formatAttemptRunLabel(a.attemptNumber, runMeta),
+      status: a.status,
+      passed: a.passed,
+      score: a.score,
+      totalTimeSeconds: resolveAttemptDurationSeconds({
+        totalTimeSeconds: a.totalTimeSeconds,
+        startedAt: a.startedAt,
+        endedAt: a.endedAt,
+      }),
+      robotTouched: a.robotTouched,
+      robotTouchCount: a.robotTouchCount,
+      startedAt: a.startedAt.toISOString(),
+    };
+  });
 
   const payload: LevelDetailPayload = {
     id: level.id,

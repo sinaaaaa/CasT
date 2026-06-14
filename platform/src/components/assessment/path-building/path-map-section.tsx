@@ -102,8 +102,8 @@ export function PathMapSection({
                 transition={{ duration: 0.4, delay: 0.05 }}
               >
                 <AssessmentGridMap
-                  title="Working path"
-                  subtitle="Closest valid route"
+                  title="A correct way"
+                  subtitle="How the robot can reach the goal"
                   path={referencePath}
                   collisions={[]}
                   pathClass="bg-emerald-500"

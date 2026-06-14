@@ -795,6 +795,37 @@ export function analyzePathBuilding(input: {
     studentEnd: studentSim.finalPosition,
   });
 
+  // When the robot reached the goal but kept moving (passed goal / extra forward),
+  // compare against the student's OWN route trimmed to the goal instead of an unrelated
+  // alternate route. This makes "Step N reached the goal, the rest is extra" obvious.
+  let selectedReferenceRoute = selectedCommands;
+  let selectedReferencePath = selectedPath;
+  let comparisonUsedType = comparison.selectedTargetType;
+  let comparisonReasonText = comparison.reasonForSelection;
+
+  const passedGoalExtra =
+    goalRel.goalTouched &&
+    !goalRel.finalStoppedOnGoal &&
+    goalRel.movedAfterGoal &&
+    goalRel.firstGoalTouchStep != null &&
+    goalRel.firstGoalTouchStep > 0;
+
+  if (passedGoalExtra) {
+    const routeToGoal = student.slice(0, goalRel.firstGoalTouchStep!);
+    const routeToGoalSim = simulateProgram(task, routeToGoal);
+    if (routeToGoal.length > 0 && programStopsOnGoalStrict(task, routeToGoalSim)) {
+      const extraCount = student.length - routeToGoal.length;
+      selectedReferenceRoute = routeToGoal;
+      selectedReferencePath =
+        routeToGoalSim.path.length > 1 ? routeToGoalSim.path : selectedPath;
+      comparisonUsedType = "studentRouteToGoal";
+      comparisonReasonText =
+        extraCount === 1
+          ? `Robot reached the ${goalLabel} at Step ${routeToGoal.length}. The command after it is extra and should be removed.`
+          : `Robot reached the ${goalLabel} at Step ${routeToGoal.length}. The ${extraCount} commands after it are extra and should be removed.`;
+    }
+  }
+
   const whatHappened = buildWhatHappened(task, studentSim, success, obstacleReport);
   const likelyUnderstanding =
     routeQuality === "Exact Route" || routeQuality === "Valid Route"
@@ -823,10 +854,10 @@ export function analyzePathBuilding(input: {
     closestValidPath: closestSim.path,
     shortestRoute: shortest.commands,
     shortestPath: shortest.path,
-    selectedReferenceRoute: selectedCommands,
-    selectedReferencePath: selectedPath,
-    comparisonUsed: comparison.selectedTargetType,
-    comparisonReason: comparison.reasonForSelection,
+    selectedReferenceRoute,
+    selectedReferencePath,
+    comparisonUsed: comparisonUsedType,
+    comparisonReason: comparisonReasonText,
     comparisonClarityScore: comparison.diagnosisClarityScore,
     firstMistakeStep,
     firstMistakeLabel: mistakeMessages?.label ?? null,

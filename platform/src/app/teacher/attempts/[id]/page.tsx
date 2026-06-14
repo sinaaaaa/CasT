@@ -19,6 +19,8 @@ import {
   resolveAttemptProgram,
   resolveStarterProgram,
 } from "@/lib/assessment/resolve-program";
+import { formatAttemptRunLabel, parseAttemptRunMeta } from "@/lib/attempt-mistakes";
+import { resolveAttemptDurationSeconds } from "@/lib/game/resolve-attempt-duration";
 import { LevelType } from "@prisma/client";
 import type { CommandToken } from "@/lib/command-icons";
 function parseStringArray(val: unknown): string[] {
@@ -94,7 +96,11 @@ export default async function AttemptDetailPage({
     commandHistory: attempt.commandHistory,
     hintsUsed: attempt.hintsUsed,
     mistakes: attempt.mistakes,
-    totalTimeSeconds: attempt.totalTimeSeconds,
+    totalTimeSeconds: resolveAttemptDurationSeconds({
+      totalTimeSeconds: attempt.totalTimeSeconds,
+      startedAt: attempt.startedAt,
+      endedAt: attempt.endedAt,
+    }),
     robotTouched: attempt.robotTouched,
     robotTouchCount: attempt.robotTouchCount,
     resetCount: attempt.resetCount,
@@ -163,13 +169,22 @@ export default async function AttemptDetailPage({
     (e) => e.eventType === "CLOSED"
   ).length;
 
+  const runMeta = parseAttemptRunMeta(attempt.mistakes);
+
   const payload: AttemptDetailPayload = {
     id: attempt.id,
     attemptNumber: attempt.attemptNumber,
+    attemptRunLabel: formatAttemptRunLabel(attempt.attemptNumber, runMeta),
+    inLevelRunNumber: runMeta.inLevelRunNumber,
+    maxLevelRuns: runMeta.maxLevelRuns,
     status: attempt.status,
     passed: attempt.passed,
     score: attempt.score,
-    totalTimeSeconds: attempt.totalTimeSeconds,
+    totalTimeSeconds: resolveAttemptDurationSeconds({
+      totalTimeSeconds: attempt.totalTimeSeconds,
+      startedAt: attempt.startedAt,
+      endedAt: attempt.endedAt,
+    }),
     startedAt: attempt.startedAt.toISOString(),
     endedAt: attempt.endedAt?.toISOString() ?? null,
     initialCommand: attempt.initialCommand,

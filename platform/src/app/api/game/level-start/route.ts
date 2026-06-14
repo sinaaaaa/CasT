@@ -1,3 +1,4 @@
+import { AttemptStatus } from "@prisma/client";
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { gameApiUnauthorized, verifyGameApiKey } from "@/lib/game-api";
@@ -53,6 +54,12 @@ export async function POST(request: NextRequest) {
 
     const previousAttempts = await prisma.levelAttempt.count({
       where: { studentId: student.id, levelId: level.id },
+    });
+
+    // Close abandoned in-progress rows so dashboard/history show Incomplete instead of hanging forever.
+    await prisma.levelAttempt.updateMany({
+      where: { studentId: student.id, levelId: level.id, endedAt: null },
+      data: { endedAt: new Date(), status: AttemptStatus.INCOMPLETE },
     });
 
     const attempt = await prisma.levelAttempt.create({

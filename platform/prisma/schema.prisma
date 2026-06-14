@@ -192,6 +192,8 @@ model LevelStudentAssignment {
   assignedByTeacherId String?
   assignedByTeacher   TeacherProfile? @relation("AssignedByTeacher", fields: [assignedByTeacherId], references: [id], onDelete: SetNull)
   assignedAt          DateTime        @default(now())
+  /// Order within this student's assignment list (0 = first item to play).
+  assignmentOrder     Int             @default(0)
   isActive            Boolean         @default(true)
   deactivatedAt       DateTime?
 

@@ -47,4 +47,23 @@ Thumbs.db
 
 # Environment variables
 .env
-.env.local 
+.env.local
+
+# Visual Studio / Rider local IDE state
+.vs/
+*.vsidx
+
+# Local scratch / recovery files (keep out of git)
+_missing_methods_block.txt
+_queue_methods_block.txt
+Assets/Scripts/CharacterMove.merged.cs
+Assets/Scripts/CharacterMove.merged.cs.meta
+Assets/Scripts/CharacterMove.patched.cs
+Assets/Scripts/CharacterMove.patched.cs.meta
+Assets/Scripts/CharacterMove.patched2.cs
+Assets/Scripts/CharacterMove.patched2.cs.meta
+Assets/Scripts/CharacterMove.recovered.cs
+Assets/Scripts/CharacterMove.recovered.cs.meta
+
+# Unity batch build logs
+BuildLogs/

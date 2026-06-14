@@ -23,6 +23,7 @@ import {
   type RobotActionButton,
 } from "@/lib/level-config";
 import { FACING_OPTIONS, NUMBER_LINE_FACING_OPTIONS } from "@/lib/level-editor-constants";
+import { Textarea } from "@/components/ui/textarea";
 import {
   ActionButtonChips,
   AttemptPicker,
@@ -157,6 +158,57 @@ export function RulesStepContent({ levelType, config, onChange }: Props) {
                 : undefined
             }
           />
+
+          <div className="h-px bg-slate-100" />
+
+          <RuleSection
+            icon={Target}
+            title="Attempt feedback (popups)"
+            description="Text shown in Unity after a wrong answer, success, or when attempts run out. Leave a field empty for no popup text in the game."
+          >
+            <div className="grid gap-4 lg:grid-cols-1">
+              <label className="block space-y-2">
+                <span className="text-sm font-semibold text-slate-700">Wrong attempt message</span>
+                <Textarea
+                  rows={2}
+                  placeholder="Leave empty for no text in the game"
+                  value={config.attemptFailureMessage ?? ""}
+                  onChange={(e) =>
+                    patch({ attemptFailureMessage: e.target.value || undefined })
+                  }
+                />
+                <span className="text-xs text-slate-500">
+                  Placeholders: {"{attempt}"}, {"{maxAttempts}"}, {"{reason}"}
+                </span>
+              </label>
+              <label className="block space-y-2">
+                <span className="text-sm font-semibold text-slate-700">Success message</span>
+                <Textarea
+                  rows={2}
+                  placeholder="Leave empty for no text in the game"
+                  value={config.attemptSuccessMessage ?? ""}
+                  onChange={(e) =>
+                    patch({ attemptSuccessMessage: e.target.value || undefined })
+                  }
+                />
+                <span className="text-xs text-slate-500">Placeholders: {"{levelName}"}</span>
+              </label>
+              <label className="block space-y-2">
+                <span className="text-sm font-semibold text-slate-700">Max attempts message</span>
+                <Textarea
+                  rows={2}
+                  placeholder="Leave empty for no text in the game"
+                  value={config.maxAttemptsMessage ?? ""}
+                  onChange={(e) =>
+                    patch({ maxAttemptsMessage: e.target.value || undefined })
+                  }
+                />
+                <span className="text-xs text-slate-500">
+                  Placeholders: {"{levelName}"}, {"{maxAttempts}"}
+                </span>
+              </label>
+            </div>
+          </RuleSection>
 
           <div className="h-px bg-slate-100" />
 
@@ -295,7 +347,7 @@ export function RulesStepContent({ levelType, config, onChange }: Props) {
           <RuleToggleCard
             icon={Flag}
             title="Tap to place flag"
-            description="Students tap any empty cell to set the goal before or during their program."
+            description="Students tap any cell (including on objects) to set the goal before or during their program."
             checked={config.playerPicksEndCellWithFlag ?? true}
             onChange={(v) => patch({ playerPicksEndCellWithFlag: v })}
             accent="rose"

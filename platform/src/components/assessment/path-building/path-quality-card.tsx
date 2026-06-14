@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { DiagnosticScoreInfo } from "@/components/assessment/diagnostic-score-info";
 import type { PathBuildingAnalysisResult } from "@/lib/assessment/pathBuildingAnalysis";
 import { cn } from "@/lib/utils";
 
@@ -70,11 +71,14 @@ export function PathQualityCard({ result }: { result: PathBuildingAnalysisResult
         {result.routeQuality}
       </p>
       <p className="mt-2 text-sm leading-relaxed text-slate-700">{result.whatHappened}</p>
-      <p className="mt-2 text-xs text-muted-foreground">
-        Diagnostic score {result.score}% · {result.commandCount} commands
-        {result.compareWithOptimalRoute && result.shortestCommandCount > 0
-          ? ` · shortest ${result.shortestCommandCount}`
-          : ""}
+      <p className="mt-2 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+        <span>
+          Diagnostic score {result.score}% · {result.commandCount} commands
+          {result.compareWithOptimalRoute && result.shortestCommandCount > 0
+            ? ` · shortest ${result.shortestCommandCount}`
+            : ""}
+        </span>
+        <DiagnosticScoreInfo variant="pathBuilding" />
       </p>
     </motion.div>
   );

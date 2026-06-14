@@ -1,8 +1,10 @@
 import { AttemptStatus } from "@prisma/client";
 import type { Prisma } from "@prisma/client";
 import { formatItemDisplayName } from "@/lib/item-display";
+import { formatAttemptRunLabel, parseAttemptRunMeta } from "@/lib/attempt-mistakes";
 import { levelsForTeachersWhere, getClassTeacherProfileIds, levelScopeWhere, type TeacherScope } from "@/lib/class-access";
 import { prisma } from "@/lib/prisma";
+import { resolveAttemptDurationSeconds } from "@/lib/game/resolve-attempt-duration";
 import type { RouteComparison } from "@/lib/assessment/assessmentTypes";
 import {
   resolveStoryOutcomeKey,
@@ -130,9 +132,18 @@ export async function getTeacherDashboardStats(filters?: {
     completed.length > 0
       ? completed.reduce((s, a) => s + (a.score ?? 0), 0) / completed.length
       : 0;
+  const completedDurations = completed
+    .map((a) =>
+      resolveAttemptDurationSeconds({
+        totalTimeSeconds: a.totalTimeSeconds,
+        startedAt: a.startedAt,
+        endedAt: a.endedAt,
+      })
+    )
+    .filter((t): t is number => t != null);
   const avgTime =
-    completed.length > 0
-      ? completed.reduce((s, a) => s + (a.totalTimeSeconds ?? 0), 0) / completed.length
+    completedDurations.length > 0
+      ? completedDurations.reduce((s, t) => s + t, 0) / completedDurations.length
       : 0;
 
   const studentAttemptMap = new Map<string, typeof attempts>();
@@ -346,15 +357,20 @@ export async function getStudentProgress(studentProfileId: string) {
 
   const levelProgress = levels.map((level) => {
     const levelAttempts = byLevel.get(level.id) ?? [];
-    const best = levelAttempts.find((a) => a.passed) ?? levelAttempts[0];
+    const endedAttempts = levelAttempts.filter((a) => a.endedAt != null);
+    const statusAttempts = endedAttempts.length > 0 ? endedAttempts : levelAttempts;
+    const best = statusAttempts.find((a) => a.passed) ?? statusAttempts[0];
+    const levelPassed = levelAttempts.some((a) => a.passed);
     return {
       levelId: level.id,
       levelKey: level.levelKey,
       name: formatItemDisplayName(level.name),
       orderIndex: level.orderIndex,
       attempts: levelAttempts.length,
-      status: best?.status ?? AttemptStatus.INCOMPLETE,
-      passed: levelAttempts.some((a) => a.passed),
+      status: levelPassed
+        ? AttemptStatus.CORRECT
+        : (best?.status ?? AttemptStatus.INCOMPLETE),
+      passed: levelPassed,
       score: best?.score ?? null,
       totalTimeSeconds: best?.totalTimeSeconds ?? null,
       feedback: best?.feedback ?? null,
@@ -380,12 +396,14 @@ export async function getStudentProgress(studentProfileId: string) {
     history: attempts.map((a) => ({
       id: a.id,
       level: formatItemDisplayName(a.level.name),
+      levelKey: a.level.levelKey,
       levelId: a.levelId,
       attemptNumber: a.attemptNumber,
       status: a.status,
       passed: a.passed,
       score: a.score,
       startedAt: a.startedAt,
+      endedAt: a.endedAt,
       totalTimeSeconds: a.totalTimeSeconds,
     })),
   };
@@ -446,7 +464,7 @@ export type ClassProgressReport = {
 };
 
 function summarizeStudentLevelAttempts(
-  levelAttempts: { passed: boolean; status: AttemptStatus }[]
+  levelAttempts: { passed: boolean; status: AttemptStatus; endedAt: Date | null }[]
 ): { passed: boolean; failed: boolean; incomplete: boolean } {
   if (levelAttempts.length === 0) {
     return { passed: false, failed: false, incomplete: true };
@@ -455,7 +473,8 @@ function summarizeStudentLevelAttempts(
   if (passed) {
     return { passed: true, failed: false, incomplete: false };
   }
-  const best = levelAttempts[0];
+  const ended = levelAttempts.filter((a) => a.endedAt != null);
+  const best = (ended.length > 0 ? ended : levelAttempts)[0];
   const failed = best?.status === AttemptStatus.INCORRECT;
   return { passed: false, failed, incomplete: !failed };
 }
@@ -658,6 +677,9 @@ export type ItemAttemptExportRow = {
   studentName: string;
   externalId: string | null;
   attemptNumber: number;
+  inLevelRunNumber: number | null;
+  maxLevelRuns: number | null;
+  attemptLabel: string;
   status: AttemptStatus;
   passed: boolean;
   score: number | null;
@@ -674,7 +696,7 @@ export type ItemStudentSummaryRow = {
   studentId: string;
   studentName: string;
   externalId: string | null;
-  status: "Passed" | "Failed" | "Not started" | "In progress";
+  status: string;
   attempts: number;
   bestScore: number | null;
   totalTimeSeconds: number | null;
@@ -779,7 +801,7 @@ export async function getItemProgressReport(
   const studentRows: ItemStudentSummaryRow[] = studentsInScope.map((student) => {
     const studentAttempts = attemptsByStudent.get(student.id) ?? [];
     const outcome = summarizeStudentLevelAttempts(studentAttempts);
-    const status: ItemStudentSummaryRow["status"] = outcome.passed
+    const status: string = outcome.passed
       ? "Passed"
       : outcome.failed
         ? "Failed"
@@ -787,11 +809,14 @@ export async function getItemProgressReport(
           ? "In progress"
           : "Not started";
     const best = studentAttempts.find((a) => a.passed) ?? studentAttempts[0];
+    const tryCount = studentAttempts.length;
+    const statusWithTries =
+      tryCount > 1 ? `${status} (${tryCount} tries)` : status;
     return {
       studentId: student.id,
       studentName: student.displayName,
       externalId: student.externalId,
-      status,
+      status: statusWithTries,
       attempts: studentAttempts.length,
       bestScore: best?.score ?? null,
       totalTimeSeconds: best?.totalTimeSeconds ?? null,
@@ -802,14 +827,25 @@ export async function getItemProgressReport(
   const failedAttempts = attempts.filter((a) => a.status === AttemptStatus.INCORRECT).length;
   const incompleteAttempts = attempts.filter((a) => a.status === AttemptStatus.INCOMPLETE).length;
   const scored = attempts.filter((a) => a.score != null);
-  const timed = attempts.filter((a) => a.totalTimeSeconds != null);
+  const timed = attempts
+    .map((a) => ({
+      attempt: a,
+      duration: resolveAttemptDurationSeconds({
+        totalTimeSeconds: a.totalTimeSeconds,
+        startedAt: a.startedAt,
+        endedAt: a.endedAt,
+      }),
+    }))
+    .filter((row): row is { attempt: (typeof attempts)[number]; duration: number } =>
+      row.duration != null
+    );
   const avgScore =
     scored.length > 0
       ? Math.round(scored.reduce((s, a) => s + (a.score ?? 0), 0) / scored.length)
       : null;
   const avgTimeSeconds =
     timed.length > 0
-      ? Math.round(timed.reduce((s, a) => s + (a.totalTimeSeconds ?? 0), 0) / timed.length)
+      ? Math.round(timed.reduce((s, row) => s + row.duration, 0) / timed.length)
       : null;
 
   return {
@@ -830,29 +866,35 @@ export async function getItemProgressReport(
       passRate: attempts.length ? Math.round((passedAttempts / attempts.length) * 100) : 0,
       avgScore,
       uniqueStudents: new Set(attempts.map((a) => a.studentId)).size,
-      studentsPassed: studentRows.filter((s) => s.status === "Passed").length,
-      studentsFailed: studentRows.filter((s) => s.status === "Failed").length,
+      studentsPassed: studentRows.filter((s) => s.status.startsWith("Passed")).length,
+      studentsFailed: studentRows.filter((s) => s.status.startsWith("Failed")).length,
       studentsNotStarted: studentRows.filter((s) => s.status === "Not started").length,
       avgTimeSeconds,
     },
     students: studentRows,
-    attempts: attempts.map((a) => ({
-      attemptId: a.id,
-      studentId: a.studentId,
-      studentName: a.student.displayName,
-      externalId: a.student.externalId,
-      attemptNumber: a.attemptNumber,
-      status: a.status,
-      passed: a.passed,
-      score: a.score,
-      totalTimeSeconds: a.totalTimeSeconds,
-      startedAt: a.startedAt,
-      endedAt: a.endedAt,
-      finalCommand: a.finalCommand,
-      resetCount: a.resetCount,
-      robotTouched: a.robotTouched,
-      robotTouchCount: a.robotTouchCount,
-    })),
+    attempts: attempts.map((a) => {
+      const runMeta = parseAttemptRunMeta(a.mistakes);
+      return {
+        attemptId: a.id,
+        studentId: a.studentId,
+        studentName: a.student.displayName,
+        externalId: a.student.externalId,
+        attemptNumber: a.attemptNumber,
+        inLevelRunNumber: runMeta.inLevelRunNumber,
+        maxLevelRuns: runMeta.maxLevelRuns,
+        attemptLabel: formatAttemptRunLabel(a.attemptNumber, runMeta),
+        status: a.status,
+        passed: a.passed,
+        score: a.score,
+        totalTimeSeconds: a.totalTimeSeconds,
+        startedAt: a.startedAt,
+        endedAt: a.endedAt,
+        finalCommand: a.finalCommand,
+        resetCount: a.resetCount,
+        robotTouched: a.robotTouched,
+        robotTouchCount: a.robotTouchCount,
+      };
+    }),
   };
 }
 

@@ -4,12 +4,10 @@ import Link from "next/link";
 import {
   Clock,
   Hand,
-  Hash,
   MessageSquare,
   Target,
   Timer,
   Trophy,
-  Info,
   ClipboardCheck,
   Stethoscope,
   Bug,
@@ -31,18 +29,26 @@ import {
   type StealthAssessmentPayload,
 } from "@/components/assessment/stealth-assessment-panel";
 import { MetricInfo } from "@/components/assessment/metric-info";
+import { ScoringHelpSection } from "@/components/assessment/scoring-help-section";
 import { RouteAnalysisPanel } from "@/components/assessment/route-analysis-panel";
+import { numberLineDiagnosticScore } from "@/lib/assessment/numberLineAnalysis";
+import type { DiagnosticScoreVariant } from "@/components/assessment/diagnostic-score-info";
 import { NumberLineAssessmentPanel } from "@/components/assessment/number-line-assessment-panel";
 import { PredictionAnalysisPanel } from "@/components/assessment/prediction-analysis-panel";
 import { ChoiceActionAnalysisPanel } from "@/components/assessment/choice-action-analysis-panel";
 import { DebuggingAnalysisPanel } from "@/components/assessment/debugging-analysis-panel";
 import { PathBuildingAnalysisPanel } from "@/components/assessment/path-building-analysis-panel";
+import { AttemptVerdictBanner } from "@/components/assessment/attempt-verdict-banner";
+import { buildAttemptVerdict } from "@/lib/assessment/attempt-verdict";
 import type { LiveRouteAnalysis } from "@/lib/assessment/compute-attempt-route";
 import type { CommandToken } from "@/lib/command-icons";
 import type { GridObjectMarker } from "@/lib/assessment/assessmentConfig";
 export type AttemptDetailPayload = {
   id: string;
   attemptNumber: number;
+  attemptRunLabel: string;
+  inLevelRunNumber: number | null;
+  maxLevelRuns: number | null;
   status: AttemptStatus;
   passed: boolean;
   score: number | null;
@@ -124,14 +130,41 @@ export function AttemptAssessmentView({ attempt }: { attempt: AttemptDetailPaylo
         ].filter(Boolean)
       : undefined);
 
-  const isFlagAssessment = Boolean(attempt.liveRoute.predictionResult?.available);
+  const isFlagLevel = attempt.level.levelType === "FLAG_PLACEMENT";
+  const isFlagAssessment = Boolean(
+    attempt.liveRoute.predictionResult?.available ||
+      (isFlagLevel && (attempt.liveRoute.predictionResult?.misconceptionMatches?.length ?? 0) > 0)
+  );
   const flagResult = attempt.liveRoute.predictionResult;
   const debugResult = attempt.liveRoute.debuggingResult;
   const pathResult = attempt.liveRoute.pathBuildingResult;
+  const isNumberLineAssessment = attempt.liveRoute.taskEnvironmentType === "number-line";
+  const numberLineResult = attempt.liveRoute.numberLineEvidence;
   const isPathBuildingAssessment =
-    Boolean(attempt.isPathBuildingLevel) && Boolean(pathResult?.available);
+    Boolean(attempt.isPathBuildingLevel) &&
+    Boolean(pathResult?.available) &&
+    !isNumberLineAssessment;
   const isDebuggingAssessment =
     Boolean(attempt.isDebuggingLevel) && Boolean(debugResult?.available);
+  const isChoiceAssessment = Boolean(attempt.liveRoute.choiceActionResult?.available);
+  const choiceResult = attempt.liveRoute.choiceActionResult;
+
+  const scoringVariant: DiagnosticScoreVariant = isFlagAssessment
+    ? "flag"
+    : isPathBuildingAssessment
+      ? "pathBuilding"
+      : isDebuggingAssessment
+        ? "debugging"
+        : isNumberLineAssessment
+          ? "numberLine"
+          : isChoiceAssessment
+            ? "choice"
+            : attempt.liveRoute.routeComparison
+              ? "route"
+              : "general";
+
+  const numberLineScore =
+    numberLineResult != null ? numberLineDiagnosticScore(numberLineResult) : null;
 
   const flagStatusTone = flagResult?.isCorrect
     ? "success"
@@ -143,11 +176,25 @@ export function AttemptAssessmentView({ attempt }: { attempt: AttemptDetailPaylo
 
   const displayStatusTone = isFlagAssessment ? flagStatusTone : statusTone;
 
+  const verdict = buildAttemptVerdict({
+    goalLabel: attempt.mapAnchors?.goalLabel ?? "goal",
+    prediction: flagResult,
+    choice: attempt.liveRoute.choiceActionResult,
+    debugging: isDebuggingAssessment ? debugResult : null,
+    pathBuilding: isPathBuildingAssessment ? pathResult : null,
+    numberLine: isNumberLineAssessment ? numberLineResult : null,
+    fallback: {
+      passed: attempt.passed,
+      status: attempt.status,
+      score: attempt.score,
+    },
+  });
+
   return (
     <div className="space-y-8">
       <PageHeader
         title={`${attempt.student.displayName} — ${formatItemDisplayName(attempt.level.name)}`}
-        description={`Attempt #${attempt.attemptNumber} · ${attempt.level.levelKey}`}
+        description={attempt.level.levelKey}
         breadcrumbs={[
           { label: "Dashboard", href: "/teacher/dashboard" },
           { label: "Items", href: "/teacher/levels" },
@@ -175,18 +222,13 @@ export function AttemptAssessmentView({ attempt }: { attempt: AttemptDetailPaylo
         }
       />
 
-      <div
-        className={cn(
-          "flex flex-wrap items-center gap-3 rounded-xl border px-4 py-3 shadow-sm",
-          displayStatusTone === "success" && "border-emerald-200 bg-emerald-50/80",
-          displayStatusTone === "danger" && "border-red-200 bg-red-50/80",
-          displayStatusTone === "warning" && "border-amber-200 bg-amber-50/80"
-        )}
-      >
+      <AttemptVerdictBanner verdict={verdict} />
+
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
         {isFlagAssessment && flagResult ? (
           <span
             className={cn(
-              "rounded-md px-2.5 py-1 text-sm font-medium",
+              "inline-flex items-center rounded-md px-2 py-0.5 font-medium",
               flagResult.isCorrect
                 ? "bg-emerald-100 text-emerald-800"
                 : "bg-red-100 text-red-800"
@@ -194,60 +236,28 @@ export function AttemptAssessmentView({ attempt }: { attempt: AttemptDetailPaylo
           >
             {flagResult.isCorrect ? "Correct placement" : "Incorrect placement"}
           </span>
+        ) : isNumberLineAssessment && numberLineResult ? (
+          <StatusBadge
+            status={numberLineResult.passed ? AttemptStatus.CORRECT : AttemptStatus.INCORRECT}
+            passed={numberLineResult.passed}
+          />
         ) : (
           <StatusBadge status={attempt.status} passed={attempt.passed} />
         )}
-        <span className="text-sm text-muted-foreground">
-          Started {new Date(attempt.startedAt).toLocaleString()}
-        </span>
-        {attempt.endedAt && (
-          <span className="text-sm text-muted-foreground">
-            · Ended {new Date(attempt.endedAt).toLocaleString()}
-          </span>
-        )}
+        <span>Started {new Date(attempt.startedAt).toLocaleString()}</span>
+        {attempt.endedAt && <span>· Ended {new Date(attempt.endedAt).toLocaleString()}</span>}
       </div>
 
-      {isDebuggingAssessment && debugResult && (
-        <div className="flex gap-2 rounded-lg border border-amber-200/70 bg-amber-50/50 px-3 py-2 text-xs text-amber-950">
-          <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
-          <p>
-            Repair quality is based on stopping on the {attempt.mapAnchors?.goalLabel ?? "goal"} — not
-            passing through.
-          </p>
-        </div>
-      )}
+      <ScoringHelpSection
+        variant={scoringVariant}
+        goalLabel={attempt.mapAnchors?.goalLabel ?? "goal"}
+        visitSequence={Boolean(numberLineResult?.visitObjectSequence)}
+      />
 
-      {isPathBuildingAssessment && pathResult && (
-        <div className="flex gap-2 rounded-lg border border-sky-200/70 bg-sky-50/50 px-3 py-2 text-xs text-sky-950">
-          <Info className="mt-0.5 h-4 w-4 shrink-0 text-sky-700" />
-          <p>
-            Route result counts only when the robot stops on the{" "}
-            {attempt.mapAnchors?.goalLabel ?? "goal"} in the right order — not when it only passes
-            through.
-          </p>
-        </div>
-      )}
-
-      {isFlagAssessment && flagResult && (
-        <div className="flex gap-3 rounded-xl border border-sky-200 bg-sky-50/80 px-4 py-3 text-sm text-sky-950">
-          <Info className="mt-0.5 h-5 w-5 shrink-0 text-sky-700" />
-          <div className="space-y-1">
-            <p className="font-medium">Two scores on flag items</p>
-            <p className="leading-relaxed text-sky-900/90">
-              <strong>Item outcome (0% or 100%)</strong> — Did the student place the flag on the
-              cell where the robot would actually stop? Wrong cell = 0%, correct = 100%.
-            </p>
-            <p className="leading-relaxed text-sky-900/90">
-              <strong>Diagnostic score (e.g. {flagResult.score}%)</strong> — Even when the flag is
-              wrong, we check if it matches a common mistake (turns swapped, one step off, etc.).
-              A higher diagnostic % helps you choose the right follow-up activity; it is not the game
-              pass score.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {attempt.liveRoute.predictionResult?.available ? (
+      {(attempt.liveRoute.predictionResult?.available ||
+        (attempt.level.levelType === "FLAG_PLACEMENT" &&
+          (attempt.liveRoute.predictionResult?.misconceptionMatches?.length ?? 0) > 0)) &&
+      attempt.liveRoute.predictionResult ? (
         <PredictionAnalysisPanel
           result={attempt.liveRoute.predictionResult}
           startPosition={
@@ -256,17 +266,18 @@ export function AttemptAssessmentView({ attempt }: { attempt: AttemptDetailPaylo
         />
       ) : attempt.liveRoute.choiceActionResult?.available ? (
         <ChoiceActionAnalysisPanel result={attempt.liveRoute.choiceActionResult} />
-      ) : isPathBuildingAssessment && pathResult ? (
-        <PathBuildingAnalysisPanel result={pathResult} />
-      ) : isDebuggingAssessment && debugResult ? (
-        <DebuggingAnalysisPanel result={debugResult} />
-      ) : attempt.liveRoute.taskEnvironmentType === "number-line" ? (
+      ) : isNumberLineAssessment ? (
         <NumberLineAssessmentPanel
           attemptId={attempt.id}
           evidence={attempt.liveRoute.numberLineEvidence}
           interpretation={attempt.liveRoute.interpretation}
           supported={attempt.liveRoute.supported}
+          passed={attempt.passed}
         />
+      ) : isPathBuildingAssessment && pathResult ? (
+        <PathBuildingAnalysisPanel result={pathResult} />
+      ) : isDebuggingAssessment && debugResult ? (
+        <DebuggingAnalysisPanel result={debugResult} />
       ) : (
         <RouteAnalysisPanel
           attemptId={attempt.id}
@@ -292,6 +303,7 @@ export function AttemptAssessmentView({ attempt }: { attempt: AttemptDetailPaylo
       )}
 
       {attempt.stealthAssessment &&
+        !isNumberLineAssessment &&
         !attempt.liveRoute.predictionResult?.available &&
         !attempt.liveRoute.choiceActionResult?.available &&
         !attempt.liveRoute.pathBuildingResult?.available &&
@@ -355,6 +367,14 @@ export function AttemptAssessmentView({ attempt }: { attempt: AttemptDetailPaylo
               icon={Target}
               tone={debugResult.editDistance > 0 ? "info" : "default"}
             />
+            <MetricTile
+              label="Diagnostic score"
+              value={`${debugResult.score}%`}
+              sub={debugResult.level}
+              icon={Stethoscope}
+              tone={statusTone}
+              info="diagnosticScoreDebugging"
+            />
           </>
         ) : isFlagAssessment && flagResult ? (
           <>
@@ -368,12 +388,14 @@ export function AttemptAssessmentView({ attempt }: { attempt: AttemptDetailPaylo
               }
               icon={ClipboardCheck}
               tone={flagResult.isCorrect ? "success" : "danger"}
+              info="itemOutcome"
             />
             <MetricTile
               label="Diagnostic score"
               value={`${flagResult.score}%`}
               sub="Misconception match (not the game pass score)"
               icon={Stethoscope}
+              info="diagnosticScoreFlag"
               tone={
                 flagResult.isCorrect
                   ? "success"
@@ -407,24 +429,67 @@ export function AttemptAssessmentView({ attempt }: { attempt: AttemptDetailPaylo
               sub={`${pathResult.commandCount} commands · shortest ${pathResult.shortestCommandCount}`}
               icon={Trophy}
               tone={statusTone}
+              info="diagnosticScorePathBuilding"
+            />
+          </>
+        ) : isNumberLineAssessment && numberLineResult ? (
+          <>
+            <MetricTile
+              label="Goal stop"
+              value={numberLineResult.passed ? "On goal tick" : "Wrong tick"}
+              sub={
+                numberLineResult.goalTick != null
+                  ? `Ended ${numberLineResult.endTick + 1}, goal ${numberLineResult.goalTick + 1}`
+                  : undefined
+              }
+              icon={Target}
+              tone={numberLineResult.passed ? "success" : "danger"}
+            />
+            <MetricTile
+              label="Diagnostic score"
+              value={`${numberLineScore ?? attempt.score ?? "—"}${numberLineScore != null || attempt.score != null ? "%" : ""}`}
+              sub={`${numberLineResult.studentMoveCount} moves · best ${numberLineResult.optimalMoveCount}`}
+              icon={Stethoscope}
+              tone={statusTone}
+              info="diagnosticScoreNumberLine"
+            />
+          </>
+        ) : isChoiceAssessment && choiceResult ? (
+          <>
+            <MetricTile
+              label="Item outcome"
+              value={choiceResult.isCorrect ? "Correct" : "Incorrect"}
+              sub={choiceResult.isCorrect ? "All choices correct" : "Some choices wrong"}
+              icon={ClipboardCheck}
+              tone={choiceResult.isCorrect ? "success" : "danger"}
+              info="itemOutcome"
+            />
+            <MetricTile
+              label="Diagnostic score"
+              value={`${choiceResult.score}%`}
+              sub="Correct choices out of all guided blanks"
+              icon={Stethoscope}
+              tone={statusTone}
+              info="diagnosticScoreChoice"
             />
           </>
         ) : !isDebuggingAssessment && !isPathBuildingAssessment ? (
           <MetricTile
-            label="Score"
+            label="Diagnostic score"
             value={attempt.score != null ? `${attempt.score}%` : "—"}
             icon={Trophy}
             tone={statusTone}
+            info={attempt.liveRoute.routeComparison ? "diagnosticScoreRoute" : "diagnosticScore"}
           />
         ) : null}
         <MetricTile label="Time on item" value={formatDuration(attempt.totalTimeSeconds)} icon={Timer} />
-        <MetricTile label="Attempt #" value={`#${attempt.attemptNumber}`} icon={Hash} />
       </div>
 
       {!attempt.liveRoute.predictionResult?.available &&
         !attempt.liveRoute.choiceActionResult?.available &&
         !attempt.liveRoute.pathBuildingResult?.available &&
-        !attempt.liveRoute.debuggingResult?.available && (
+        !attempt.liveRoute.debuggingResult?.available &&
+        !isNumberLineAssessment && (
         <Card className="shadow-sm">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

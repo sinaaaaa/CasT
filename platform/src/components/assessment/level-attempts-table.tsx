@@ -23,6 +23,9 @@ export type LevelAttemptRow = {
   studentId: string;
   studentName: string;
   attemptNumber: number;
+  inLevelRunNumber: number | null;
+  maxLevelRuns: number | null;
+  attemptLabel: string;
   status: AttemptStatus;
   passed: boolean;
   score: number | null;
@@ -85,7 +88,7 @@ export function LevelAttemptsTable({ attempts }: { attempts: LevelAttemptRow[] }
           <TableHeader>
             <TableRow className="bg-muted/40 hover:bg-muted/40">
               <TableHead>Student</TableHead>
-              <TableHead>Attempt</TableHead>
+              <TableHead>Try</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Score</TableHead>
               <TableHead>Time</TableHead>
@@ -117,7 +120,7 @@ export function LevelAttemptsTable({ attempts }: { attempts: LevelAttemptRow[] }
                       {a.studentName}
                     </Link>
                   </TableCell>
-                  <TableCell>#{a.attemptNumber}</TableCell>
+                  <TableCell className="font-medium">{a.attemptLabel}</TableCell>
                   <TableCell>
                     <StatusBadge status={a.status} passed={a.passed} />
                   </TableCell>

@@ -34,11 +34,28 @@ export async function resolveAssignedByTeacherId(
 export async function getActiveDirectAssignmentLevelIds(
   studentProfileId: string
 ): Promise<Set<string>> {
+  const ordered = await getActiveDirectAssignmentLevelIdsOrdered(studentProfileId);
+  return new Set(ordered);
+}
+
+/** Active direct assignments in play order (catalog orderIndex). */
+export async function getActiveDirectAssignmentLevelIdsOrdered(
+  studentProfileId: string
+): Promise<string[]> {
   const rows = await prisma.levelStudentAssignment.findMany({
     where: { studentId: studentProfileId, isActive: true },
-    select: { levelId: true },
+    select: {
+      levelId: true,
+      level: { select: { orderIndex: true, levelKey: true } },
+    },
   });
-  return new Set(rows.map((r) => r.levelId));
+  return rows
+    .sort(
+      (a, b) =>
+        a.level.orderIndex - b.level.orderIndex ||
+        (a.level.levelKey ?? "").localeCompare(b.level.levelKey ?? "")
+    )
+    .map((r) => r.levelId);
 }
 
 export async function countActiveDirectAssignments(studentProfileId: string): Promise<number> {

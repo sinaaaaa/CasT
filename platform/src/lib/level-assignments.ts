@@ -7,7 +7,10 @@ import {
   type TeacherScope,
   levelScopeWhere,
 } from "@/lib/class-access";
-import { getActiveDirectAssignmentLevelIds } from "@/lib/level-student-assignments";
+import {
+  getActiveDirectAssignmentLevelIds,
+  getActiveDirectAssignmentLevelIdsOrdered,
+} from "@/lib/level-student-assignments";
 import type { Prisma } from "@prisma/client";
 
 function isLevelVisibleInGame(config: unknown): boolean {
@@ -91,15 +94,24 @@ export async function getPlayableLevelsForStudent(studentIdOrExternal?: string |
   const teacherIds = await getStudentTeacherProfileIds(profileId);
   const ownershipWhere = studentLevelOwnershipWhere(teacherIds);
 
-  const directActive = await getActiveDirectAssignmentLevelIds(profileId);
-  if (directActive.size === 0) {
+  const directActive = await getActiveDirectAssignmentLevelIdsOrdered(profileId);
+  if (directActive.length === 0) {
     return fetchVisible(ownershipWhere);
   }
 
-  return fetchVisible({
-    ...ownershipWhere,
-    id: { in: Array.from(directActive) },
+  // Direct teacher assignment overrides catalog ownership rules — assigned items always load.
+  const rows = await prisma.level.findMany({
+    where: {
+      published: true,
+      isArchived: false,
+      id: { in: directActive },
+    },
   });
+  const visible = rows.filter((l) => isLevelVisibleInGame(l.config));
+  const byId = new Map(visible.map((l) => [l.id, l]));
+  return directActive
+    .map((id) => byId.get(id))
+    .filter((l): l is (typeof visible)[number] => l != null);
 }
 
 export async function studentHasLevelAccess(

@@ -23,9 +23,12 @@ public static class AssignGridObjectPrefabs
         var so = new SerializedObject(move);
         int assigned = 0;
 
+        TryAssign(so, "blockPrefab", "block", ref assigned);
         TryAssign(so, "outletPrefab", "outlet", ref assigned);
         TryAssign(so, "mailPrefab", "mail", ref assigned);
         TryAssign(so, "amazonBoxPrefab", "amazon-box", ref assigned);
+        TryAssign(so, "bagPrefab", "backpack", ref assigned);
+        TryAssignIfNull(so, "bagPrefab", "bag", ref assigned);
         TryAssign(so, "blackCrayonPrefab", "crayon", ref assigned);
         TryAssignIfNull(so, "blackCrayonPrefab", "black-crayon", ref assigned);
         TryAssign(so, "crayonsPrefab", "crayon-box", ref assigned);

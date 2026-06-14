@@ -119,7 +119,7 @@ export function PathProgramCompare({
           activeStep={activeStep}
         />
         <ProgramDiffTrack
-          label="Reference for diagnosis"
+          label="How it should look"
           sublabel={comparisonTargetLabel(result.comparisonUsed)}
           slots={referenceFixSlots(reference)}
           onStepHover={onStepHover}
@@ -127,7 +127,7 @@ export function PathProgramCompare({
         />
         {showShortest && (
           <ProgramDiffTrack
-            label="Shortest path (BFS)"
+            label="Best (shortest) way"
             sublabel={`${result.shortestRoute.length} commands`}
             slots={referenceFixSlots(result.shortestRoute)}
             onStepHover={onStepHover}

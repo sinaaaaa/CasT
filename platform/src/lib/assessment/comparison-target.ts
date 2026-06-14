@@ -10,7 +10,9 @@ export type ComparisonTargetType =
   | "teacherSolution"
   | "shortestValidRoute"
   | "closestValidRoute"
-  | "alternateValidRoute";
+  | "alternateValidRoute"
+  /** The student's own program trimmed to where it first stopped on the goal. */
+  | "studentRouteToGoal";
 
 export type TaskComparisonSettings = {
   compareWithOptimalRoute?: boolean;
@@ -41,13 +43,15 @@ export type ComparisonTargetResult = {
 export function comparisonTargetLabel(type: ComparisonTargetType): string {
   switch (type) {
     case "teacherSolution":
-      return "Teacher solution";
+      return "The expected answer";
     case "shortestValidRoute":
-      return "Shortest correct route";
+      return "Best (shortest) way";
     case "closestValidRoute":
-      return "Closest valid route";
+      return "Closest correct way";
     case "alternateValidRoute":
-      return "Alternate valid route";
+      return "Another correct way";
+    case "studentRouteToGoal":
+      return "Student's route up to the goal";
   }
 }
 

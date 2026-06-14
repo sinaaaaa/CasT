@@ -3,6 +3,7 @@
  */
 
 import type { Vec2 } from "@/lib/assessment/assessmentTypes";
+import { GRID_COLS, GRID_ROWS } from "@/lib/level-editor-constants";
 import { normalizeCommandToken, type CommandToken } from "@/lib/command-icons";
 
 export function readVec2(raw: unknown): Vec2 | null {
@@ -16,6 +17,16 @@ export function readVec2(raw: unknown): Vec2 | null {
   return { x, y };
 }
 
+/** Unity sends -1,-1 when no flag was placed; ignore invalid grid coordinates. */
+export function isValidGridFlagCell(
+  cell: Vec2 | null,
+  cols = GRID_COLS,
+  rows = GRID_ROWS
+): cell is Vec2 {
+  if (!cell) return false;
+  return cell.x >= 0 && cell.y >= 0 && cell.x < cols && cell.y < rows;
+}
+
 function mistakesRecord(mistakes: unknown): Record<string, unknown> | null {
   if (!mistakes || typeof mistakes !== "object" || Array.isArray(mistakes)) return null;
   return mistakes as Record<string, unknown>;
@@ -24,18 +35,19 @@ function mistakesRecord(mistakes: unknown): Record<string, unknown> | null {
 export function parseStudentFlagFromMistakes(mistakes: unknown): Vec2 | null {
   const o = mistakesRecord(mistakes);
   if (!o) return null;
-  return (
+  const raw =
     readVec2(o.flagCell) ??
     readVec2(o.studentFlagPosition) ??
     readVec2(o.flagPosition) ??
-    null
-  );
+    null;
+  return isValidGridFlagCell(raw) ? raw : null;
 }
 
 export function parseExpectedFlagFromMistakes(mistakes: unknown): Vec2 | null {
   const o = mistakesRecord(mistakes);
   if (!o) return null;
-  return readVec2(o.expectedCell) ?? readVec2(o.expectedFlagPosition) ?? null;
+  const raw = readVec2(o.expectedCell) ?? readVec2(o.expectedFlagPosition) ?? null;
+  return isValidGridFlagCell(raw) ? raw : null;
 }
 
 export function parseBlankAnswersFromMistakes(mistakes: unknown): {

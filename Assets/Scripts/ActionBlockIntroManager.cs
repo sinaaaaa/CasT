@@ -129,6 +129,45 @@ public class ActionBlockIntroManager : MonoBehaviour
         characterMove = move;
     }
 
+    public static string GetStudentIdForIntroPrefs()
+    {
+        return PlayerPrefs.GetString("UserId", "").Trim();
+    }
+
+    /// <summary>PlayerPrefs key scoped to the logged-in student (and intro id).</summary>
+    public static string GetCompletionPrefsKey(ActionBlockIntroConfig cfg, string studentId = null)
+    {
+        if (cfg == null) return PrefsKeyPrefix + "default";
+        string introPart = string.IsNullOrEmpty(cfg.introId) ? "default" : cfg.introId;
+        string sid = studentId ?? GetStudentIdForIntroPrefs();
+        if (string.IsNullOrEmpty(sid) || sid == "UnknownUser")
+            return PrefsKeyPrefix + introPart;
+        return sid + "_" + PrefsKeyPrefix + introPart;
+    }
+
+    public static bool IsIntroCompletedForStudent(ActionBlockIntroConfig cfg, string studentId = null)
+    {
+        if (cfg == null || !cfg.showOnlyOnce) return false;
+        string sid = studentId ?? GetStudentIdForIntroPrefs();
+        string key = GetCompletionPrefsKey(cfg, sid);
+        if (PlayerPrefs.GetInt(key, 0) == 1) return true;
+        // Legacy global key (pre per-student fix) — only when no logged-in student id.
+        if (string.IsNullOrEmpty(sid) || sid == "UnknownUser")
+        {
+            string legacyKey = PrefsKeyPrefix + (string.IsNullOrEmpty(cfg.introId) ? "default" : cfg.introId);
+            return PlayerPrefs.GetInt(legacyKey, 0) == 1;
+        }
+        return false;
+    }
+
+    public static void MarkIntroCompletedForStudent(ActionBlockIntroConfig cfg, string studentId = null)
+    {
+        if (cfg == null || !cfg.showOnlyOnce) return;
+        string key = GetCompletionPrefsKey(cfg, studentId);
+        PlayerPrefs.SetInt(key, 1);
+        PlayerPrefs.Save();
+    }
+
     public bool ShouldRunIntro(LevelData levelData)
     {
         if (!CharacterMove.IsIntroLevel(levelData)) return false;
@@ -137,8 +176,7 @@ public class ActionBlockIntroManager : MonoBehaviour
         if (forceShowIntro) return true;
         var cfg = levelData.actionBlockIntro;
         if (!cfg.showOnlyOnce) return true;
-        string key = PrefsKeyPrefix + (string.IsNullOrEmpty(cfg.introId) ? "default" : cfg.introId);
-        return PlayerPrefs.GetInt(key, 0) != 1;
+        return !IsIntroCompletedForStudent(cfg);
     }
 
     /// <summary>
@@ -206,7 +244,10 @@ public class ActionBlockIntroManager : MonoBehaviour
             _phase = Phase.Welcome;
             ShowAllPaletteButtonsForWelcome();
             if (characterMove.cornerHintPanel != null)
+            {
                 characterMove.cornerHintPanel.SetSkipVisible(false, null);
+                characterMove.cornerHintPanel.PlayHintAudioOnly(levelData.cornerHint);
+            }
             ShowWelcomeLetsGoPopup(levelData);
             return;
         }
@@ -606,12 +647,8 @@ public class ActionBlockIntroManager : MonoBehaviour
         if (characterMove.cornerHintPanel != null)
             characterMove.cornerHintPanel.SetSkipVisible(false, null);
 
-        if (markPrefs && _config != null)
-        {
-            string key = PrefsKeyPrefix + (string.IsNullOrEmpty(_config.introId) ? "default" : _config.introId);
-            PlayerPrefs.SetInt(key, 1);
-            PlayerPrefs.Save();
-        }
+        if (markPrefs && _config != null && _config.showOnlyOnce)
+            MarkIntroCompletedForStudent(_config);
 
         if (characterMove.chatGPTResponseText != null && _config != null &&
             !string.IsNullOrEmpty(_config.completeMessage))

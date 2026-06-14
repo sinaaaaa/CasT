@@ -1129,6 +1129,37 @@ export function analyzeEditStarterDebugging(params: {
     repairStatus = "overFix";
   }
 
+  // When the student reached the goal but added extra movement after it (over-fix /
+  // passed goal), the clearest reference is the student's OWN program trimmed to the
+  // moment it stood on the goal — not an unrelated alternate valid route. This shows
+  // "you had it right up to Step N, the rest is extra" instead of a confusing diff.
+  let comparisonUsed = comparison.selectedTargetType;
+  let comparisonReason = comparison.reasonForSelection;
+  let selectedComparisonRoute = [...comparison.selectedTargetProgram];
+
+  const passedGoalOverFix =
+    goalRelationship.goalTouched &&
+    !goalRelationship.finalStoppedOnGoal &&
+    goalRelationship.movedAfterGoal &&
+    goalRelationship.firstGoalTouchStep != null &&
+    goalRelationship.firstGoalTouchStep > 0;
+
+  if (passedGoalOverFix) {
+    const routeToGoal = student.slice(0, goalRelationship.firstGoalTouchStep!);
+    if (
+      routeToGoal.length > 0 &&
+      programStopsOnGoalStrict(task, simulateProgram(task, routeToGoal))
+    ) {
+      const extraCount = student.length - routeToGoal.length;
+      selectedComparisonRoute = routeToGoal;
+      comparisonUsed = "studentRouteToGoal";
+      comparisonReason =
+        extraCount === 1
+          ? `Robot reached the ${goalLabel} at Step ${routeToGoal.length}. The command after it is extra and should be removed.`
+          : `Robot reached the ${goalLabel} at Step ${routeToGoal.length}. The ${extraCount} commands after it are extra and should be removed.`;
+    }
+  }
+
   return {
     bugFixed,
     repairStatus,
@@ -1174,9 +1205,9 @@ export function analyzeEditStarterDebugging(params: {
     bugFixedStatus,
     bugFixedDetail,
     firstMistakeStep,
-    comparisonUsed: comparison.selectedTargetType,
-    comparisonReason: comparison.reasonForSelection,
+    comparisonUsed,
+    comparisonReason,
     comparisonClarityScore: comparison.diagnosisClarityScore,
-    selectedComparisonRoute: [...comparison.selectedTargetProgram],
+    selectedComparisonRoute,
   };
 }

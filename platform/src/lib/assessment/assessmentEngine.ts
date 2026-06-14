@@ -397,16 +397,18 @@ export function extractEvidence(
     return extractDebuggingEvidence(task, attempt, levelType);
   }
 
+  if (task.taskEnvironmentType === "number-line") {
+    const cmds = parseCommandsFromAttempt(attempt, task, levelType);
+    const simulation = simulateProgram(task, cmds);
+    return extractNumberLineEvidence(task, attempt, simulation);
+  }
+
   if (isPathBuildingLevel(task.levelConfig, levelType)) {
     return extractPathBuildingEvidence(task, attempt, levelType);
   }
 
   const cmds = parseCommandsFromAttempt(attempt, task, levelType);
   const simulation = simulateProgram(task, cmds);
-
-  if (task.taskEnvironmentType === "number-line") {
-    return extractNumberLineEvidence(task, attempt, simulation);
-  }
 
   const optimal = task.compareWithOptimalRoute ? findOptimalRoute(task) : null;
   const routeComparison = task.compareWithOptimalRoute

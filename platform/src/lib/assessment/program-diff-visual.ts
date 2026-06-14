@@ -25,10 +25,30 @@ export type CommandChipLabel =
   | "Wrong command"
   | "Wrong turn"
   | "Extra command"
+  | "Extra Forward"
+  | "Extra Backward"
+  | "Extra Turn left"
+  | "Extra Turn right"
   | "Hit obstacle"
   | "Wrong order"
   | "Stopped early"
   | "Passed goal";
+
+/** Command-specific "Extra …" chip label, e.g. "Extra Forward". */
+export function extraCommandChipLabel(cmd: CommandToken | undefined): CommandChipLabel {
+  switch (cmd) {
+    case "forward":
+      return "Extra Forward";
+    case "backward":
+      return "Extra Backward";
+    case "turn left":
+      return "Extra Turn left";
+    case "turn right":
+      return "Extra Turn right";
+    default:
+      return "Extra command";
+  }
+}
 
 export type ProgramDiffSlot = {
   status: DiffSlotStatus;
@@ -409,8 +429,8 @@ export function buildStudentProgramDisplay(params: {
           : `Step ${step}: ${COMMAND_ARIA_LABELS[cmd]} (correct)`;
     } else if (highlightExtraAfterGoalStep != null && step === highlightExtraAfterGoalStep) {
       status = "wrong";
-      chipLabel = "Extra command";
-      tooltip = "Extra movement after reaching goal.";
+      chipLabel = extraCommandChipLabel(cmd);
+      tooltip = `Extra ${COMMAND_ARIA_LABELS[cmd]} after reaching the goal — should be removed.`;
     } else if (
       highlightExtraAfterGoalStep != null &&
       step > highlightExtraAfterGoalStep
@@ -422,19 +442,24 @@ export function buildStudentProgramDisplay(params: {
       tooltip = `Step ${step}: ${COMMAND_ARIA_LABELS[cmd]} (correct)`;
     } else if (step === firstMistakeStep) {
       status = "wrong";
-      chipLabel = firstMistakeChipLabel(cmd, ref, issueHints);
-      if (chipLabel === "Wrong turn" && ref) {
-        tooltip = `Used ${COMMAND_ARIA_LABELS[cmd]}, expected ${COMMAND_ARIA_LABELS[ref]}`;
-      } else if (chipLabel === "Passed goal") {
-        tooltip = `Step ${step}: robot passed the goal`;
-      } else if (chipLabel === "Stopped early") {
-        tooltip = `Step ${step}: stopped before the goal`;
-      } else if (chipLabel === "Wrong order") {
-        tooltip = `Step ${step}: commands out of order`;
+      if (ref == null && i >= reference.length) {
+        chipLabel = extraCommandChipLabel(cmd);
+        tooltip = `Extra ${COMMAND_ARIA_LABELS[cmd]} at Step ${step}`;
       } else {
-        tooltip = ref
-          ? `Used ${COMMAND_ARIA_LABELS[cmd]}, expected ${COMMAND_ARIA_LABELS[ref]}`
-          : `Unexpected command at Step ${step}`;
+        chipLabel = firstMistakeChipLabel(cmd, ref, issueHints);
+        if (chipLabel === "Wrong turn" && ref) {
+          tooltip = `Used ${COMMAND_ARIA_LABELS[cmd]}, expected ${COMMAND_ARIA_LABELS[ref]}`;
+        } else if (chipLabel === "Passed goal") {
+          tooltip = `Step ${step}: robot passed the goal`;
+        } else if (chipLabel === "Stopped early") {
+          tooltip = `Step ${step}: stopped before the goal`;
+        } else if (chipLabel === "Wrong order") {
+          tooltip = `Step ${step}: commands out of order`;
+        } else {
+          tooltip = ref
+            ? `Used ${COMMAND_ARIA_LABELS[cmd]}, expected ${COMMAND_ARIA_LABELS[ref]}`
+            : `Unexpected command at Step ${step}`;
+        }
       }
     } else if (
       softenAfterFirstMistake &&
@@ -447,7 +472,7 @@ export function buildStudentProgramDisplay(params: {
     } else if (ref == null || cmd !== ref) {
       status = "wrongLater";
       if (i >= reference.length) {
-        chipLabel = "Extra command";
+        chipLabel = extraCommandChipLabel(cmd);
         tooltip = `Extra ${COMMAND_ARIA_LABELS[cmd]} at Step ${step}`;
       } else {
         chipLabel = commandMismatchChipLabel(cmd, ref) ?? "Wrong command";

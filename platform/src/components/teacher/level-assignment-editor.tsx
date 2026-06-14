@@ -42,8 +42,6 @@ export function LevelAssignmentEditor(props: Props) {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [levelFilter, setLevelFilter] = useState<LevelFilter>("all");
-  /** Avoid SSR/client mismatch on `disabled` while fetch state settles. */
-  const [mounted, setMounted] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -71,15 +69,11 @@ export function LevelAssignmentEditor(props: Props) {
   }, [apiBase, props.target]);
 
   useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
     void load();
   }, [load]);
 
-  const actionsDisabled = !mounted || loading;
-  const saveDisabled = !mounted || loading || saving;
+  const actionsDisabled = loading;
+  const saveDisabled = loading || saving;
 
   const filteredLevels = useMemo(() => {
     if (levelFilter === "assigned") return levels.filter((l) => selected.has(l.id));
@@ -111,11 +105,15 @@ export function LevelAssignmentEditor(props: Props) {
     setSaving(true);
     setError(null);
     setSaved(false);
+    const orderedLevelIds = levels
+      .filter((l) => selected.has(l.id))
+      .sort((a, b) => a.orderIndex - b.orderIndex || a.name.localeCompare(b.name))
+      .map((l) => l.id);
     try {
       const res = await fetch(apiBase, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ levelIds: Array.from(selected) }),
+        body: JSON.stringify({ levelIds: orderedLevelIds }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -160,10 +158,22 @@ export function LevelAssignmentEditor(props: Props) {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={assignAllLevels} disabled={actionsDisabled}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={assignAllLevels}
+            disabled={actionsDisabled}
+          >
             Assign all items
           </Button>
-          <Button type="button" variant="outline" size="sm" onClick={clearAssignments} disabled={actionsDisabled}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={clearAssignments}
+            disabled={actionsDisabled}
+          >
             Clear assignments
           </Button>
           <Button type="button" size="sm" onClick={save} disabled={saveDisabled} className="gap-2">

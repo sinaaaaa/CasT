@@ -2,10 +2,11 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { gameApiUnauthorized, verifyGameApiKey } from "@/lib/game-api";
 import {
-  parseAttemptStatus,
   rebuildCommandHistory,
   syncRobotTouchStats,
 } from "@/lib/game-service";
+import { resolveAttemptEndScore } from "@/lib/game/resolve-attempt-score";
+import { resolveAttemptDurationSeconds } from "@/lib/game/resolve-attempt-duration";
 import { analyzeAttemptConstructs } from "@/lib/ct/scoring";
 import { AttemptStatus, Prisma } from "@prisma/client";
 
@@ -74,15 +75,18 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: "attemptId is required" }, { status: 400 });
   }
 
-  const attempt = await prisma.levelAttempt.findUnique({ where: { id: attemptId } });
+  const attempt = await prisma.levelAttempt.findUnique({
+    where: { id: attemptId },
+    include: { level: true },
+  });
   if (!attempt) return Response.json({ error: "Attempt not found" }, { status: 404 });
 
   const endedAt = new Date();
-  const computedTime =
-    totalTimeSeconds ??
-    (attempt.startedAt ? (endedAt.getTime() - attempt.startedAt.getTime()) / 1000 : null);
-
-  const parsedStatus = status ? parseAttemptStatus(status) : attempt.status;
+  const computedTime = resolveAttemptDurationSeconds({
+    totalTimeSeconds,
+    startedAt: attempt.startedAt,
+    endedAt,
+  });
 
   await syncRobotTouchStats(attemptId);
 
@@ -93,11 +97,17 @@ export async function POST(request: NextRequest) {
   const mistakesPayload: Prisma.InputJsonValue = (() => {
     if (extras || objectVisit) {
       const flagCell =
-        typeof extras?.flagCellX === "number" && typeof extras?.flagCellY === "number"
+        typeof extras?.flagCellX === "number" &&
+        typeof extras?.flagCellY === "number" &&
+        extras.flagCellX >= 0 &&
+        extras.flagCellY >= 0
           ? { x: extras.flagCellX, y: extras.flagCellY }
           : undefined;
       const expectedCell =
-        typeof extras?.expectedCellX === "number" && typeof extras?.expectedCellY === "number"
+        typeof extras?.expectedCellX === "number" &&
+        typeof extras?.expectedCellY === "number" &&
+        extras.expectedCellX >= 0 &&
+        extras.expectedCellY >= 0
           ? { x: extras.expectedCellX, y: extras.expectedCellY }
           : undefined;
       return {
@@ -117,19 +127,38 @@ export async function POST(request: NextRequest) {
         ...(typeof extras?.blankAnswersCorrect === "boolean"
           ? { blankAnswersCorrect: extras.blankAnswersCorrect }
           : {}),
+        ...(typeof extras?.inLevelRunNumber === "number" && extras.inLevelRunNumber >= 1
+          ? { inLevelRunNumber: extras.inLevelRunNumber }
+          : {}),
+        ...(typeof extras?.maxLevelRuns === "number" && extras.maxLevelRuns >= 1
+          ? { maxLevelRuns: extras.maxLevelRuns }
+          : {}),
       } as Prisma.InputJsonValue;
     }
     return ((mistakes ?? attempt.mistakes) as Prisma.InputJsonValue) ?? [];
   })();
+
+  const { score: resolvedScore, passed: resolvedPassed } = resolveAttemptEndScore({
+    levelType: attempt.level.levelType,
+    levelConfig: attempt.level.config,
+    passed,
+    score: score ?? attempt.score,
+    mistakes: mistakesPayload,
+    finalCommand: finalCommand ?? attempt.finalCommand,
+    initialCommand: attempt.initialCommand,
+    attemptNumber: attempt.attemptNumber,
+  });
+
+  const resolvedStatus = resolvedPassed ? AttemptStatus.CORRECT : AttemptStatus.INCORRECT;
 
   const updated = await prisma.levelAttempt.update({
     where: { id: attemptId },
     data: {
       endedAt,
       totalTimeSeconds: computedTime,
-      status: parsedStatus,
-      passed: passed ?? parsedStatus === AttemptStatus.CORRECT,
-      score: score ?? attempt.score,
+      status: resolvedStatus,
+      passed: resolvedPassed,
+      score: resolvedScore ?? attempt.score,
       finalCommand: finalCommand ?? attempt.finalCommand,
       hintsUsed: hintsUsed ?? attempt.hintsUsed,
       mistakes: mistakesPayload,

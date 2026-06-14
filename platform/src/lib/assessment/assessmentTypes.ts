@@ -109,6 +109,14 @@ export interface NumberLineEvidence {
   orientationUnderstanding: number;
   optimalMoveCount: number;
   studentMoveCount: number;
+  /** Shortest forward/backward program from start facing along the line. */
+  optimalCommands: RobotCommand[];
+  /** Tick positions along the best route (includes start). */
+  optimalPathTicks: number[];
+  /** 1-based step of first command mismatch vs best route, if any. */
+  firstMistakeStep: number | null;
+  /** Whether the robot ended on, before, or past the goal tick. */
+  goalOutcome: "reached" | "stopped_early" | "overshot" | "wrong_path";
   passed: boolean;
   teacherNotes: {
     directionConfusion?: string;
