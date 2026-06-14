@@ -57,6 +57,7 @@ public static class WebGLBuildScript
 
         InjectStudentConfigBridge(outputDir);
         InjectTouchGestureGuards(outputDir);
+        InjectLandscapeOrientationGuard(outputDir);
         Debug.Log("[WebGLBuildScript] Build succeeded: " + outputDir);
         if (exitWhenDone)
             EditorApplication.Exit(0);
@@ -111,6 +112,50 @@ public static class WebGLBuildScript
             html = html.Replace("</head>", snippet + "</head>");
         else
             html = snippet + html;
+
+        File.WriteAllText(indexPath, html);
+    }
+
+    /// <summary>
+    /// Blocks portrait play on phones/tablets and requests landscape orientation in the browser.
+    /// </summary>
+    private static void InjectLandscapeOrientationGuard(string outputDir)
+    {
+        var indexPath = Path.Combine(outputDir, "index.html");
+        if (!File.Exists(indexPath))
+            return;
+
+        const string marker = "sparc-landscape-only";
+        var html = File.ReadAllText(indexPath);
+        if (html.Contains(marker))
+            return;
+
+        const string snippet =
+            "<style>/* sparc-landscape-only */" +
+            "#sparc-landscape-overlay{display:none;position:fixed;inset:0;z-index:99999;" +
+            "align-items:center;justify-content:center;flex-direction:column;gap:16px;" +
+            "background:#020617;color:#fff;text-align:center;padding:24px;font-family:system-ui,sans-serif;}" +
+            "#sparc-landscape-overlay h2{margin:0;font-size:1.5rem;}" +
+            "#sparc-landscape-overlay p{margin:0;max-width:20rem;color:#cbd5e1;line-height:1.5;}" +
+            "@media (orientation: portrait) and (max-width: 1024px){" +
+            "#sparc-landscape-overlay{display:flex;}" +
+            "#unity-container,#unity-loading-bar,#unity-footer,#unity-warning{visibility:hidden;}" +
+            "}</style>" +
+            "<div id=\"sparc-landscape-overlay\">" +
+            "<div style=\"font-size:3rem;line-height:1\">&#8635;</div>" +
+            "<h2>Rotate your device</h2>" +
+            "<p>Play in landscape (horizontal) mode. Turn your phone or tablet sideways.</p>" +
+            "</div>" +
+            "<script>/* sparc-landscape-only */" +
+            "(function(){function lock(){try{if(screen.orientation&&screen.orientation.lock)" +
+            "screen.orientation.lock('landscape').catch(function(){});}catch(e){}}" +
+            "lock();window.addEventListener('orientationchange',lock);" +
+            "window.addEventListener('resize',lock);})();</script>";
+
+        if (html.Contains("</body>"))
+            html = html.Replace("</body>", snippet + "</body>");
+        else
+            html = html + snippet;
 
         File.WriteAllText(indexPath, html);
     }

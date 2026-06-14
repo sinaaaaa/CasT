@@ -30,6 +30,8 @@ public class PlatformBootstrap : MonoBehaviour
         DontDestroyOnLoad(assessment.gameObject);
 
         EnsureStudentDataManager();
+        LandscapeOrientationLock.ApplyLandscapeOnly();
+        LandscapeOrientationLock.RequestBrowserLandscapeLock();
     }
 
     private void Start()
