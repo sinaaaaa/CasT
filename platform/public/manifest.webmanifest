@@ -1,6 +1,6 @@
 {
-  "name": "Little Logic Adventure",
-  "short_name": "Logic Game",
+  "name": "LilLogic",
+  "short_name": "LilLogic",
   "description": "Robot coding game — install for fullscreen play on phones and tablets.",
   "start_url": "/play",
   "scope": "/",

@@ -42,10 +42,9 @@ public class DragDropTutorialController : MonoBehaviour
     public CanvasGroup instructionPanel;
     public TMP_Text instructionText;
 
-    [Header("Audio")]
-    public AudioSource audioSource;
+    [Header("Audio (legacy — clip migrates to GameInteractionSoundsSettings)")]
+    [Tooltip("Deprecated: assign on GameInteractionSoundsSettings as Queue Snap Pop Clip.")]
     public AudioClip popSound;
-    [Range(0f, 1f)] public float popVolume = 0.5f;
 
     [Header("Timing")]
     public float startDelaySeconds = 0.5f;
@@ -106,12 +105,15 @@ public class DragDropTutorialController : MonoBehaviour
     private void Awake()
     {
         if (characterMove == null) characterMove = FindObjectOfType<CharacterMove>();
-        if (audioSource == null)
-        {
-            audioSource = GetComponent<AudioSource>();
-            if (audioSource == null) audioSource = gameObject.AddComponent<AudioSource>();
-        }
         RemoveLegacyShowMeHowButton();
+    }
+
+    /// <summary>One-time copy from scene fields into <see cref="GameInteractionSoundsSettings"/>.</summary>
+    public void MigrateSoundClipsTo(GameInteractionSoundsSettings target)
+    {
+        if (target == null) return;
+        if (target.queueSnapPopClip == null && popSound != null)
+            target.queueSnapPopClip = popSound;
     }
 
     private void OnEnable()
@@ -605,8 +607,7 @@ public class DragDropTutorialController : MonoBehaviour
         }
 
         SpawnSparkle(canvasPoint);
-        if (popSound != null && audioSource != null)
-            audioSource.PlayOneShot(popSound, popVolume);
+        GameInteractionSounds.PlayQueueSnapPop();
 
         if (_runtimeHand != null) _runtimeHand.SetActive(false);
         if (_runtimeGhost != null) _runtimeGhost.SetActive(false);
@@ -664,8 +665,7 @@ public class DragDropTutorialController : MonoBehaviour
                 runRt.localScale = runBaseScale;
             if (_runtimeHand != null) _runtimeHand.SetActive(false);
 
-            if (popSound != null && audioSource != null)
-                audioSource.PlayOneShot(popSound, popVolume * 0.7f);
+            GameInteractionSounds.PlayQueueSnapPop(0.7f);
 
             if (i < taps - 1)
                 yield return new WaitForSeconds(pauseBetweenRunTapsSeconds);

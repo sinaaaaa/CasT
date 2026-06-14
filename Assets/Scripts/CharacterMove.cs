@@ -2862,6 +2862,11 @@ public class CharacterMove : MonoBehaviour
         string levelKey = GetPlatformLevelKey(currentLevel);
         if (!string.IsNullOrEmpty(levelKey))
             PlayerPrefs.SetString(currentUserId + "_currentLevelKey", levelKey);
+        if (allLevelsData != null && allLevelsData.Count > 0)
+        {
+            string levelListKey = string.Join("|", allLevelsData.ConvertAll(ld => ld.levelKey ?? ""));
+            PlayerPrefs.SetString(currentUserId + "_assignedLevelKeys", levelListKey);
+        }
         PlayerPrefs.Save();
         Debug.Log($"[CharacterMove] Saved level slot {currentLevel} ({levelKey}) for user {currentUserId}");
 
@@ -2881,8 +2886,9 @@ public class CharacterMove : MonoBehaviour
         {
             Debug.LogError($"[CharacterMove] Invalid level number: {levelNumber}. Resetting to level 1.");
             levelNumber = 1;
-            currentLevel = 1; // Ensure currentLevel is also reset
         }
+
+        currentLevel = levelNumber;
         
         // Clean up any old AppleCluster scripts from the scene
         CleanupOldAppleClusterScripts();
@@ -3676,23 +3682,17 @@ public class CharacterMove : MonoBehaviour
         currentUserId = PlayerPrefs.GetString("UserId");
         Debug.Log($"Logged in with ID: {currentUserId}");
 
-        // Check if this is a new game session
+        // Mark browser tab session — do not reset saved progress here (WebGL reloads often).
         string sessionKey = currentUserId + "_session_active";
         if (!PlayerPrefs.HasKey(sessionKey))
         {
-            // This is a new session, start from Level 1
-            currentLevel = 1;
-            PlayerPrefs.SetInt(currentUserId + "_currentLevel", currentLevel);
-            PlayerPrefs.SetInt(sessionKey, 1); // Mark session as active
+            PlayerPrefs.SetInt(sessionKey, 1);
             PlayerPrefs.Save();
-            Debug.Log($"[CharacterMove] New session: Starting from Level 1");
+            Debug.Log("[CharacterMove] New browser session — progress will resume from server/local save.");
         }
-        else
-        {
-            // Existing session, load saved level
-            currentLevel = PlayerPrefs.GetInt(currentUserId + "_currentLevel", 1);
-            Debug.Log($"[CharacterMove] Existing session: Continuing from Level {currentLevel}");
-        }
+
+        currentLevel = PlayerPrefs.GetInt(currentUserId + "_currentLevel", 1);
+        Debug.Log($"[CharacterMove] Local saved slot before level list load: {currentLevel}");
 
         // Establish virtual-matrix origin in world space.
         if (gridOriginTransform != null)
@@ -3837,13 +3837,45 @@ public class CharacterMove : MonoBehaviour
 
         if (savedListKey != levelListKey)
         {
-            currentLevel = 1;
             PlayerPrefs.SetString(prefsPrefix + "_assignedLevelKeys", levelListKey);
+            Debug.Log("[CharacterMove] Assigned item list changed; resolving resume from server/local save.");
+        }
+
+        var loader = PlatformLevelLoader.Instance;
+        if (loader != null && loader.HasServerResume)
+        {
+            for (int i = 0; i < allLevelsData.Count; i++)
+            {
+                if (allLevelsData[i]?.levelKey == loader.ResumeLevelKey)
+                {
+                    currentLevel = i + 1;
+                    PlayerPrefs.SetInt(prefsPrefix + "_currentLevel", currentLevel);
+                    PlayerPrefs.SetString(prefsPrefix + "_currentLevelKey", loader.ResumeLevelKey);
+                    PlayerPrefs.Save();
+                    Debug.Log(
+                        $"[CharacterMove] Resuming from server at slot {currentLevel} ({loader.ResumeLevelKey}).");
+                    return;
+                }
+            }
+
+            currentLevel = Mathf.Clamp(loader.ResumeSlot, 1, allLevelsData.Count);
+            string resumeKey = GetPlatformLevelKey(currentLevel);
+            PlayerPrefs.SetInt(prefsPrefix + "_currentLevel", currentLevel);
+            if (!string.IsNullOrEmpty(resumeKey))
+                PlayerPrefs.SetString(prefsPrefix + "_currentLevelKey", resumeKey);
+            PlayerPrefs.Save();
+            Debug.Log($"[CharacterMove] Resuming from server slot {currentLevel} ({resumeKey}).");
+            return;
+        }
+
+        if (savedListKey != levelListKey)
+        {
+            currentLevel = 1;
             PlayerPrefs.SetInt(prefsPrefix + "_currentLevel", 1);
             if (allLevelsData[0] != null && !string.IsNullOrEmpty(allLevelsData[0].levelKey))
                 PlayerPrefs.SetString(prefsPrefix + "_currentLevelKey", allLevelsData[0].levelKey);
             PlayerPrefs.Save();
-            Debug.Log($"[CharacterMove] Assigned level list changed; starting at first item ({allLevelsData[0]?.levelKey}).");
+            Debug.Log($"[CharacterMove] Assigned item list changed; starting at first item ({allLevelsData[0]?.levelKey}).");
             return;
         }
 
@@ -4079,9 +4111,10 @@ public class CharacterMove : MonoBehaviour
     
     private void AdvanceToNextLevel()
     {
-        currentLevel++;
-        if (currentLevel <= MAX_LEVELS && currentLevel <= allLevelsData.Count)
+        int nextLevel = currentLevel + 1;
+        if (nextLevel <= MAX_LEVELS && nextLevel <= allLevelsData.Count)
         {
+            currentLevel = nextLevel;
             SavePlayerLevel();
             StartCoroutine(SetupNextLevel());
         }
@@ -4959,6 +4992,7 @@ public class CharacterMove : MonoBehaviour
             {
                 successPopupText.text = GetConfiguredPopupText(levelData.maxAttemptsMessage, levelData, failureReason);
                 successPopup.SetActive(true);
+                GameInteractionSounds.PlayFailPopup();
             }
             else
             {
@@ -4972,6 +5006,7 @@ public class CharacterMove : MonoBehaviour
         if (wrongAnswerPopup != null)
         {
             wrongAnswerPopup.SetActive(true);
+            GameInteractionSounds.PlayFailPopup();
             var popupText = wrongAnswerPopup.GetComponentInChildren<TextMeshProUGUI>();
             if (popupText != null)
                 popupText.text = GetConfiguredPopupText(levelData.attemptFailureMessage, levelData, failureReason);
@@ -6282,6 +6317,7 @@ public class CharacterMove : MonoBehaviour
         {
             successPopupText.text = GetConfiguredPopupText(completedLevel?.attemptSuccessMessage, completedLevel);
             successPopup.SetActive(true);
+            GameInteractionSounds.PlaySuccessPopup();
             RefreshStudentResetButtonState();
         }
         else
@@ -6735,7 +6771,8 @@ public class CharacterMove : MonoBehaviour
         public string assessment;
     }
 
-    public AudioClip whichArrowAudioClip; // Assign in inspector
+    [Tooltip("Deprecated: assign on GameInteractionSoundsSettings as Guided Blank Prompt Clip.")]
+    public AudioClip whichArrowAudioClip;
     private bool waitingForGuidedInput = false;
 
     // Call this when the user picks left or right for the blank slot
@@ -6894,15 +6931,20 @@ public class CharacterMove : MonoBehaviour
 
     private void PlayWhichArrowAudio()
     {
-        if (whichArrowAudioClip != null && audioSource != null)
-        {
-            audioSource.PlayOneShot(whichArrowAudioClip);
-        }
+        GameInteractionSounds.PlayGuidedBlankPrompt();
         // Optionally, show a text prompt as well
         if (chatGPTResponseText != null)
         {
             chatGPTResponseText.text = "Which arrow belongs here?";
         }
+    }
+
+    /// <summary>One-time copy from scene fields into <see cref="GameInteractionSoundsSettings"/>.</summary>
+    public void MigrateInteractionSoundClipsTo(GameInteractionSoundsSettings target)
+    {
+        if (target == null) return;
+        if (target.guidedBlankPromptClip == null && whichArrowAudioClip != null)
+            target.guidedBlankPromptClip = whichArrowAudioClip;
     }
 
 

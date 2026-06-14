@@ -5,6 +5,8 @@ import { useCallback, useEffect, useState } from "react";
 
 const DISMISS_STORAGE_KEY = "sparc-pwa-install-dismissed-v1";
 
+const APP_SHORT_NAME = "LilLogic";
+
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
@@ -114,7 +116,7 @@ export function InstallPlayAppPrompt({ gameReady = false }: Props) {
           </div>
           <div className="min-w-0 flex-1">
             <p id="pwa-install-title" className="text-sm font-bold text-white">
-              Recommended: install for fullscreen play
+              Recommended: install {APP_SHORT_NAME} for fullscreen play
             </p>
             <p className="mt-1 text-xs leading-relaxed text-indigo-100/90">
               Optional — you can keep playing in the browser. Installing hides the browser bar and
@@ -125,7 +127,8 @@ export function InstallPlayAppPrompt({ gameReady = false }: Props) {
               <p className="mt-2 flex items-start gap-1.5 text-xs text-indigo-100">
                 <Share className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 <span>
-                  Tap <strong>Share</strong> in Safari, then <strong>Add to Home Screen</strong>.
+                  Tap <strong>Share</strong> in Safari, then <strong>Add to Home Screen</strong>. Name it{" "}
+                  <strong>{APP_SHORT_NAME}</strong>.
                 </span>
               </p>
             )}
@@ -135,7 +138,7 @@ export function InstallPlayAppPrompt({ gameReady = false }: Props) {
                 <Download className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 <span>
                   Open the browser menu and choose <strong>Install app</strong> or{" "}
-                  <strong>Add to Home screen</strong>.
+                  <strong>Add to Home screen</strong>. Use the name <strong>{APP_SHORT_NAME}</strong>.
                 </span>
               </p>
             )}

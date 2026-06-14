@@ -36,13 +36,11 @@ public class FlagTaskTutorialController : MonoBehaviour
     public Sprite handTapSprite;
     public TextMeshProUGUI instructionText;
 
-    [Header("Audio")]
-    public AudioSource uiAudioSource;
+    [Header("Audio (legacy — clips migrate to GameInteractionSoundsSettings)")]
+    [Tooltip("Deprecated: assign on GameInteractionSoundsSettings instead.")]
     public AudioClip placeFlagSound;
-    [Range(0f, 1f)] public float placeFlagVolume = 0.65f;
-    [Tooltip("Optional soft 'tap' sound for the tutorial animation.")]
+    [Tooltip("Deprecated: assign on GameInteractionSoundsSettings instead.")]
     public AudioClip tutorialTapSound;
-    [Range(0f, 1f)] public float tutorialTapVolume = 0.35f;
 
     [Header("Timing")]
     public float startDelaySeconds = 0.5f;
@@ -78,13 +76,18 @@ public class FlagTaskTutorialController : MonoBehaviour
     private void Awake()
     {
         if (characterMove == null) characterMove = FindObjectOfType<CharacterMove>();
-        if (uiAudioSource == null)
-        {
-            uiAudioSource = GetComponent<AudioSource>();
-            if (uiAudioSource == null) uiAudioSource = gameObject.AddComponent<AudioSource>();
-        }
 
         RemoveLegacyHintButton();
+    }
+
+    /// <summary>One-time copy from scene fields into <see cref="GameInteractionSoundsSettings"/>.</summary>
+    public void MigrateSoundClipsTo(GameInteractionSoundsSettings target)
+    {
+        if (target == null) return;
+        if (target.flagPlaceClip == null && placeFlagSound != null)
+            target.flagPlaceClip = placeFlagSound;
+        if (target.flagTutorialTapClip == null && tutorialTapSound != null)
+            target.flagTutorialTapClip = tutorialTapSound;
     }
 
     private void Start()
@@ -134,8 +137,7 @@ public class FlagTaskTutorialController : MonoBehaviour
             chosenFlagCell = current;
 
             // Gentle sound feedback when the flag is placed/moved.
-            if (placeFlagSound != null && uiAudioSource != null)
-                uiAudioSource.PlayOneShot(placeFlagSound, placeFlagVolume);
+            GameInteractionSounds.PlayFlagPlace();
 
             if (!_hasPlacedOnceThisLevel)
             {
@@ -517,8 +519,7 @@ public class FlagTaskTutorialController : MonoBehaviour
         float t = 0f;
         const float dur = 0.12f;
 
-        if (tutorialTapSound != null && uiAudioSource != null)
-            uiAudioSource.PlayOneShot(tutorialTapSound, tutorialTapVolume);
+        GameInteractionSounds.PlayFlagTutorialTap();
 
         while (t < dur)
         {

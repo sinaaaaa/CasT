@@ -228,7 +228,12 @@ public class MultiTargetCamera : MonoBehaviour
                     }
                 }
                 if (characterMove.activeFlag != null && characterMove.activeFlag.activeInHierarchy)
-                    AddObjectBoundsToFraming(characterMove.activeFlag, ref bounds, ref any);
+                {
+                    // Avoid camera zoom/pan when the student places the flag before RUN — that made UI panels appear to blink.
+                    bool framingFlag = !characterMove.IsFlagPlacementActive || characterMove.IsActionQueueLocked();
+                    if (framingFlag)
+                        AddObjectBoundsToFraming(characterMove.activeFlag, ref bounds, ref any);
+                }
             }
         }
 

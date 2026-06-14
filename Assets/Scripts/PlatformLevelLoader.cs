@@ -19,6 +19,9 @@ public class PlatformLevelLoader : MonoBehaviour
     public bool LoadSucceeded { get; private set; }
     public string LastError { get; private set; }
     public bool AssignmentRestricted { get; private set; }
+    public string ResumeLevelKey { get; private set; }
+    public int ResumeSlot { get; private set; }
+    public bool HasServerResume { get; private set; }
 
     private void Awake()
     {
@@ -38,6 +41,9 @@ public class PlatformLevelLoader : MonoBehaviour
         LoadSucceeded = false;
         LastError = null;
         AssignmentRestricted = false;
+        ResumeLevelKey = null;
+        ResumeSlot = 0;
+        HasServerResume = false;
 
         if (!usePlatformLevels)
         {
@@ -69,6 +75,9 @@ public class PlatformLevelLoader : MonoBehaviour
             {
                 var root = JObject.Parse(req.downloadHandler.text);
                 AssignmentRestricted = root["assignmentRestricted"]?.Value<bool>() ?? false;
+                ResumeLevelKey = root["resumeLevelKey"]?.ToString();
+                ResumeSlot = root["resumeSlot"]?.Value<int>() ?? 0;
+                HasServerResume = !string.IsNullOrEmpty(ResumeLevelKey) && ResumeSlot > 0;
                 bool filteredForStudent = root["filteredForStudent"]?.Value<bool>() ?? false;
                 var levelsToken = root["levels"] as JArray;
                 if (levelsToken == null || levelsToken.Count == 0)

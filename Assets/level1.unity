@@ -6219,7 +6219,7 @@ RectTransform:
   m_GameObject: {fileID: 277276752}
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalScale: {x: 1.3, y: 1.3, z: 1.3}
   m_ConstrainProportionsScale: 1
   m_Children:
   - {fileID: 1938163991}
@@ -6227,7 +6227,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 1, y: 0}
   m_AnchorMax: {x: 1, y: 0}
-  m_AnchoredPosition: {x: -128.68, y: 189.9}
+  m_AnchoredPosition: {x: -128.68, y: 162.8}
   m_SizeDelta: {x: 190, y: 176}
   m_Pivot: {x: 1, y: 0}
 --- !u!114 &277276754
@@ -17776,11 +17776,8 @@ MonoBehaviour:
   handTapIcon: {fileID: 0}
   handTapSprite: {fileID: 21300000, guid: fc1bbb4449993e94a809a5490f5afe9d, type: 3}
   instructionText: {fileID: 0}
-  uiAudioSource: {fileID: 0}
-  placeFlagSound: {fileID: 0}
-  placeFlagVolume: 0.65
-  tutorialTapSound: {fileID: 0}
-  tutorialTapVolume: 0.35
+  placeFlagSound: {fileID: 8300000, guid: 32096b3ffbc644848816d45984191312, type: 3}
+  tutorialTapSound: {fileID: 8300000, guid: 48c4b35b375e2ea4cb6ea17a1d953af9, type: 3}
   startDelaySeconds: 2.5
   tutorialVisibleSeconds: 4
   fadeOutSeconds: 0.6
@@ -33881,6 +33878,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1656700527}
   - component: {fileID: 1656700526}
+  - component: {fileID: 1656700528}
   m_Layer: 0
   m_Name: CornerHint
   m_TagString: Untagged
@@ -33912,7 +33910,7 @@ MonoBehaviour:
   playAudioButton: {fileID: 863905437}
   playAudioButtonImage: {fileID: 863905436}
   playAudioButtonLabel: {fileID: 1436492188}
-  hintAudioSource: {fileID: 1614009738}
+  hintAudioSource: {fileID: 1656700528}
   defaultLayout:
     useManualLayout: 1
     panelBackground: {fileID: 21300000, guid: 1506d55bbd415514ab3a89aedf7ca1f6, type: 3}
@@ -34059,6 +34057,102 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!82 &1656700528
+AudioSource:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1656700525}
+  m_Enabled: 1
+  serializedVersion: 4
+  OutputAudioMixerGroup: {fileID: 0}
+  m_audioClip: {fileID: 8300000, guid: 29dbbc8264c89c74ab93fbe6922bcc41, type: 3}
+  m_PlayOnAwake: 0
+  m_Volume: 1
+  m_Pitch: 1
+  Loop: 0
+  Mute: 0
+  Spatialize: 0
+  SpatializePostEffects: 0
+  Priority: 128
+  DopplerLevel: 1
+  MinDistance: 1
+  MaxDistance: 500
+  Pan2D: 0
+  rolloffMode: 0
+  BypassEffects: 0
+  BypassListenerEffects: 0
+  BypassReverbZones: 0
+  rolloffCustomCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    - serializedVersion: 3
+      time: 1
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  panLevelCustomCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  spreadCustomCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  reverbZoneMixCustomCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
 --- !u!1001 &1658176538
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -35033,6 +35127,78 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 5236078868935419280, guid: fc3606814b105d944aebbeed94d35dc4, type: 3}
   m_PrefabInstance: {fileID: 1899292194}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1716281434
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1716281436}
+  - component: {fileID: 1716281435}
+  m_Layer: 0
+  m_Name: GameInteractionSoundsSettings
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1716281435
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1716281434}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6cacc043b8c23674f87769aa986329d8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  actionTapClip: {fileID: 8300000, guid: 48c4b35b375e2ea4cb6ea17a1d953af9, type: 3}
+  actionDragClip: {fileID: 8300000, guid: d5a9d99a059a7164c90150afde03c7dd, type: 3}
+  robotTouchClip: {fileID: 8300000, guid: dc4066718b59dba49ab2452e364a8a11, type: 3}
+  flagPlaceClip: {fileID: 8300000, guid: 32096b3ffbc644848816d45984191312, type: 3}
+  flagTutorialTapClip: {fileID: 8300000, guid: 29dbbc8264c89c74ab93fbe6922bcc41, type: 3}
+  queueSnapPopClip: {fileID: 8300000, guid: 29dbbc8264c89c74ab93fbe6922bcc41, type: 3}
+  guidedBlankPromptClip: {fileID: 8300000, guid: 7c07455665cfd494fa86c54d276d5a19, type: 3}
+  successPopupClip: {fileID: 8300000, guid: a1f3c8e92b4d6a1489e0f2c7d5b8e301, type: 3}
+  failPopupClip: {fileID: 8300000, guid: b2e4d9f03c5e7b2590f1a3d8e6c9f412, type: 3}
+  masterVolume: 0.55
+  actionTapVolume: 0.5
+  actionDragVolume: 0.55
+  robotTouchVolume: 0.6
+  flagPlaceVolume: 0.65
+  flagTutorialTapVolume: 0.35
+  queueSnapPopVolume: 0.7
+  guidedBlankPromptVolume: 0.75
+  successPopupVolume: 0.7
+  failPopupVolume: 0.65
+  playActionTap: 1
+  playActionDrag: 1
+  playRobotTouch: 1
+  playFlagPlace: 1
+  playFlagTutorialTap: 1
+  playQueueSnapPop: 1
+  playGuidedBlankPrompt: 1
+  playSuccessPopup: 1
+  playFailPopup: 1
+--- !u!4 &1716281436
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1716281434}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!4 &1716845885 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 5236078868935419280, guid: fc3606814b105d944aebbeed94d35dc4, type: 3}
@@ -44116,9 +44282,7 @@ MonoBehaviour:
   ghostCommandPrefab: {fileID: 0}
   instructionPanel: {fileID: 0}
   instructionText: {fileID: 0}
-  audioSource: {fileID: 0}
-  popSound: {fileID: 0}
-  popVolume: 0.5
+  popSound: {fileID: 8300000, guid: 48c4b35b375e2ea4cb6ea17a1d953af9, type: 3}
   startDelaySeconds: 0.5
   dragDemoRepeatCount: 3
   runTapDemoRepeatCount: 2
@@ -45299,3 +45463,4 @@ SceneRoots:
   - {fileID: 884356423}
   - {fileID: 2109310188}
   - {fileID: 1048461840}
+  - {fileID: 1716281436}

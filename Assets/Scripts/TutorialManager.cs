@@ -846,4 +846,14 @@ public class TutorialManager : MonoBehaviour
         
         Debug.Log($"[Tutorial] Reset {button.name} to normal state - scale: {button.transform.localScale}, color: {img?.color}");
     }
+
+    /// <summary>One-time copy from scene fields into <see cref="GameInteractionSoundsSettings"/>.</summary>
+    public void MigrateSoundClipsTo(GameInteractionSoundsSettings target)
+    {
+        if (target == null) return;
+        if (target.successPopupClip == null && celebrationAudio != null)
+            target.successPopupClip = celebrationAudio;
+        if (target.successPopupClip == null && goodJobAudio != null)
+            target.successPopupClip = goodJobAudio;
+    }
 }

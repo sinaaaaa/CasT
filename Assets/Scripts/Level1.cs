@@ -775,6 +775,7 @@ public class Level1 : MonoBehaviour
         
         // Make sure popup is visible and in front
         successPopup.SetActive(true);
+        GameInteractionSounds.PlaySuccessPopup();
         Canvas popupCanvas = successPopup.GetComponent<Canvas>();
         if (popupCanvas != null)
         {

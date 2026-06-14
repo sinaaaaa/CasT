@@ -30,6 +30,7 @@ public class PlatformBootstrap : MonoBehaviour
         DontDestroyOnLoad(assessment.gameObject);
 
         EnsureStudentDataManager();
+        EnsureInteractionSoundsSettings(comm.gameObject);
         LandscapeOrientationLock.ApplyLandscapeOnly();
         LandscapeOrientationLock.RequestBrowserLandscapeLock();
     }
@@ -58,5 +59,12 @@ public class PlatformBootstrap : MonoBehaviour
         if (StudentDataManager.Instance != null) return;
         var go = new GameObject("StudentDataManager");
         go.AddComponent<StudentDataManager>();
+    }
+
+    private static void EnsureInteractionSoundsSettings(GameObject host)
+    {
+        if (GameInteractionSoundsSettings.Instance != null) return;
+        if (host.GetComponent<GameInteractionSoundsSettings>() != null) return;
+        host.AddComponent<GameInteractionSoundsSettings>();
     }
 }

@@ -12,7 +12,7 @@ export const metadata: Metadata = {
   themeColor: "#312E81",
   appleWebApp: {
     capable: true,
-    title: "Little Logic Adventure",
+    title: "LilLogic",
     statusBarStyle: "black-translucent",
   },
   icons: {

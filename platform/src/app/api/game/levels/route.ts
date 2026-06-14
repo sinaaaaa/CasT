@@ -11,6 +11,7 @@ import {
   getPlayableLevelsForStudent,
   resolveStudentProfileId,
 } from "@/lib/level-assignments";
+import { resolveGameResumeLevel } from "@/lib/game-resume-level";
 import { getActiveDirectAssignmentLevelIds } from "@/lib/level-student-assignments";
 
 export async function GET(request: NextRequest) {
@@ -23,11 +24,21 @@ export async function GET(request: NextRequest) {
     : await getPlayableLevelsForStudent(null);
 
   let hasCustomAssignments = false;
+  let resumeLevelKey: string | null = null;
+  let resumeSlot: number | null = null;
   if (studentId) {
     const profileId = await resolveStudentProfileId(studentId);
     if (profileId) {
       const active = await getActiveDirectAssignmentLevelIds(profileId);
       hasCustomAssignments = active.size > 0;
+      const resume = await resolveGameResumeLevel(
+        profileId,
+        levels.map((l) => ({ id: l.id, levelKey: l.levelKey }))
+      );
+      if (resume) {
+        resumeLevelKey = resume.resumeLevelKey;
+        resumeSlot = resume.resumeSlot;
+      }
     }
   }
 
@@ -53,5 +64,7 @@ export async function GET(request: NextRequest) {
     filteredForStudent: Boolean(studentId),
     hasCustomAssignments,
     assignmentRestricted: hasCustomAssignments,
+    resumeLevelKey,
+    resumeSlot,
   });
 }

@@ -347,7 +347,7 @@ MonoBehaviour:
   studentIdInput: {fileID: 1665047638}
   loginButton: {fileID: 1496192631}
   statusText: {fileID: 1043769889}
-  platformUrl: http://localhost:3000
+  platformUrl: https://cas-t.vercel.app
 --- !u!4 &195001908
 Transform:
   m_ObjectHideFlags: 0
@@ -4745,7 +4745,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8de202a2970c2134fa9779b4297d3477, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  platformUrl: http://localhost:3000
+  platformUrl: https://cas-t.vercel.app
   gameApiKey: sparc-game-dev-key-change-in-production
   logReadyMessage: 1
 --- !u!4 &1510258901
