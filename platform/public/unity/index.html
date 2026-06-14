@@ -7,7 +7,7 @@
     <link rel="shortcut icon" href="TemplateData/favicon.ico">
     <link rel="stylesheet" href="TemplateData/style.css">
     <script>/* StudentGameConfig bridge */try{if(window.parent&&window.parent.StudentGameConfig&&!window.StudentGameConfig)window.StudentGameConfig=window.parent.StudentGameConfig;}catch(e){}</script>
-    <style>canvas,#unity-container,#unity-canvas{touch-action:none;-ms-touch-action:none;}/* sparc-landscape-only */#sparc-landscape-overlay{display:none;position:fixed;inset:0;z-index:99999;align-items:center;justify-content:center;flex-direction:column;gap:16px;background:#020617;color:#fff;text-align:center;padding:24px;font-family:system-ui,sans-serif;}#sparc-landscape-overlay h2{margin:0;font-size:1.5rem;}#sparc-landscape-overlay p{margin:0;max-width:20rem;color:#cbd5e1;line-height:1.5;}@media (orientation: portrait) and (max-width: 1024px){#sparc-landscape-overlay{display:flex;}#unity-container,#unity-loading-bar,#unity-footer,#unity-warning{visibility:hidden;}}</style>
+    <style>canvas,#unity-container,#unity-canvas{touch-action:none;-ms-touch-action:none;}/* sparc-force-horizontal */html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#000;}@media (orientation:portrait) and (max-width:1024px){#unity-container{position:fixed;top:50%;left:50%;width:100vh;height:100vw;transform:translate(-50%,-50%) rotate(90deg);transform-origin:center center;}}</style>
   </head>
   <body>
     <div id="unity-container" class="unity-desktop">
@@ -61,9 +61,9 @@
       var buildUrl = "Build";
       var loaderUrl = buildUrl + "/unity.loader.js";
       var config = {
-        dataUrl: buildUrl + "/0d43613e1eee8a6a29c090e650053dcd.data",
-        frameworkUrl: buildUrl + "/6f34362d9be43e0510486dded8472002.js",
-        codeUrl: buildUrl + "/b2969c36abc2eb6f8d4f1fb347f85306.wasm",
+        dataUrl: buildUrl + "/0d1f183dbfe36da3b1dac77bdb64c42e.data",
+        frameworkUrl: buildUrl + "/295aeb9c37590637116cd07e76b2f689.js",
+        codeUrl: buildUrl + "/df91e8e25652725897edd4f055b29af4.wasm",
         streamingAssetsUrl: "StreamingAssets",
         companyName: "DefaultCompany",
         productName: "coding-block",
@@ -120,7 +120,6 @@
       document.body.appendChild(script);
 
     </script>
-    <div id="sparc-landscape-overlay"><div style="font-size:3rem;line-height:1">&#8635;</div><h2>Rotate your device</h2><p>Play in landscape (horizontal) mode. Turn your phone or tablet sideways.</p></div>
     <script>document.addEventListener('touchmove',function(e){if(e.touches.length>1)e.preventDefault();},{passive:false});</script>
   </body>
 </html>

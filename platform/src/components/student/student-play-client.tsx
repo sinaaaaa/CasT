@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import type { StudentGameConfig } from "@/lib/student-session";
-import { LandscapeRequiredOverlay } from "@/components/student/landscape-required-overlay";
 
 declare global {
   interface Window {
@@ -55,7 +54,6 @@ export function StudentPlayClient({
 
   return (
     <div className="student-zone flex min-h-screen flex-col bg-slate-950 text-white">
-      <LandscapeRequiredOverlay />
       <header className="flex shrink-0 items-center justify-between border-b border-indigo-500/20 bg-gradient-to-r from-[#312E81] to-[#1E1B4B] px-4 py-3 backdrop-blur">
         <div className="flex items-center gap-3">
           <Link

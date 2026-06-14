@@ -57,7 +57,7 @@ public static class WebGLBuildScript
 
         InjectStudentConfigBridge(outputDir);
         InjectTouchGestureGuards(outputDir);
-        InjectLandscapeOrientationGuard(outputDir);
+        InjectForceHorizontalLayout(outputDir);
         Debug.Log("[WebGLBuildScript] Build succeeded: " + outputDir);
         if (exitWhenDone)
             EditorApplication.Exit(0);
@@ -117,40 +117,31 @@ public static class WebGLBuildScript
     }
 
     /// <summary>
-    /// Blocks portrait play on phones/tablets and requests landscape orientation in the browser.
+    /// On portrait phones/tablets, rotates the game canvas so it always appears horizontal (no rotate prompt).
     /// </summary>
-    private static void InjectLandscapeOrientationGuard(string outputDir)
+    private static void InjectForceHorizontalLayout(string outputDir)
     {
         var indexPath = Path.Combine(outputDir, "index.html");
         if (!File.Exists(indexPath))
             return;
 
-        const string marker = "sparc-landscape-only";
+        const string marker = "sparc-force-horizontal";
         var html = File.ReadAllText(indexPath);
         if (html.Contains(marker))
             return;
 
         const string snippet =
-            "<style>/* sparc-landscape-only */" +
-            "#sparc-landscape-overlay{display:none;position:fixed;inset:0;z-index:99999;" +
-            "align-items:center;justify-content:center;flex-direction:column;gap:16px;" +
-            "background:#020617;color:#fff;text-align:center;padding:24px;font-family:system-ui,sans-serif;}" +
-            "#sparc-landscape-overlay h2{margin:0;font-size:1.5rem;}" +
-            "#sparc-landscape-overlay p{margin:0;max-width:20rem;color:#cbd5e1;line-height:1.5;}" +
-            "@media (orientation: portrait) and (max-width: 1024px){" +
-            "#sparc-landscape-overlay{display:flex;}" +
-            "#unity-container,#unity-loading-bar,#unity-footer,#unity-warning{visibility:hidden;}" +
-            "}</style>" +
-            "<div id=\"sparc-landscape-overlay\">" +
-            "<div style=\"font-size:3rem;line-height:1\">&#8635;</div>" +
-            "<h2>Rotate your device</h2>" +
-            "<p>Play in landscape (horizontal) mode. Turn your phone or tablet sideways.</p>" +
-            "</div>";
+            "<style>/* sparc-force-horizontal */" +
+            "html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#000;}" +
+            "@media (orientation:portrait) and (max-width:1024px){" +
+            "#unity-container{position:fixed;top:50%;left:50%;width:100vh;height:100vw;" +
+            "transform:translate(-50%,-50%) rotate(90deg);transform-origin:center center;}" +
+            "}</style>";
 
-        if (html.Contains("</body>"))
-            html = html.Replace("</body>", snippet + "</body>");
+        if (html.Contains("</head>"))
+            html = html.Replace("</head>", snippet + "</head>");
         else
-            html = html + snippet;
+            html = snippet + html;
 
         File.WriteAllText(indexPath, html);
     }
