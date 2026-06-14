@@ -15,6 +15,7 @@ type Props = {
   config: StudentGameConfig;
   unityGameUrl: string;
   displayName: string;
+  homeHref?: string;
 };
 
 function buildUnityUrl(baseUrl: string, config: StudentGameConfig): string {
@@ -23,10 +24,18 @@ function buildUnityUrl(baseUrl: string, config: StudentGameConfig): string {
   url.searchParams.set("studentCode", config.studentCode);
   url.searchParams.set("token", config.sessionToken);
   url.searchParams.set("apiBaseUrl", config.apiBaseUrl);
+  if (config.gameApiKey) {
+    url.searchParams.set("gameApiKey", config.gameApiKey);
+  }
   return url.pathname + url.search;
 }
 
-export function StudentPlayClient({ config, unityGameUrl, displayName }: Props) {
+export function StudentPlayClient({
+  config,
+  unityGameUrl,
+  displayName,
+  homeHref = "/student/home",
+}: Props) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "missing">("loading");
   const [iframeSrc, setIframeSrc] = useState(unityGameUrl);
@@ -48,7 +57,7 @@ export function StudentPlayClient({ config, unityGameUrl, displayName }: Props) 
       <header className="flex shrink-0 items-center justify-between border-b border-indigo-500/20 bg-gradient-to-r from-[#312E81] to-[#1E1B4B] px-4 py-3 backdrop-blur">
         <div className="flex items-center gap-3">
           <Link
-            href="/student/home"
+            href={homeHref}
             className="inline-flex items-center gap-2 rounded-xl px-3 py-1.5 text-sm font-semibold text-indigo-100 hover:bg-white/10"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -96,7 +105,7 @@ export function StudentPlayClient({ config, unityGameUrl, displayName }: Props) 
               )}
             </pre>
             <Link
-              href="/student/home"
+              href={homeHref}
               className="rounded-2xl bg-white px-6 py-3 font-semibold text-indigo-900 hover:bg-indigo-50"
             >
               Back to home

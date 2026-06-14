@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
 const nav = [
-  { href: "/student/play", label: "Play", icon: Play },
+  { href: "/play", label: "Play", icon: Play },
   { href: "/student/dashboard", label: "Dashboard", icon: Home },
   { href: "/student/progress", label: "Progress", icon: TrendingUp },
   { href: "/student/levels", label: "Items", icon: Layers },

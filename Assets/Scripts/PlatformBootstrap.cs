@@ -30,20 +30,25 @@ public class PlatformBootstrap : MonoBehaviour
         DontDestroyOnLoad(assessment.gameObject);
 
         EnsureStudentDataManager();
+    }
 
-        if (StudentWebConfig.TryApplyToGame())
+    private void Start()
+    {
+        if (!StudentWebConfig.TryApplyToGame())
         {
             if (logReadyMessage)
             {
-                Debug.Log($"[PlatformBootstrap] Web student session applied — {platformUrl}");
+                Debug.Log($"[PlatformBootstrap] Ready — {platformUrl} (enter Student ID on login screen)");
             }
             return;
         }
 
         if (logReadyMessage)
         {
-            Debug.Log($"[PlatformBootstrap] Ready — {platformUrl} (enter Student ID on login screen)");
+            Debug.Log($"[PlatformBootstrap] Web student session applied — {platformUrl}");
         }
+
+        StudentWebConfig.EnterGameFromWebSession();
     }
 
     private static void EnsureStudentDataManager()

@@ -142,7 +142,7 @@ export function StudentDashboardHome() {
                 size="xl"
                 variant="secondary"
                 className="border-0 bg-white text-[#4F46E5] hover:bg-indigo-50"
-                onClick={() => router.push("/student/play")}
+                onClick={() => router.push("/play")}
               >
                 <Play className="h-6 w-6" />
                 Play Now
@@ -203,7 +203,7 @@ export function StudentDashboardHome() {
               <h2 className="text-xl font-extrabold text-slate-900 sm:text-2xl">Your levels</h2>
               <p className="text-slate-600">Pick a challenge and help your robot succeed!</p>
             </div>
-            <SparcButton size="md" onClick={() => router.push("/student/play")}>
+            <SparcButton size="md" onClick={() => router.push("/play")}>
               <Play className="h-5 w-5" />
               Play
             </SparcButton>
@@ -214,7 +214,7 @@ export function StudentDashboardHome() {
                 key={level.id}
                 {...level}
                 index={i}
-                onClick={() => router.push("/student/play")}
+                onClick={() => router.push("/play")}
               />
             ))}
           </div>

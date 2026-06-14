@@ -18,6 +18,12 @@ public class LoginManager : MonoBehaviour
 
     private void Start()
     {
+        if (StudentWebConfig.HasWebSessionPayload())
+        {
+            HideLoginUi();
+            return;
+        }
+
         if (loginButton != null)
         {
             loginButton.onClick.AddListener(OnLoginButtonClicked);
@@ -36,6 +42,19 @@ public class LoginManager : MonoBehaviour
         if (studentIdInput != null)
         {
             // The Update loop now handles focus detection, so onSelect is not needed.
+        }
+    }
+
+    private void HideLoginUi()
+    {
+        if (studentIdInput != null)
+            studentIdInput.gameObject.SetActive(false);
+        if (loginButton != null)
+            loginButton.gameObject.SetActive(false);
+        if (statusText != null)
+        {
+            statusText.text = "Loading your game…";
+            statusText.color = Color.white;
         }
     }
 
@@ -186,7 +205,7 @@ public class LoginManager : MonoBehaviour
                       $"key='{PlayerPrefs.GetString(levelIdKey, "")}'");
         }
 
-        PlayerPrefs.SetString("SceneToLoadAfterLoading", "Level1");
+        PlayerPrefs.SetString("SceneToLoadAfterLoading", "level1");
         PlayerPrefs.Save();
 
         if (StudentDataManager.Instance == null)

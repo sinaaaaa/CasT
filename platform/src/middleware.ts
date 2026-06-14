@@ -57,6 +57,7 @@ function gameCorsHeaders(req: NextRequest): Record<string, string> {
 }
 
 function isPublicStudentPath(path: string): boolean {
+  if (path === "/play") return true;
   if (path === "/student") return true;
   if (path.startsWith("/student/login")) return true;
   if (path.startsWith("/student/home")) return true;

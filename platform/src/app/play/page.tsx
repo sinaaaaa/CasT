@@ -4,6 +4,6 @@ export const metadata = {
   title: "Play — Robot Coding",
 };
 
-export default function StudentPlayPage() {
-  return <StudentPlayView loginNext="/student/play" />;
+export default function PlayPage() {
+  return <StudentPlayView loginNext="/play" homeHref="/student/home" />;
 }

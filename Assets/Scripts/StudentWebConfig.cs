@@ -3,6 +3,7 @@ using System.Collections;
 using System.Runtime.InteropServices;
 using UnityEngine;
 using UnityEngine.Networking;
+using UnityEngine.SceneManagement;
 
 /// <summary>
 /// Reads student session config injected by the Next.js /student/play page (WebGL).
@@ -60,6 +61,39 @@ public static class StudentWebConfig
 
         Debug.Log($"[StudentWebConfig] Applied Web session for {studentCode}");
         return true;
+    }
+
+    /// <summary>
+    /// After TryApplyToGame(), skip MainMenu login and go straight to LoadingScene → level play.
+    /// </summary>
+    public static void EnterGameFromWebSession()
+    {
+        var payload = Load();
+        if (payload == null || string.IsNullOrWhiteSpace(payload.studentCode))
+            return;
+
+        var studentCode = PlatformCommunication.NormalizeExternalId(payload.studentCode.Trim());
+
+        string levelSlotKey = studentCode + "_currentLevel";
+        string levelIdKey = studentCode + "_currentLevelKey";
+        if (!PlayerPrefs.HasKey(levelSlotKey))
+        {
+            PlayerPrefs.SetInt(levelSlotKey, 1);
+            PlayerPrefs.DeleteKey(levelIdKey);
+        }
+
+        PlayerPrefs.SetString("SceneToLoadAfterLoading", "level1");
+        PlayerPrefs.Save();
+
+        Debug.Log($"[StudentWebConfig] Web login — skipping ID screen for {studentCode}");
+        SceneManager.LoadScene("LoadingScene");
+    }
+
+    /// <summary>True when the page URL or parent iframe injected a student session.</summary>
+    public static bool HasWebSessionPayload()
+    {
+        var payload = Load();
+        return payload != null && !string.IsNullOrWhiteSpace(payload.studentCode);
     }
 
     public static Payload Load()
