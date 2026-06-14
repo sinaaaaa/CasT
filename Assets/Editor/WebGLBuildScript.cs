@@ -145,12 +145,7 @@ public static class WebGLBuildScript
             "<div style=\"font-size:3rem;line-height:1\">&#8635;</div>" +
             "<h2>Rotate your device</h2>" +
             "<p>Play in landscape (horizontal) mode. Turn your phone or tablet sideways.</p>" +
-            "</div>" +
-            "<script>/* sparc-landscape-only */" +
-            "(function(){function lock(){try{if(screen.orientation&&screen.orientation.lock)" +
-            "screen.orientation.lock('landscape').catch(function(){});}catch(e){}}" +
-            "lock();window.addEventListener('orientationchange',lock);" +
-            "window.addEventListener('resize',lock);})();</script>";
+            "</div>";
 
         if (html.Contains("</body>"))
             html = html.Replace("</body>", snippet + "</body>");

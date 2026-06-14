@@ -6,6 +6,7 @@ import {
   getStudentSessionFromCookies,
   STUDENT_SESSION_COOKIE,
 } from "@/lib/student-session";
+import { resolveUnityGameUrl } from "@/lib/unity-game-url";
 
 type Props = {
   loginNext?: string;
@@ -25,10 +26,7 @@ export async function StudentPlayView({
   const sessionToken = cookieStore.get(STUDENT_SESSION_COOKIE)?.value ?? "";
   const config = buildStudentGameConfig(session, sessionToken);
 
-  const unityGameUrl =
-    process.env.UNITY_WEBGL_URL?.trim() ||
-    process.env.NEXT_PUBLIC_UNITY_WEBGL_URL?.trim() ||
-    "/unity/index.html";
+  const unityGameUrl = resolveUnityGameUrl();
 
   return (
     <StudentPlayClient

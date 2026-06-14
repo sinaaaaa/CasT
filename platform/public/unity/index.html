@@ -6,6 +6,8 @@
     <title>Unity WebGL Player | coding-block</title>
     <link rel="shortcut icon" href="TemplateData/favicon.ico">
     <link rel="stylesheet" href="TemplateData/style.css">
+    <script>/* StudentGameConfig bridge */try{if(window.parent&&window.parent.StudentGameConfig&&!window.StudentGameConfig)window.StudentGameConfig=window.parent.StudentGameConfig;}catch(e){}</script>
+    <style>canvas,#unity-container,#unity-canvas{touch-action:none;-ms-touch-action:none;}/* sparc-landscape-only */#sparc-landscape-overlay{display:none;position:fixed;inset:0;z-index:99999;align-items:center;justify-content:center;flex-direction:column;gap:16px;background:#020617;color:#fff;text-align:center;padding:24px;font-family:system-ui,sans-serif;}#sparc-landscape-overlay h2{margin:0;font-size:1.5rem;}#sparc-landscape-overlay p{margin:0;max-width:20rem;color:#cbd5e1;line-height:1.5;}@media (orientation: portrait) and (max-width: 1024px){#sparc-landscape-overlay{display:flex;}#unity-container,#unity-loading-bar,#unity-footer,#unity-warning{visibility:hidden;}}</style>
   </head>
   <body>
     <div id="unity-container" class="unity-desktop">
@@ -118,5 +120,7 @@
       document.body.appendChild(script);
 
     </script>
+    <div id="sparc-landscape-overlay"><div style="font-size:3rem;line-height:1">&#8635;</div><h2>Rotate your device</h2><p>Play in landscape (horizontal) mode. Turn your phone or tablet sideways.</p></div>
+    <script>document.addEventListener('touchmove',function(e){if(e.touches.length>1)e.preventDefault();},{passive:false});</script>
   </body>
 </html>

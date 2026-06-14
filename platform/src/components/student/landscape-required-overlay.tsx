@@ -17,19 +17,6 @@ function isPortraitViewport(): boolean {
   return window.matchMedia("(orientation: portrait)").matches;
 }
 
-async function tryLockLandscape(): Promise<void> {
-  try {
-    const orientation = screen.orientation as ScreenOrientation & {
-      lock?: (orientation: string) => Promise<void>;
-    };
-    if (orientation?.lock) {
-      await orientation.lock("landscape");
-    }
-  } catch {
-    // iOS Safari and some browsers require fullscreen before lock — overlay still guides the user.
-  }
-}
-
 export function LandscapeRequiredOverlay() {
   const [show, setShow] = useState(false);
 
@@ -39,7 +26,7 @@ export function LandscapeRequiredOverlay() {
     };
 
     update();
-    tryLockLandscape();
+    // Portrait overlay only — do not call screen.orientation.lock (throws in iframes / iOS).
 
     const portraitMq = window.matchMedia("(orientation: portrait)");
     portraitMq.addEventListener("change", update);
