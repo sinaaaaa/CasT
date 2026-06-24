@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { studentScopeWhere } from "@/lib/class-access";
+import { assertClassAccess, studentScopeWhere } from "@/lib/class-access";
 import { requireTeacher } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 import { normalizeExternalStudentId } from "@/lib/game-service";
@@ -10,6 +10,7 @@ import { z } from "zod";
 const createStudentSchema = z.object({
   displayName: z.string().min(1).max(120),
   externalId: z.string().min(1).max(64),
+  classId: z.string().min(1).optional(),
   email: z.string().email().optional(),
   password: z.string().min(6).optional(),
 });
@@ -83,13 +84,35 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const { error } = await requireTeacher();
+  const { error, scope } = await requireTeacher();
   if (error) return error;
 
   const body = await request.json();
   const parsed = createStudentSchema.safeParse(body);
   if (!parsed.success) {
     return Response.json({ error: parsed.error.flatten() }, { status: 400 });
+  }
+
+  const classId = parsed.data.classId?.trim();
+  if (!scope!.isAdmin) {
+    if (!scope!.teacherProfileId || (scope!.classIds?.length ?? 0) === 0) {
+      return Response.json(
+        { error: "Create a class first, then add students to it." },
+        { status: 400 }
+      );
+    }
+    if (!classId) {
+      return Response.json(
+        { error: "Class is required when adding a student." },
+        { status: 400 }
+      );
+    }
+    if (!assertClassAccess(scope!, classId)) {
+      return Response.json({ error: "You do not have access to this class" }, { status: 403 });
+    }
+  } else if (classId) {
+    const cls = await prisma.class.findUnique({ where: { id: classId } });
+    if (!cls) return Response.json({ error: "Class not found" }, { status: 404 });
   }
 
   const externalId = normalizeExternalStudentId(parsed.data.externalId);
@@ -106,19 +129,29 @@ export async function POST(request: NextRequest) {
   }
 
   const hashed = await bcrypt.hash(password, 10);
-  const student = await prisma.studentProfile.create({
-    data: {
-      displayName: parsed.data.displayName,
-      externalId,
-      user: {
-        create: {
-          email,
-          password: hashed,
-          role: UserRole.STUDENT,
+  const student = await prisma.$transaction(async (tx) => {
+    const created = await tx.studentProfile.create({
+      data: {
+        displayName: parsed.data.displayName,
+        externalId,
+        user: {
+          create: {
+            email,
+            password: hashed,
+            role: UserRole.STUDENT,
+          },
         },
       },
-    },
-    include: { user: { select: { email: true } } },
+      include: { user: { select: { email: true } } },
+    });
+
+    if (classId) {
+      await tx.classStudent.create({
+        data: { classId, studentId: created.id },
+      });
+    }
+
+    return created;
   });
 
   return Response.json({ student }, { status: 201 });

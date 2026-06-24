@@ -2,7 +2,9 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Download, Search, Trash2, UserPlus } from "lucide-react";
+import { AddStudentDialog } from "@/components/teacher/add-student-dialog";
 import { BulkLevelAssignmentPanel } from "@/components/teacher/bulk-level-assignment-panel";
 import { PageHeader } from "@/components/assessment/page-header";
 import { EduStudentListItem } from "@/components/edu/edu-student-list-item";
@@ -40,7 +42,9 @@ export function StudentsHub({
   initialNeedsHelp?: boolean;
   initialSort?: "name" | "recent";
 }) {
+  const router = useRouter();
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [addOpen, setAddOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -89,26 +93,6 @@ export function StudentsHub({
     }
   }
 
-  async function addStudent() {
-    const displayName = prompt("Student display name");
-    if (!displayName?.trim()) return;
-    const externalId = prompt("Student ID (e.g. 1001 or STU-1001)");
-    if (!externalId?.trim()) return;
-    setBusy(true);
-    try {
-      const res = await fetch("/api/teacher/students", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ displayName: displayName.trim(), externalId: externalId.trim() }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error ?? "Failed");
-      window.location.reload();
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Could not add student");
-      setBusy(false);
-    }
-  }
-
   async function editStudent(s: StudentRow) {
     const displayName = prompt("Display name", s.displayName);
     if (!displayName?.trim()) return;
@@ -150,7 +134,18 @@ export function StudentsHub({
 
       <BulkLevelAssignmentPanel
         selectedStudentIds={selectedIds}
-        onComplete={() => window.location.reload()}
+        onComplete={() => router.refresh()}
+      />
+
+      <AddStudentDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        classes={classes}
+        defaultClassId={initialClassId}
+        onCreated={() => {
+          setMessage("Student added.");
+          router.refresh();
+        }}
       />
 
       <div className="mb-6 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-100">
@@ -168,9 +163,9 @@ export function StudentsHub({
             </span>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" size="sm" className="rounded-xl" onClick={addStudent} disabled={busy}>
+            <Button type="button" variant="outline" size="sm" className="rounded-xl" onClick={() => setAddOpen(true)} disabled={busy}>
               <UserPlus className="mr-1 h-4 w-4" />
-              Add
+              Add student
             </Button>
             <Button
               type="button"
