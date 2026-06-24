@@ -88,7 +88,11 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      rows.push(student);
+      rows.push({
+        id: student.id,
+        displayName: student.displayName,
+        externalId: student.externalId ?? externalId,
+      });
     }
 
     return rows;
