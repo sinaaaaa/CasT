@@ -109,12 +109,12 @@ export function AddStudentDialog({
       if (!res.ok) throw new Error(parseApiError(data, "Could not generate for this range"));
 
       const record = data as Record<string, unknown>;
-      const from = record.from as number;
-      const to = record.to as number;
+      const rangeFromNum = record.from as number;
+      const rangeToNum = record.to as number;
       const count = record.count as number;
       const prefix = String(record.namePrefix ?? namePrefix.trim());
-      const { head, tail } = buildStudentSlotPreviews(from, to, prefix);
-      const preview = { head, tail, count, from, to };
+      const { head, tail } = buildStudentSlotPreviews(rangeFromNum, rangeToNum, prefix);
+      const preview = { head, tail, count, from: rangeFromNum, to: rangeToNum };
       setRangePreview(preview);
       return preview;
     } catch (err) {
