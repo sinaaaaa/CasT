@@ -1,10 +1,17 @@
--- Link teacher copies to the platform default they replace (one customization per teacher per source item).
+-- Safe additive migration: no rows deleted. Re-run friendly where noted.
 ALTER TABLE "Level" ADD COLUMN IF NOT EXISTS "customizedFromLevelId" TEXT;
 
-ALTER TABLE "Level"
-  ADD CONSTRAINT "Level_customizedFromLevelId_fkey"
-  FOREIGN KEY ("customizedFromLevelId") REFERENCES "Level"("id")
-  ON DELETE SET NULL ON UPDATE CASCADE;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'Level_customizedFromLevelId_fkey'
+  ) THEN
+    ALTER TABLE "Level"
+      ADD CONSTRAINT "Level_customizedFromLevelId_fkey"
+      FOREIGN KEY ("customizedFromLevelId") REFERENCES "Level"("id")
+      ON DELETE SET NULL ON UPDATE CASCADE;
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS "Level_customizedFromLevelId_idx" ON "Level"("customizedFromLevelId");
 

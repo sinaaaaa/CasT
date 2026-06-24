@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { assertLevelReadAccess } from "@/lib/class-access";
 import { requireTeacher } from "@/lib/api-auth";
+import { findExistingCustomization, linkLevelCustomization } from "@/lib/level-customization";
 import { resolveAssignedByTeacherId } from "@/lib/level-student-assignments";
 import { prisma } from "@/lib/prisma";
 import { INTRO_LEVEL_KEY } from "@/lib/level-config";
@@ -16,36 +17,6 @@ async function uniqueLevelKey(base: string): Promise<string> {
     n += 1;
   }
   return candidate;
-}
-
-async function findExistingCustomization(
-  ownerTeacherId: string,
-  sourceId: string,
-  sourceLevelKey: string
-) {
-  const linked = await prisma.level.findFirst({
-    where: {
-      ownerTeacherId,
-      customizedFromLevelId: sourceId,
-      isArchived: false,
-    },
-  });
-  if (linked) return linked;
-
-  const legacy = await prisma.level.findFirst({
-    where: {
-      ownerTeacherId,
-      isArchived: false,
-      levelKey: { startsWith: `${sourceLevelKey}_copy` },
-    },
-  });
-  if (legacy && !legacy.customizedFromLevelId) {
-    return prisma.level.update({
-      where: { id: legacy.id },
-      data: { customizedFromLevelId: sourceId },
-    });
-  }
-  return legacy;
 }
 
 /** Copy a platform or shared item into this teacher's catalog so they can edit and assign it. */
@@ -117,9 +88,12 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       published: false,
       config: source.config as object,
       ownerTeacherId,
-      customizedFromLevelId: source.id,
     },
   });
+
+  if (ownerTeacherId) {
+    await linkLevelCustomization(level.id, source.id);
+  }
 
   return Response.json(
     {
