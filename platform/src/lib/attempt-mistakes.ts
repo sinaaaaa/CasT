@@ -27,6 +27,32 @@ export function parseAttemptRunMeta(mistakes: unknown): AttemptRunMeta {
   return { inLevelRunNumber, maxLevelRuns, playSlot };
 }
 
+type AttemptDisplayRow = {
+  levelId: string;
+  startedAt: Date | string;
+  endedAt: Date | string | null;
+  status: string;
+};
+
+/** Hide orphan INCOMPLETE rows superseded by a later ended run on the same item. */
+export function filterSupersededIncompleteAttempts<T extends AttemptDisplayRow>(
+  attempts: T[]
+): T[] {
+  return attempts.filter((attempt) => {
+    if (attempt.endedAt != null) return true;
+    if (attempt.status !== "INCOMPLETE") return true;
+
+    const startedMs = new Date(attempt.startedAt).getTime();
+    const superseded = attempts.some(
+      (other) =>
+        other.levelId === attempt.levelId &&
+        other.endedAt != null &&
+        new Date(other.startedAt).getTime() > startedMs
+    );
+    return !superseded;
+  });
+}
+
 /** Label for dashboard tables, e.g. "Try 1 of 2" or "Session #3". */
 export function formatAttemptRunLabel(
   attemptNumber: number,

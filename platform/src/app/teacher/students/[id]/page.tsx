@@ -5,7 +5,7 @@ import { assertStudentAccess, resolveTeacherScope } from "@/lib/class-access";
 import { getStudentProgress } from "@/lib/analytics";
 import { formatStudentAttemptItemLabelFromAttempt } from "@/lib/student-item-label";
 import { getPlayableLevelsForStudent } from "@/lib/level-assignments";
-import { parseAttemptRunMeta, formatAttemptRunLabel } from "@/lib/attempt-mistakes";
+import { parseAttemptRunMeta, formatAttemptRunLabel, filterSupersededIncompleteAttempts } from "@/lib/attempt-mistakes";
 import { prisma } from "@/lib/prisma";
 import { TeacherShell } from "@/components/teacher/teacher-shell";
 import { StudentProfileView } from "@/components/teacher/student-profile-view";
@@ -66,7 +66,7 @@ export default async function StudentProfilePage({
           finalCommand: l.finalCommand,
           lastAttemptAt: l.lastAttemptAt?.toISOString() ?? null,
         }))}
-        attempts={recentAttempts.map((a) => {
+        attempts={filterSupersededIncompleteAttempts(recentAttempts).map((a) => {
           const runMeta = parseAttemptRunMeta(a.mistakes);
           return {
             id: a.id,

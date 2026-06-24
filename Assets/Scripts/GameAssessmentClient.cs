@@ -94,6 +94,15 @@ public class GameAssessmentClient : MonoBehaviour
         _startInFlight = false;
     }
 
+    /// <summary>
+    /// Drops the local attempt handle after level-end is queued (end payload keeps the captured id).
+    /// Does not cancel in-flight level-start requests.
+    /// </summary>
+    private void ReleaseAttemptAfterQueuedEnd()
+    {
+        _currentAttemptId = null;
+    }
+
     public void StartLevel(string levelIdOrKey, string initialCommand = null, int slotNumber = 0, Action<bool> onComplete = null)
     {
         _currentLevelId = levelIdOrKey;
@@ -195,8 +204,13 @@ public class GameAssessmentClient : MonoBehaviour
     {
         SetStudent(externalStudentId);
         _currentLevelId = levelKey;
+        var capturedAttemptId = _currentAttemptId;
+        var playSlot = assessmentExtras != null && assessmentExtras.playSlot > 0
+            ? assessmentExtras.playSlot
+            : 0;
         EnqueueEnd(new LevelEndRequest
         {
+            attemptId = capturedAttemptId,
             status = status,
             passed = passed,
             score = score,
@@ -212,8 +226,11 @@ public class GameAssessmentClient : MonoBehaviour
             assessmentExtras = assessmentExtras,
             initialCommand = initialCommand,
             levelKey = levelKey,
-            waitForAttemptStart = true
+            playSlot = playSlot,
+            waitForAttemptStart = string.IsNullOrEmpty(capturedAttemptId)
         });
+        if (!string.IsNullOrEmpty(capturedAttemptId))
+            ReleaseAttemptAfterQueuedEnd();
     }
 
     public void EndLevel(
@@ -232,8 +249,10 @@ public class GameAssessmentClient : MonoBehaviour
         Action<bool> onComplete = null,
         AssessmentExtrasPayload assessmentExtras = null)
     {
+        var capturedAttemptId = _currentAttemptId;
         EnqueueEnd(new LevelEndRequest
         {
+            attemptId = capturedAttemptId,
             status = status,
             passed = passed,
             score = score,
@@ -248,8 +267,10 @@ public class GameAssessmentClient : MonoBehaviour
             resetCount = resetCount,
             assessmentExtras = assessmentExtras,
             onComplete = onComplete,
-            waitForAttemptStart = false
+            waitForAttemptStart = string.IsNullOrEmpty(capturedAttemptId)
         });
+        if (!string.IsNullOrEmpty(capturedAttemptId))
+            ReleaseAttemptAfterQueuedEnd();
     }
 
     private void EnqueueEnd(LevelEndRequest request)
@@ -272,7 +293,9 @@ public class GameAssessmentClient : MonoBehaviour
 
     private IEnumerator EndLevelWhenReady(LevelEndRequest request)
     {
-        if (request.waitForAttemptStart)
+        var attemptId = request.attemptId;
+
+        if (request.waitForAttemptStart && string.IsNullOrEmpty(attemptId))
         {
             float elapsed = 0f;
             while (string.IsNullOrEmpty(_currentAttemptId) && (_startInFlight || elapsed < 15f))
@@ -281,12 +304,16 @@ public class GameAssessmentClient : MonoBehaviour
                 yield return null;
             }
 
-            if (string.IsNullOrEmpty(_currentAttemptId))
+            attemptId = !string.IsNullOrEmpty(request.attemptId)
+                ? request.attemptId
+                : _currentAttemptId;
+
+            if (string.IsNullOrEmpty(attemptId))
             {
                 Debug.LogWarning("[Assessment] No attempt id after waiting — starting level before end.");
                 bool started = false;
                 bool startOk = false;
-                StartLevel(request.levelKey, request.initialCommand, 0, ok =>
+                StartLevel(request.levelKey, request.initialCommand, request.playSlot, ok =>
                 {
                     startOk = ok;
                     started = true;
@@ -297,7 +324,8 @@ public class GameAssessmentClient : MonoBehaviour
                     elapsed += Time.unscaledDeltaTime;
                     yield return null;
                 }
-                if (!startOk || string.IsNullOrEmpty(_currentAttemptId))
+                attemptId = _currentAttemptId;
+                if (!startOk || string.IsNullOrEmpty(attemptId))
                 {
                     Debug.LogError("[Assessment] level-end aborted: could not obtain attempt id.");
                     request.onComplete?.Invoke(false);
@@ -306,14 +334,15 @@ public class GameAssessmentClient : MonoBehaviour
             }
         }
 
-        if (string.IsNullOrEmpty(_currentAttemptId))
+        if (string.IsNullOrEmpty(attemptId))
+            attemptId = _currentAttemptId;
+
+        if (string.IsNullOrEmpty(attemptId))
         {
             Debug.LogWarning("[Assessment] level-end skipped: no active attempt.");
             request.onComplete?.Invoke(false);
             yield break;
         }
-
-        var attemptId = _currentAttemptId;
         var payload = new LevelEndPayload
         {
             attemptId = attemptId,
@@ -394,6 +423,7 @@ public class GameAssessmentClient : MonoBehaviour
 
     private class LevelEndRequest
     {
+        public string attemptId;
         public string status;
         public bool passed;
         public int score;
@@ -411,6 +441,7 @@ public class GameAssessmentClient : MonoBehaviour
         public bool waitForAttemptStart;
         public string levelKey;
         public string initialCommand;
+        public int playSlot;
     }
 
     [Serializable]

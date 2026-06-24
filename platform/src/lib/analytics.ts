@@ -3,7 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { formatItemDisplayName } from "@/lib/item-display";
 import { getPlayableLevelsForStudent } from "@/lib/level-assignments";
 import { formatStudentAttemptItemLabel } from "@/lib/student-item-label";
-import { parsePlaySlot } from "@/lib/attempt-mistakes";
+import { parsePlaySlot, filterSupersededIncompleteAttempts } from "@/lib/attempt-mistakes";
 import { formatAttemptRunLabel, parseAttemptRunMeta } from "@/lib/attempt-mistakes";
 import { levelsForTeachersWhere, getClassTeacherProfileIds, levelScopeWhere, type TeacherScope } from "@/lib/class-access";
 import { prisma } from "@/lib/prisma";
@@ -94,10 +94,10 @@ export function summarizeStudentListProgress(
     const endedAttempts = levelAttempts.filter((a) => a.endedAt != null);
     const statusAttempts = endedAttempts.length > 0 ? endedAttempts : levelAttempts;
     const best = statusAttempts.find((a) => a.passed) ?? statusAttempts[0];
-    const levelPassed = levelAttempts.some((a) => a.passed);
+    const levelPassed = endedAttempts.some((a) => a.passed);
 
     if (levelPassed) passed += 1;
-    else if (best?.status === AttemptStatus.INCORRECT) failed += 1;
+    else if (endedAttempts.length > 0 && best?.status === AttemptStatus.INCORRECT) failed += 1;
 
     if (best?.score != null) {
       scoreSum += best.score;
@@ -485,17 +485,23 @@ export async function getStudentProgress(studentProfileId: string) {
     const endedAttempts = levelAttempts.filter((a) => a.endedAt != null);
     const statusAttempts = endedAttempts.length > 0 ? endedAttempts : levelAttempts;
     const best = statusAttempts.find((a) => a.passed) ?? statusAttempts[0];
-    const levelPassed = levelAttempts.some((a) => a.passed);
+    const levelPassed = endedAttempts.some((a) => a.passed);
+    const displayAttempts =
+      endedAttempts.length > 0 ? endedAttempts.length : levelAttempts.length;
     return {
       levelId: level.id,
       levelKey: level.levelKey,
       name: formatItemDisplayName(level.name),
       orderIndex: level.orderIndex,
       playSlot: index + 1,
-      attempts: levelAttempts.length,
+      attempts: displayAttempts,
       status: levelPassed
         ? AttemptStatus.CORRECT
-        : (best?.status ?? AttemptStatus.INCOMPLETE),
+        : endedAttempts.length > 0
+          ? (best?.status ?? AttemptStatus.INCOMPLETE)
+          : levelAttempts.length > 0
+            ? AttemptStatus.INCOMPLETE
+            : AttemptStatus.INCOMPLETE,
       passed: levelPassed,
       score: best?.score ?? null,
       totalTimeSeconds: best?.totalTimeSeconds ?? null,
@@ -533,7 +539,7 @@ export async function getStudentProgress(studentProfileId: string) {
       completionPercent: summary.completionPercent,
     },
     levels: levelProgress,
-    history: attempts.map((a) => ({
+    history: filterSupersededIncompleteAttempts(attempts).map((a) => ({
       id: a.id,
       level: formatStudentAttemptItemLabel(
         playableRefs,
