@@ -6,6 +6,7 @@ import { TeacherShell } from "@/components/teacher/teacher-shell";
 import { LevelsHub, type LevelHubRow } from "@/components/teacher/levels-hub";
 import { LevelType } from "@prisma/client";
 import { INTRO_LEVEL_KEY, levelGameplayConfigSchema } from "@/lib/level-config";
+import { assertLevelEditAccess } from "@/lib/class-access";
 
 export default async function TeacherLevelsPage() {
   const session = await getServerSession(authOptions);
@@ -35,6 +36,9 @@ export default async function TeacherLevelsPage() {
         published: l.published,
         visible,
         attemptCount: attemptCounts.get(l.id) ?? 0,
+        ownerTeacherId: l.ownerTeacherId,
+        canEdit: assertLevelEditAccess(scope, l),
+        isPlatformDefault: l.ownerTeacherId === null,
       };
     });
 

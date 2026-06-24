@@ -602,6 +602,7 @@ public class CharacterMove : MonoBehaviour
 
     public float collisionBackstep = 1f; // Distance to move back on collision
     private Vector3 lastSafePosition; // To store the character's last safe position
+    private bool _lastMoveBlocked;
 
     public Text applesNeededText; // UI Text to display level info
 
@@ -2967,6 +2968,9 @@ public class CharacterMove : MonoBehaviour
         }
 
         currentLevel = levelNumber;
+
+        if (GameAssessmentClient.Instance != null)
+            GameAssessmentClient.Instance.ClearCurrentAttempt();
         
         // Clean up any old AppleCluster scripts from the scene
         CleanupOldAppleClusterScripts();
@@ -3554,7 +3558,6 @@ public class CharacterMove : MonoBehaviour
         // Per-level timer and initial command snapshot (after guided queue / palette are configured).
         levelStartTime = Time.time;
         CaptureInitialProgramTelemetry();
-        EnsurePlatformRunAttemptStarted();
 
         EnsureCornerHintPanel();
         EnsureActionBlockIntro();
@@ -4002,7 +4005,11 @@ public class CharacterMove : MonoBehaviour
     {
         LevelData ld = GetCurrentLevelData();
         if (ld != null && IsIntroLevel(ld))
+        {
+            if (GameAssessmentClient.Instance != null)
+                GameAssessmentClient.Instance.ClearCurrentAttempt();
             AdvanceToNextLevel();
+        }
     }
 
     private void OnSuccessPopupContinue()
@@ -4036,12 +4043,19 @@ public class CharacterMove : MonoBehaviour
     {
         if (string.IsNullOrEmpty(currentUserId) || currentUserId == "UnknownUser") return;
         if (GameAssessmentClient.Instance == null) return;
-        if (!string.IsNullOrEmpty(GameAssessmentClient.Instance.CurrentAttemptId)) return;
 
         string levelKey = GetPlatformLevelKey(currentLevel);
+        var client = GameAssessmentClient.Instance;
+        if (!string.IsNullOrEmpty(client.CurrentAttemptId))
+        {
+            if (client.CurrentLevelId == levelKey)
+                return;
+            client.ClearCurrentAttempt();
+        }
+
         string initial = BuildCommandsString(_telemetryInitialCommands);
-        GameAssessmentClient.Instance.SetStudent(currentUserId);
-        GameAssessmentClient.Instance.StartLevel(levelKey, string.IsNullOrEmpty(initial) ? null : initial);
+        client.SetStudent(currentUserId);
+        client.StartLevel(levelKey, string.IsNullOrEmpty(initial) ? null : initial);
     }
 
     private void ReportCurrentRunToPlatform(bool passed)
@@ -4916,6 +4930,7 @@ public class CharacterMove : MonoBehaviour
         _activeInLevelRunNumber = currentAttempt + 1;
         _runAttemptStartTime = Time.time;
         _currentRunReportedToPlatform = false;
+        _lastMoveBlocked = false;
         EnsurePlatformRunAttemptStarted();
 
         RecordTelemetryBeforeRun();
@@ -5397,6 +5412,7 @@ public class CharacterMove : MonoBehaviour
         {
         int actionsInThisRun = actionQueue.Count; 
         Queue<CharacterAction> successfullyExecutedActions = new Queue<CharacterAction>();
+        LevelData levelData = GetCurrentLevelData();
         isProcessing = true;
         while (actionQueue.Count > 0)
         {
@@ -5404,6 +5420,13 @@ public class CharacterMove : MonoBehaviour
             HighlightFirstNonPlaceholderQueueChild();
             if (action != null)
                 yield return action.Execute(this);
+            if (_lastMoveBlocked)
+            {
+                _lastMoveBlocked = false;
+                isProcessing = false;
+                HandleRunFailure(levelData, "Blocked by obstacle");
+                yield break;
+            }
             successfullyExecutedActions.Enqueue(action);
             DestroyFirstNonPlaceholderQueueChild();
 
@@ -5425,7 +5448,7 @@ public class CharacterMove : MonoBehaviour
         }
 
         // Check for wrong blank answer after all actions
-        LevelData levelData = GetCurrentLevelData();
+        levelData = GetCurrentLevelData();
         if (levelData != null && levelData.guidedActions != null && levelData.guidedActions.Contains("blank"))
         {
             if (!IsBlankAnswerCorrect())
@@ -5581,6 +5604,47 @@ public class CharacterMove : MonoBehaviour
 
     public IEnumerator MoveCoroutine(Vector3 direction)
     {
+        _lastMoveBlocked = false;
+        Vector2Int candidateCell = robotGridPosition;
+        bool isLinearMove = direction == Vector3.forward || direction == -Vector3.forward;
+        if (isLinearMove)
+        {
+            if (direction == Vector3.forward)
+                candidateCell += facingDirection;
+            else
+                candidateCell -= facingDirection;
+
+            LevelData ld = GetCurrentLevelData();
+            if (ld != null && UsesNumberLine(ld))
+                candidateCell.y = ld.robotStartPosition.y;
+
+            if (!CanRobotEnterCell(candidateCell))
+            {
+                _lastMoveBlocked = true;
+                lastSafePosition = transform.position;
+                Vector3 bumpDir = Quaternion.Euler(0, transform.eulerAngles.y, 0) * direction * gridSize;
+                Vector3 bumpTarget = lastSafePosition + bumpDir * 0.35f;
+                animator.SetBool("isWalking", true);
+                if (audioSource1 != null && footstepsround != null && !audioSource1.isPlaying)
+                    audioSource1.PlayOneShot(footstepsround);
+
+                float bumpElapsed = 0f;
+                float bumpDuration = moveDuration * 0.35f;
+                while (bumpElapsed < bumpDuration)
+                {
+                    transform.position = Vector3.Lerp(lastSafePosition, bumpTarget, bumpElapsed / bumpDuration);
+                    bumpElapsed += Time.deltaTime;
+                    yield return null;
+                }
+
+                yield return MoveBackCoroutine();
+                animator.SetBool("isWalking", false);
+                if (audioSource1 != null) audioSource1.Stop();
+                Debug.Log($"[CharacterMove] Move blocked at cell {candidateCell}; robot stays at {robotGridPosition}");
+                yield break;
+            }
+        }
+
         Vector3 adjustedDirection = Quaternion.Euler(0, transform.eulerAngles.y, 0) * direction * gridSize;
         Vector3 startPosition = transform.position;
         Vector3 endPosition = startPosition + adjustedDirection;
@@ -5604,6 +5668,7 @@ public class CharacterMove : MonoBehaviour
         }
 
         transform.position = endPosition;
+        lastSafePosition = endPosition;
         animator.SetBool("isWalking", false);
         if (audioSource1 != null) audioSource1.Stop(); // Null check
 
@@ -5614,7 +5679,7 @@ public class CharacterMove : MonoBehaviour
         else if (direction == -Vector3.forward)
             robotGridPosition -= facingDirection;
 
-        if (direction == Vector3.forward || direction == -Vector3.forward)
+        if (isLinearMove)
         {
             SnapRobotToLogicalGridCell();
             OnRobotMovedInMatrix(prevRobotCell, robotGridPosition);
@@ -5634,7 +5699,6 @@ public class CharacterMove : MonoBehaviour
     {
         float elapsedTime = 0;
         Vector3 startPosition = transform.position;
-        // Quaternion startRotation = transform.rotation; // Not used
 
         while (elapsedTime < moveDuration)
         {
@@ -5643,6 +5707,7 @@ public class CharacterMove : MonoBehaviour
             yield return null;
         }
         transform.position = lastSafePosition;
+        SnapRobotToLogicalGridCell();
     }
 
 

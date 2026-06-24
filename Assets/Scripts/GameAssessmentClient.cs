@@ -83,6 +83,16 @@ public class GameAssessmentClient : MonoBehaviour
     }
 
     public string CurrentAttemptId => _currentAttemptId;
+    public string CurrentLevelId => _currentLevelId;
+
+    /// <summary>Clears the active attempt when loading a new item (prevents cross-item telemetry).</summary>
+    public void ClearCurrentAttempt()
+    {
+        _currentAttemptId = null;
+        _currentLevelId = null;
+        _startRequestGeneration++;
+        _startInFlight = false;
+    }
 
     public void StartLevel(string levelIdOrKey, string initialCommand = null, Action<bool> onComplete = null)
     {
@@ -116,7 +126,7 @@ public class GameAssessmentClient : MonoBehaviour
                 Debug.LogError($"[Assessment] level-start failed (HTTP {code}): {body}");
             }
             onComplete?.Invoke(ok);
-        }));
+        }, retries: 2));
     }
 
     public void SaveCommandEvent(string command, string action, Action<bool> onComplete = null)
@@ -335,7 +345,7 @@ public class GameAssessmentClient : MonoBehaviour
             }
             else Debug.LogError($"[Assessment] level-end failed (HTTP {code}): {body}");
             done = true;
-        }));
+        }, retries: 2));
 
         float wait = 0f;
         while (!done && wait < 20f)
@@ -347,27 +357,38 @@ public class GameAssessmentClient : MonoBehaviour
         request.onComplete?.Invoke(success);
     }
 
-    private IEnumerator PostJson(string path, object payload, Action<bool, string, long> callback)
+    private IEnumerator PostJson(string path, object payload, Action<bool, string, long> callback, int retries = 1)
     {
-        var json = JsonUtility.ToJson(payload);
-        var url = apiBaseUrl.TrimEnd('/') + path;
-        using var req = new UnityWebRequest(url, "POST");
-        var bodyRaw = Encoding.UTF8.GetBytes(json);
-        req.uploadHandler = new UploadHandlerRaw(bodyRaw);
-        req.downloadHandler = new DownloadHandlerBuffer();
-        req.SetRequestHeader("Content-Type", "application/json");
-        req.SetRequestHeader("X-Game-Api-Key", gameApiKey);
-
-        yield return req.SendWebRequest();
-
-        var responseText = req.downloadHandler?.text;
-        if (string.IsNullOrEmpty(responseText) && !string.IsNullOrEmpty(req.error))
+        var attempt = 0;
+        while (true)
         {
-            responseText = req.error;
-        }
+            var json = JsonUtility.ToJson(payload);
+            var url = apiBaseUrl.TrimEnd('/') + path;
+            using var req = new UnityWebRequest(url, "POST");
+            var bodyRaw = Encoding.UTF8.GetBytes(json);
+            req.uploadHandler = new UploadHandlerRaw(bodyRaw);
+            req.downloadHandler = new DownloadHandlerBuffer();
+            req.SetRequestHeader("Content-Type", "application/json");
+            req.SetRequestHeader("X-Game-Api-Key", gameApiKey);
 
-        var success = req.result == UnityWebRequest.Result.Success;
-        callback?.Invoke(success, responseText ?? "", req.responseCode);
+            yield return req.SendWebRequest();
+
+            var responseText = req.downloadHandler?.text;
+            if (string.IsNullOrEmpty(responseText) && !string.IsNullOrEmpty(req.error))
+            {
+                responseText = req.error;
+            }
+
+            var success = req.result == UnityWebRequest.Result.Success;
+            if (success || attempt >= retries)
+            {
+                callback?.Invoke(success, responseText ?? "", req.responseCode);
+                yield break;
+            }
+
+            attempt++;
+            yield return new WaitForSecondsRealtime(0.6f);
+        }
     }
 
     private class LevelEndRequest

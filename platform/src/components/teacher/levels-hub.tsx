@@ -33,6 +33,9 @@ export type LevelHubRow = {
   published: boolean;
   visible: boolean;
   attemptCount: number;
+  ownerTeacherId?: string | null;
+  canEdit?: boolean;
+  isPlatformDefault?: boolean;
 };
 
 export type IntroLevelSummary = {
