@@ -136,13 +136,30 @@ export async function studentHasLevelAccess(
   if (!level || !level.published || level.isArchived) return false;
 
   const teacherIds = await getStudentTeacherProfileIds(studentProfileId);
+  const customizationIndex = await buildTeacherCustomizationIndex(teacherIds, {
+    publishedOnly: true,
+  });
+
+  if (level.ownerTeacherId === null && customizationIndex.supersededDefaultIds.has(levelId)) {
+    return false;
+  }
+  const chosenCopyIds = new Set(customizationIndex.publishedReplacementBySource.values());
+  if (
+    level.ownerTeacherId &&
+    customizationIndex.customizationCopyIds.has(levelId) &&
+    !chosenCopyIds.has(levelId)
+  ) {
+    return false;
+  }
+
   const allowed =
     level.ownerTeacherId === null || teacherIds.includes(level.ownerTeacherId);
   if (!allowed) return false;
 
   const directActive = await getActiveDirectAssignmentLevelIds(studentProfileId);
   if (directActive.size === 0) return true;
-  return directActive.has(levelId);
+  const resolved = resolveAssignmentLevelIds([...directActive], customizationIndex);
+  return resolved.includes(levelId);
 }
 
 /** Validate that all level ids are assignable by this teacher. */

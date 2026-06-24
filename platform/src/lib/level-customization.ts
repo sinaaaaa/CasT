@@ -21,60 +21,141 @@ const EMPTY_INDEX: LevelCustomizationIndex = {
 
 let customizationColumnReady: boolean | null = null;
 
+const COPY_KEY_SUFFIX = /_copy(_\d+)?$/;
+
+function sourceKeyFromCopyLevelKey(levelKey: string): string | null {
+  if (!COPY_KEY_SUFFIX.test(levelKey)) return null;
+  return levelKey.replace(COPY_KEY_SUFFIX, "");
+}
+
 /** DB column is optional until migration SQL is applied on Neon — Prisma must not reference it. */
 export async function isLevelCustomizationColumnReady(): Promise<boolean> {
-  if (customizationColumnReady !== null) return customizationColumnReady;
+  if (customizationColumnReady === true) return true;
   try {
     await prisma.$queryRaw`SELECT "customizedFromLevelId" FROM "Level" LIMIT 0`;
     customizationColumnReady = true;
+    return true;
   } catch {
-    customizationColumnReady = false;
+    return false;
   }
-  return customizationColumnReady;
 }
 
 type CustomizationRow = { id: string; customizedFromLevelId: string };
+
+async function loadCustomizationIndexFromColumn(
+  teacherProfileIds: string[],
+  publishedOnly: boolean
+): Promise<LevelCustomizationIndex> {
+  const rows = await prisma.$queryRaw<CustomizationRow[]>`
+    SELECT id, "customizedFromLevelId"
+    FROM "Level"
+    WHERE "ownerTeacherId" IN (${Prisma.join(teacherProfileIds)})
+      AND "customizedFromLevelId" IS NOT NULL
+      AND "isArchived" = false
+      ${publishedOnly ? Prisma.sql`AND published = true` : Prisma.empty}
+    ORDER BY "updatedAt" DESC
+  `;
+
+  const supersededDefaultIds = new Set<string>();
+  const publishedReplacementBySource = new Map<string, string>();
+  const customizationCopyIds = new Set<string>();
+  for (const row of rows) {
+    const from = row.customizedFromLevelId;
+    customizationCopyIds.add(row.id);
+    supersededDefaultIds.add(from);
+    if (!publishedReplacementBySource.has(from)) {
+      publishedReplacementBySource.set(from, row.id);
+    }
+  }
+
+  return { supersededDefaultIds, publishedReplacementBySource, customizationCopyIds };
+}
+
+/** Match level_1_copy → level_1 when customizedFromLevelId was never set. */
+async function mergeLegacyCopyLevelKeys(
+  teacherProfileIds: string[],
+  publishedOnly: boolean,
+  index: LevelCustomizationIndex
+): Promise<LevelCustomizationIndex> {
+  const copies = await prisma.level.findMany({
+    where: {
+      ownerTeacherId: { in: teacherProfileIds },
+      isArchived: false,
+      levelKey: { contains: "_copy" },
+      ...(publishedOnly ? { published: true } : {}),
+    },
+    select: { id: true, levelKey: true },
+    orderBy: { updatedAt: "desc" },
+  });
+
+  if (copies.length === 0) return index;
+
+  const sourceKeys = [
+    ...new Set(
+      copies
+        .map((c) => sourceKeyFromCopyLevelKey(c.levelKey))
+        .filter((k): k is string => Boolean(k))
+    ),
+  ];
+  if (sourceKeys.length === 0) return index;
+
+  const sources = await prisma.level.findMany({
+    where: {
+      ownerTeacherId: null,
+      isArchived: false,
+      levelKey: { in: sourceKeys },
+    },
+    select: { id: true, levelKey: true },
+  });
+  const sourceIdByKey = new Map(sources.map((s) => [s.levelKey, s.id]));
+
+  const supersededDefaultIds = new Set(index.supersededDefaultIds);
+  const publishedReplacementBySource = new Map(index.publishedReplacementBySource);
+  const customizationCopyIds = new Set(index.customizationCopyIds);
+
+  for (const copy of copies) {
+    const sourceKey = sourceKeyFromCopyLevelKey(copy.levelKey);
+    if (!sourceKey) continue;
+    const sourceId = sourceIdByKey.get(sourceKey);
+    if (!sourceId) continue;
+
+    customizationCopyIds.add(copy.id);
+    supersededDefaultIds.add(sourceId);
+    if (!publishedReplacementBySource.has(sourceId)) {
+      publishedReplacementBySource.set(sourceId, copy.id);
+    }
+    void linkLevelCustomization(copy.id, sourceId);
+  }
+
+  return { supersededDefaultIds, publishedReplacementBySource, customizationCopyIds };
+}
 
 export async function buildTeacherCustomizationIndex(
   teacherProfileIds: string[],
   options: { publishedOnly: boolean }
 ): Promise<LevelCustomizationIndex> {
   if (teacherProfileIds.length === 0) return EMPTY_INDEX;
-  if (!(await isLevelCustomizationColumnReady())) return EMPTY_INDEX;
 
   try {
-    const rows = await prisma.$queryRaw<CustomizationRow[]>`
-      SELECT id, "customizedFromLevelId"
-      FROM "Level"
-      WHERE "ownerTeacherId" IN (${Prisma.join(teacherProfileIds)})
-        AND "customizedFromLevelId" IS NOT NULL
-        AND "isArchived" = false
-        ${options.publishedOnly ? Prisma.sql`AND published = true` : Prisma.empty}
-      ORDER BY "updatedAt" DESC
-    `;
-
-    const supersededDefaultIds = new Set<string>();
-    const publishedReplacementBySource = new Map<string, string>();
-    const customizationCopyIds = new Set<string>();
-    for (const row of rows) {
-      const from = row.customizedFromLevelId;
-      customizationCopyIds.add(row.id);
-      supersededDefaultIds.add(from);
-      if (!publishedReplacementBySource.has(from)) {
-        publishedReplacementBySource.set(from, row.id);
-      }
+    let index = EMPTY_INDEX;
+    if (await isLevelCustomizationColumnReady()) {
+      index = await loadCustomizationIndexFromColumn(teacherProfileIds, options.publishedOnly);
     }
-
-    return { supersededDefaultIds, publishedReplacementBySource, customizationCopyIds };
+    return mergeLegacyCopyLevelKeys(teacherProfileIds, options.publishedOnly, index);
   } catch (error) {
     console.warn("[level-customization] Could not load customization index:", error);
-    return EMPTY_INDEX;
+    try {
+      return mergeLegacyCopyLevelKeys(teacherProfileIds, options.publishedOnly, EMPTY_INDEX);
+    } catch {
+      return EMPTY_INDEX;
+    }
   }
 }
 
 type LevelRow = {
   id: string;
   ownerTeacherId: string | null;
+  levelKey?: string;
 };
 
 /** Hide duplicate Item N: default + teacher copy should not both appear. */
@@ -83,6 +164,13 @@ export function applyLevelCustomizationFilter<T extends LevelRow>(
   index: LevelCustomizationIndex,
   mode: "teacher" | "student"
 ): T[] {
+  if (
+    index.supersededDefaultIds.size === 0 &&
+    index.customizationCopyIds.size === 0
+  ) {
+    return levels;
+  }
+
   if (mode === "teacher") {
     return levels.filter(
       (l) => !(l.ownerTeacherId === null && index.supersededDefaultIds.has(l.id))
@@ -90,8 +178,10 @@ export function applyLevelCustomizationFilter<T extends LevelRow>(
   }
 
   const chosenCopyIds = new Set(index.publishedReplacementBySource.values());
+
   return levels.filter((l) => {
     if (l.ownerTeacherId === null && index.supersededDefaultIds.has(l.id)) return false;
+
     if (
       l.ownerTeacherId !== null &&
       index.customizationCopyIds.has(l.id) &&
@@ -99,6 +189,20 @@ export function applyLevelCustomizationFilter<T extends LevelRow>(
     ) {
       return false;
     }
+
+    // Safety net: hide platform default when a published teacher copy is in the list.
+    if (l.ownerTeacherId === null && l.levelKey) {
+      const replacedByCopy = levels.some(
+        (other) =>
+          other.id !== l.id &&
+          other.ownerTeacherId !== null &&
+          other.levelKey != null &&
+          sourceKeyFromCopyLevelKey(other.levelKey) === l.levelKey &&
+          chosenCopyIds.has(other.id)
+      );
+      if (replacedByCopy) return false;
+    }
+
     return true;
   });
 }
