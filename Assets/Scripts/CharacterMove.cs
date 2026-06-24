@@ -4000,25 +4000,44 @@ public class CharacterMove : MonoBehaviour
         }
     }
 
-    /// <summary>Called when Level 0 block introduction finishes â€” advances to Level 1.</summary>
+    /// <summary>Called when Level 0 block introduction finishes — advances to Level 1.</summary>
     public void OnIntroLevelComplete()
     {
         LevelData ld = GetCurrentLevelData();
         if (ld != null && IsIntroLevel(ld))
-        {
-            if (GameAssessmentClient.Instance != null)
-                GameAssessmentClient.Instance.ClearCurrentAttempt();
-            AdvanceToNextLevel();
-        }
+            StartCoroutine(IntroCompleteReportAndAdvance());
+    }
+
+    private IEnumerator IntroCompleteReportAndAdvance()
+    {
+        if (!_skipNextPlatformReport && !_currentRunReportedToPlatform)
+            yield return ReportCurrentRunToPlatformRoutine(true);
+
+        if (GameAssessmentClient.Instance != null)
+            yield return GameAssessmentClient.Instance.WaitForPendingReports();
+
+        if (GameAssessmentClient.Instance != null)
+            GameAssessmentClient.Instance.ClearCurrentAttempt();
+
+        AdvanceToNextLevel();
     }
 
     private void OnSuccessPopupContinue()
     {
+        StartCoroutine(OnSuccessPopupContinueRoutine());
+    }
+
+    private IEnumerator OnSuccessPopupContinueRoutine()
+    {
         successPopup.SetActive(false);
         if (!_skipNextPlatformReport && !_currentRunReportedToPlatform)
-            ReportCurrentRunToPlatform(pendingLevelPassed);
+            yield return ReportCurrentRunToPlatformRoutine(pendingLevelPassed);
         else
             _skipNextPlatformReport = false;
+
+        if (GameAssessmentClient.Instance != null)
+            yield return GameAssessmentClient.Instance.WaitForPendingReports();
+
         AdvanceToNextLevel();
     }
 
@@ -4046,12 +4065,8 @@ public class CharacterMove : MonoBehaviour
 
         string levelKey = GetPlatformLevelKey(currentLevel);
         var client = GameAssessmentClient.Instance;
-        if (!string.IsNullOrEmpty(client.CurrentAttemptId))
-        {
-            if (client.CurrentLevelId == levelKey)
-                return;
+        if (!string.IsNullOrEmpty(client.CurrentAttemptId) && client.CurrentLevelId != levelKey)
             client.ClearCurrentAttempt();
-        }
 
         string initial = BuildCommandsString(_telemetryInitialCommands);
         client.SetStudent(currentUserId);
@@ -4068,6 +4083,7 @@ public class CharacterMove : MonoBehaviour
         if (currentLevel < 1 || currentLevel > allLevelsData.Count) yield break;
         if (string.IsNullOrEmpty(currentUserId) || currentUserId == "UnknownUser") yield break;
         if (GameAssessmentClient.Instance == null) yield break;
+        if (_currentRunReportedToPlatform) yield break;
 
         LevelData levelData = GetCurrentLevelData();
         string levelKey = GetPlatformLevelKey(currentLevel);
@@ -5089,6 +5105,13 @@ public class CharacterMove : MonoBehaviour
             Destroy(actionHistoryTransform.GetChild(i).gameObject);
     }
 
+    private IEnumerator AdvanceAfterPendingReports()
+    {
+        if (GameAssessmentClient.Instance != null)
+            yield return GameAssessmentClient.Instance.WaitForPendingReports();
+        AdvanceToNextLevel();
+    }
+
     private bool HandleRunFailure(LevelData levelData, string failureReason = null)
     {
         if (levelData == null) return false;
@@ -5110,7 +5133,7 @@ public class CharacterMove : MonoBehaviour
             }
             else
             {
-                AdvanceToNextLevel();
+                StartCoroutine(AdvanceAfterPendingReports());
             }
             if (runButton != null) runButton.interactable = false;
             RefreshStudentResetButtonState();
@@ -6469,13 +6492,13 @@ public class CharacterMove : MonoBehaviour
 
     private IEnumerator CompleteLevelSuccessfully()
     {
-        // Wait a moment for the fade effect
         yield return new WaitForSeconds(1.0f);
 
         if (!_skipNextPlatformReport && !_currentRunReportedToPlatform)
-            ReportCurrentRunToPlatform(pendingLevelPassed);
+            yield return ReportCurrentRunToPlatformRoutine(pendingLevelPassed);
+        else if (GameAssessmentClient.Instance != null)
+            yield return GameAssessmentClient.Instance.WaitForPendingReports();
         
-        // Show success popup to go to next level
         LevelData completedLevel = GetCurrentLevelData();
         if (successPopup != null && successPopupText != null)
         {
@@ -6487,7 +6510,8 @@ public class CharacterMove : MonoBehaviour
         else
         {
             Debug.LogWarning("[CharacterMove] successPopup or successPopupText not assigned!");
-            // Fallback: advance automatically
+            if (GameAssessmentClient.Instance != null)
+                yield return GameAssessmentClient.Instance.WaitForPendingReports();
             AdvanceToNextLevel();
         }
     }
