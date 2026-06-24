@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { requireTeacher } from "@/lib/api-auth";
-import { findAvailableStudentSlotInRange } from "@/lib/student-id-utils";
+import { planStudentRange } from "@/lib/student-id-utils";
 
 const querySchema = z.object({
   from: z.coerce.number().int().min(1).max(999999),
@@ -31,17 +31,18 @@ export async function GET(request: NextRequest) {
     return Response.json({ error: "Name prefix is required for generation." }, { status: 400 });
   }
 
-  const slot = await findAvailableStudentSlotInRange(
-    parsed.data.from,
-    parsed.data.to,
-    namePrefix
-  );
-  if (!slot) {
+  const plan = await planStudentRange(parsed.data.from, parsed.data.to, namePrefix);
+  if (!plan.ok) {
     return Response.json(
-      { error: "No available names or IDs in that range. Try a different range." },
-      { status: 404 }
+      { error: plan.message, conflicts: plan.conflicts },
+      { status: 409 }
     );
   }
 
-  return Response.json(slot);
+  return Response.json({
+    slots: plan.slots,
+    count: plan.count,
+    from: plan.from,
+    to: plan.to,
+  });
 }

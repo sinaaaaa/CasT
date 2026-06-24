@@ -17,6 +17,12 @@ import { Label } from "@/components/ui/label";
 
 type ClassOption = { id: string; name: string };
 
+type SlotPreview = {
+  displayName: string;
+  externalId: string;
+  number: number;
+};
+
 function parseApiError(data: unknown, fallback: string): string {
   if (!data || typeof data !== "object") return fallback;
   const record = data as Record<string, unknown>;
@@ -47,13 +53,14 @@ export function AddStudentDialog({
   const [classId, setClassId] = useState("");
   const [idMode, setIdMode] = useState<"manual" | "range">("range");
   const [rangeFrom, setRangeFrom] = useState("500");
-  const [rangeTo, setRangeTo] = useState("100");
+  const [rangeTo, setRangeTo] = useState("530");
   const [busy, setBusy] = useState(false);
   const [fieldError, setFieldError] = useState<string | null>(null);
-  const [generatedPreview, setGeneratedPreview] = useState<{
-    displayName: string;
-    externalId: string;
-    number: number;
+  const [rangePreview, setRangePreview] = useState<{
+    slots: SlotPreview[];
+    count: number;
+    from: number;
+    to: number;
   } | null>(null);
 
   const needsClass = classes.length > 0;
@@ -66,15 +73,20 @@ export function AddStudentDialog({
     setClassId(defaultClassId ?? classes[0]?.id ?? "");
     setIdMode("range");
     setRangeFrom("500");
-    setRangeTo("100");
+    setRangeTo("530");
     setFieldError(null);
-    setGeneratedPreview(null);
+    setRangePreview(null);
   }, [open, classes, defaultClassId]);
 
-  async function suggestFromRange(): Promise<{
-    displayName: string;
-    externalId: string;
-    number: number;
+  function clearRangePreview() {
+    setRangePreview(null);
+  }
+
+  async function generateRangePreview(): Promise<{
+    slots: SlotPreview[];
+    count: number;
+    from: number;
+    to: number;
   } | null> {
     const from = Number.parseInt(rangeFrom, 10);
     const to = Number.parseInt(rangeTo, 10);
@@ -83,12 +95,13 @@ export function AddStudentDialog({
       return null;
     }
     if (!namePrefix.trim()) {
-      setFieldError('Enter a name prefix first (e.g. "test" → test 500, test 501).');
+      setFieldError('Enter a name prefix first (e.g. "test" → test 500 … test 530).');
       return null;
     }
 
     setBusy(true);
     setFieldError(null);
+    setRangePreview(null);
     try {
       const params = new URLSearchParams({
         from: String(from),
@@ -97,52 +110,73 @@ export function AddStudentDialog({
       });
       const res = await fetch(`/api/teacher/students/suggest-id?${params}`);
       const data = await res.json();
-      if (!res.ok) throw new Error(parseApiError(data, "No slots available in range"));
+      if (!res.ok) throw new Error(parseApiError(data, "Could not generate for this range"));
 
-      const next = {
-        displayName: data.displayName as string,
-        externalId: data.externalId as string,
-        number: data.number as number,
+      const slots = (data.slots as SlotPreview[]) ?? [];
+      const preview = {
+        slots,
+        count: data.count as number,
+        from: data.from as number,
+        to: data.to as number,
       };
-      setGeneratedPreview(next);
-      setDisplayName(next.displayName);
-      setExternalId(next.externalId);
-      return next;
+      setRangePreview(preview);
+      return preview;
     } catch (err) {
       setFieldError(err instanceof Error ? err.message : "Could not generate");
-      setGeneratedPreview(null);
       return null;
     } finally {
       setBusy(false);
     }
   }
 
-  async function submit(e: React.FormEvent, addAnother = false) {
+  async function submitBulk() {
+    setFieldError(null);
+    if (!namePrefix.trim()) {
+      setFieldError('Enter a name prefix first (e.g. "test").');
+      return;
+    }
+    if (needsClass && !classId) {
+      setFieldError("Select a class for these students.");
+      return;
+    }
+
+    const preview = rangePreview ?? (await generateRangePreview());
+    if (!preview || preview.count === 0) return;
+
+    setBusy(true);
+    try {
+      const res = await fetch("/api/teacher/students/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          namePrefix: namePrefix.trim(),
+          from: Number.parseInt(rangeFrom, 10),
+          to: Number.parseInt(rangeTo, 10),
+          ...(classId ? { classId } : {}),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(parseApiError(data, "Could not add students"));
+
+      onOpenChange(false);
+      onCreated?.();
+    } catch (err) {
+      setFieldError(err instanceof Error ? err.message : "Could not add students");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitManual(e: React.FormEvent) {
     e.preventDefault();
     setFieldError(null);
 
-    let finalDisplayName = displayName.trim();
-    let finalExternalId = externalId.trim();
-
-    if (idMode === "range") {
-      if (!namePrefix.trim()) {
-        setFieldError('Enter a name prefix first (e.g. "test").');
-        return;
-      }
-      if (!finalDisplayName || !finalExternalId) {
-        const generated = await suggestFromRange();
-        if (!generated) return;
-        finalDisplayName = generated.displayName;
-        finalExternalId = generated.externalId;
-      }
-    }
-
-    if (!finalDisplayName) {
+    if (!displayName.trim()) {
       setFieldError("Display name is required.");
       return;
     }
-    if (!finalExternalId) {
-      setFieldError("Student ID is required. Generate from range or enter manually.");
+    if (!externalId.trim()) {
+      setFieldError("Student ID is required.");
       return;
     }
     if (needsClass && !classId) {
@@ -156,23 +190,13 @@ export function AddStudentDialog({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          displayName: finalDisplayName,
-          externalId: finalExternalId,
+          displayName: displayName.trim(),
+          externalId: externalId.trim(),
           ...(classId ? { classId } : {}),
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(parseApiError(data, "Could not add student"));
-
-      if (addAnother && idMode === "range") {
-        setDisplayName("");
-        setExternalId("");
-        setGeneratedPreview(null);
-        onCreated?.();
-        await suggestFromRange();
-        return;
-      }
-
       onOpenChange(false);
       onCreated?.();
     } catch (err) {
@@ -181,6 +205,11 @@ export function AddStudentDialog({
       setBusy(false);
     }
   }
+
+  const previewHead = rangePreview?.slots.slice(0, 4) ?? [];
+  const previewTail = rangePreview?.slots.slice(-2) ?? [];
+  const showPreviewEllipsis =
+    rangePreview != null && rangePreview.count > previewHead.length + previewTail.length;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -191,12 +220,12 @@ export function AddStudentDialog({
             Add student
           </DialogTitle>
           <DialogDescription>
-            Create a student account and enroll them in your class so they appear in your roster.
+            Create student accounts and enroll them in your class so they appear in your roster.
           </DialogDescription>
         </DialogHeader>
 
         {needsClass ? (
-          <form onSubmit={(e) => void submit(e)} className="space-y-4">
+          <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="add-student-class">Class</Label>
               <select
@@ -224,7 +253,7 @@ export function AddStudentDialog({
                 onClick={() => setIdMode("range")}
                 disabled={busy}
               >
-                Generate name + ID
+                Generate batch
               </Button>
               <Button
                 type="button"
@@ -234,7 +263,7 @@ export function AddStudentDialog({
                 onClick={() => setIdMode("manual")}
                 disabled={busy}
               >
-                Enter manually
+                One student
               </Button>
             </div>
 
@@ -247,15 +276,15 @@ export function AddStudentDialog({
                     value={namePrefix}
                     onChange={(e) => {
                       setNamePrefix(e.target.value);
-                      setGeneratedPreview(null);
+                      clearRangePreview();
                     }}
                     placeholder="test"
                     disabled={busy}
                     autoFocus
                   />
                   <p className="text-xs text-muted-foreground">
-                    Students are named <span className="font-medium">prefix + number</span>, e.g.{" "}
-                    <span className="font-mono">test 500</span>, <span className="font-mono">test 501</span>
+                    Creates <span className="font-mono">test 500</span>, <span className="font-mono">test 501</span>
+                    , … for every number in the range. Login IDs: <span className="font-mono">STU-500</span>, etc.
                   </p>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
@@ -268,7 +297,7 @@ export function AddStudentDialog({
                       value={rangeFrom}
                       onChange={(e) => {
                         setRangeFrom(e.target.value);
-                        setGeneratedPreview(null);
+                        clearRangePreview();
                       }}
                       disabled={busy}
                     />
@@ -282,22 +311,21 @@ export function AddStudentDialog({
                       value={rangeTo}
                       onChange={(e) => {
                         setRangeTo(e.target.value);
-                        setGeneratedPreview(null);
+                        clearRangePreview();
                       }}
                       disabled={busy}
                     />
                   </div>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Range can be entered in any order (500–100 or 100–500). Login ID uses STU-###
-                  (e.g. STU-500).
+                  The whole range must be free — if any ID or name already exists, choose a different range.
                 </p>
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   className="gap-2 rounded-lg"
-                  onClick={() => void suggestFromRange()}
+                  onClick={() => void generateRangePreview()}
                   disabled={busy}
                 >
                   {busy ? (
@@ -305,12 +333,31 @@ export function AddStudentDialog({
                   ) : (
                     <Sparkles className="h-4 w-4" />
                   )}
-                  Generate next available
+                  Preview batch
                 </Button>
-                {generatedPreview && (
-                  <div className="rounded-lg border border-indigo-200 bg-white px-3 py-2 text-sm">
-                    <p className="font-medium text-slate-900">{generatedPreview.displayName}</p>
-                    <p className="font-mono text-xs text-indigo-700">{generatedPreview.externalId}</p>
+
+                {rangePreview && (
+                  <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-indigo-200 bg-white p-3 text-sm">
+                    <p className="mb-2 font-medium text-indigo-900">
+                      {rangePreview.count} student{rangePreview.count === 1 ? "" : "s"} (
+                      {rangePreview.from}–{rangePreview.to})
+                    </p>
+                    {previewHead.map((slot) => (
+                      <div key={slot.number} className="flex justify-between gap-2 text-xs">
+                        <span>{slot.displayName}</span>
+                        <span className="font-mono text-slate-500">{slot.externalId}</span>
+                      </div>
+                    ))}
+                    {showPreviewEllipsis && (
+                      <p className="py-1 text-center text-xs text-muted-foreground">…</p>
+                    )}
+                    {rangePreview.count > 4 &&
+                      previewTail.map((slot) => (
+                        <div key={slot.number} className="flex justify-between gap-2 text-xs">
+                          <span>{slot.displayName}</span>
+                          <span className="font-mono text-slate-500">{slot.externalId}</span>
+                        </div>
+                      ))}
                   </div>
                 )}
               </div>
@@ -341,16 +388,6 @@ export function AddStudentDialog({
               </>
             )}
 
-            {idMode === "range" && (displayName || externalId) && (
-              <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Will be created
-                </p>
-                <p className="font-medium">{displayName || "—"}</p>
-                <p className="font-mono text-xs text-slate-600">{externalId || "—"}</p>
-              </div>
-            )}
-
             {fieldError && <p className="text-sm text-destructive">{fieldError}</p>}
 
             <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
@@ -362,27 +399,31 @@ export function AddStudentDialog({
               >
                 Cancel
               </Button>
-              {idMode === "range" && (
+              {idMode === "range" ? (
                 <Button
                   type="button"
-                  variant="secondary"
                   disabled={busy}
-                  onClick={(e) => void submit(e, true)}
+                  className="bg-[#4F46E5] hover:bg-[#4338CA]"
+                  onClick={() => void submitBulk()}
                 >
                   {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  Add &amp; next
+                  {rangePreview
+                    ? `Add all ${rangePreview.count} students`
+                    : "Add all in range"}
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  disabled={busy}
+                  className="bg-[#4F46E5] hover:bg-[#4338CA]"
+                  onClick={(e) => void submitManual(e)}
+                >
+                  {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Add student
                 </Button>
               )}
-              <Button
-                type="submit"
-                disabled={busy}
-                className="bg-[#4F46E5] hover:bg-[#4338CA]"
-              >
-                {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Add student
-              </Button>
             </DialogFooter>
-          </form>
+          </div>
         ) : (
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">

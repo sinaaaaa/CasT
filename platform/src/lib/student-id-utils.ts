@@ -26,7 +26,20 @@ export type StudentSlotSuggestion = {
   displayName: string;
 };
 
-function normalizeRange(from: number, to: number): { lo: number; hi: number } | null {
+export type RangeConflict = {
+  number: number;
+  externalId?: string;
+  displayName?: string;
+};
+
+export type StudentRangePlan =
+  | { ok: true; slots: StudentSlotSuggestion[]; count: number; from: number; to: number }
+  | { ok: false; conflicts: RangeConflict[]; message: string };
+
+export function normalizeStudentNumberRange(
+  from: number,
+  to: number
+): { lo: number; hi: number } | null {
   if (!Number.isFinite(from) || !Number.isFinite(to)) return null;
   const lo = Math.min(from, to);
   const hi = Math.max(from, to);
@@ -71,47 +84,87 @@ async function loadTakenDisplayNames(names: string[]): Promise<Set<string>> {
   return taken;
 }
 
-/** First unused STU-#### in range; display name = "{prefix} {n}" when prefix is set. */
-export async function findAvailableStudentSlotInRange(
+/** Whole range must be free — returns all slots or conflicts (no partial generation). */
+export async function planStudentRange(
   from: number,
   to: number,
-  namePrefix?: string
-): Promise<StudentSlotSuggestion | null> {
-  const range = normalizeRange(from, to);
-  if (!range) return null;
+  namePrefix: string
+): Promise<StudentRangePlan> {
+  const range = normalizeStudentNumberRange(from, to);
+  if (!range) {
+    return {
+      ok: false,
+      conflicts: [],
+      message: "Invalid range. Use two numbers (max 2000 students per batch).",
+    };
+  }
 
-  const prefix = namePrefix?.trim() ?? "";
+  const prefix = namePrefix.trim();
+  if (!prefix) {
+    return { ok: false, conflicts: [], message: "Name prefix is required." };
+  }
+
   const numbers: number[] = [];
   for (let n = range.lo; n <= range.hi; n++) {
     numbers.push(n);
   }
 
   const idCandidates = numbers.map((n) => studentIdFromNumber(n));
+  const nameCandidates = numbers.map((n) => displayNameFromPrefix(prefix, n));
   const takenIds = await loadTakenIds(idCandidates);
-
-  const nameCandidates = prefix
-    ? numbers.map((n) => displayNameFromPrefix(prefix, n))
-    : [];
   const takenNames = await loadTakenDisplayNames(nameCandidates);
 
+  const conflicts: RangeConflict[] = [];
   for (const n of numbers) {
     const externalId = studentIdFromNumber(n);
-    if (takenIds.has(externalId)) continue;
-
-    const displayName = prefix ? displayNameFromPrefix(prefix, n) : externalId;
-    if (prefix && takenNames.has(displayName.toLowerCase())) continue;
-
-    return { externalId, number: n, displayName };
+    const displayName = displayNameFromPrefix(prefix, n);
+    const idTaken = takenIds.has(externalId);
+    const nameTaken = takenNames.has(displayName.toLowerCase());
+    if (idTaken || nameTaken) {
+      conflicts.push({
+        number: n,
+        ...(idTaken ? { externalId } : {}),
+        ...(nameTaken ? { displayName } : {}),
+      });
+    }
   }
 
-  return null;
+  if (conflicts.length > 0) {
+    const sample = conflicts
+      .slice(0, 4)
+      .map((c) => c.externalId ?? c.displayName ?? String(c.number))
+      .join(", ");
+    return {
+      ok: false,
+      conflicts,
+      message: `This range is not fully available (${conflicts.length} conflict${
+        conflicts.length === 1 ? "" : "s"
+      }: ${sample}${conflicts.length > 4 ? "…" : ""}). Select another range.`,
+    };
+  }
+
+  const slots = numbers.map((n) => ({
+    number: n,
+    externalId: studentIdFromNumber(n),
+    displayName: displayNameFromPrefix(prefix, n),
+  }));
+
+  return {
+    ok: true,
+    slots,
+    count: slots.length,
+    from: range.lo,
+    to: range.hi,
+  };
 }
 
-/** @deprecated Use findAvailableStudentSlotInRange */
-export async function findAvailableStudentIdInRange(
+/** @deprecated Use planStudentRange */
+export async function findAvailableStudentSlotInRange(
   from: number,
-  to: number
-): Promise<string | null> {
-  const slot = await findAvailableStudentSlotInRange(from, to);
-  return slot?.externalId ?? null;
+  to: number,
+  namePrefix?: string
+): Promise<StudentSlotSuggestion | null> {
+  if (!namePrefix?.trim()) return null;
+  const plan = await planStudentRange(from, to, namePrefix);
+  return plan.ok ? plan.slots[0] ?? null : null;
 }
