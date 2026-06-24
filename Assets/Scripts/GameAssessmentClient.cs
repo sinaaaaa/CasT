@@ -286,7 +286,7 @@ public class GameAssessmentClient : MonoBehaviour
                 Debug.LogWarning("[Assessment] No attempt id after waiting — starting level before end.");
                 bool started = false;
                 bool startOk = false;
-                StartLevel(request.levelKey, request.initialCommand, ok =>
+                StartLevel(request.levelKey, request.initialCommand, 0, ok =>
                 {
                     startOk = ok;
                     started = true;
