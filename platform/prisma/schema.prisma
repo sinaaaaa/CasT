@@ -171,6 +171,10 @@ model Level {
   /// null = platform-shared catalog (intro, seed). Set when a teacher creates an item.
   ownerTeacherId String?
   ownerTeacher   TeacherProfile? @relation("LevelOwner", fields: [ownerTeacherId], references: [id], onDelete: SetNull)
+  /// When set, this teacher item replaces the linked platform default in that teacher's catalog.
+  customizedFromLevelId String?
+  customizedFrom        Level?  @relation("LevelCustomization", fields: [customizedFromLevelId], references: [id], onDelete: SetNull)
+  customizedCopies        Level[] @relation("LevelCustomization")
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @default(now()) @updatedAt
 
@@ -180,6 +184,8 @@ model Level {
   constructMappings   LevelCTConstruct[]
 
   @@index([ownerTeacherId])
+  @@index([customizedFromLevelId])
+  @@unique([ownerTeacherId, customizedFromLevelId])
 }
 
 /// Direct level assignment per student (StudentLevelAssignment). Soft-remove via isActive.

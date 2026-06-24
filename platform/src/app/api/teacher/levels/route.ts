@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { requireTeacher } from "@/lib/api-auth";
-import { getScopedAttemptCountsByLevel, levelScopeWhere } from "@/lib/class-access";
+import { getScopedAttemptCountsByLevel } from "@/lib/class-access";
+import { fetchTeacherVisibleLevels } from "@/lib/level-customization";
 import { resolveAssignedByTeacherId } from "@/lib/level-student-assignments";
 import { prisma } from "@/lib/prisma";
 import {
@@ -15,10 +16,7 @@ export async function GET() {
   if (error) return error;
 
   const [levels, attemptCounts] = await Promise.all([
-    prisma.level.findMany({
-      where: levelScopeWhere(scope!),
-      orderBy: { orderIndex: "asc" },
-    }),
+    fetchTeacherVisibleLevels(scope!),
     getScopedAttemptCountsByLevel(scope!),
   ]);
 

@@ -4,9 +4,9 @@ import { prisma } from "@/lib/prisma";
 import { requireTeacher } from "@/lib/api-auth";
 import {
   assertStudentAccess,
-  levelScopeWhere,
   studentScopeWhere,
 } from "@/lib/class-access";
+import { fetchTeacherVisibleLevels } from "@/lib/level-customization";
 import { assertLevelsAssignableByTeacher } from "@/lib/level-assignments";
 import {
   addStudentLevelAssignments,
@@ -96,29 +96,31 @@ export async function GET() {
   const { error, scope } = await requireTeacher();
   if (error) return error;
 
-  const levels = await prisma.level.findMany({
-    where: { isArchived: false, ...levelScopeWhere(scope!) },
-    orderBy: { orderIndex: "asc" },
-    select: {
-      id: true,
-      levelKey: true,
-      name: true,
-      orderIndex: true,
-      published: true,
-      levelType: true,
-      ownerTeacherId: true,
-      _count: {
-        select: {
-          studentAssignments: {
-            where: {
-              isActive: true,
-              student: studentScopeWhere(scope!),
-            },
+  const levels = await fetchTeacherVisibleLevels(scope!);
+  const levelIds = levels.map((l) => l.id);
+  const assignmentCounts =
+    levelIds.length === 0
+      ? []
+      : await prisma.levelStudentAssignment.groupBy({
+          by: ["levelId"],
+          where: {
+            levelId: { in: levelIds },
+            isActive: true,
+            student: studentScopeWhere(scope!),
           },
-        },
-      },
-    },
-  });
+          _count: { id: true },
+        });
+  const countByLevel = new Map(assignmentCounts.map((g) => [g.levelId, g._count.id]));
+
+  const levelsWithCounts = levels.map((l) => ({
+    id: l.id,
+    levelKey: l.levelKey,
+    name: l.name,
+    orderIndex: l.orderIndex,
+    published: l.published,
+    levelType: l.levelType,
+    assignedStudentCount: countByLevel.get(l.id) ?? 0,
+  }));
 
   const scopedStudentWhere = studentScopeWhere(scope!);
 
@@ -136,15 +138,7 @@ export async function GET() {
   });
 
   return Response.json({
-    levels: levels.map((l) => ({
-      id: l.id,
-      levelKey: l.levelKey,
-      name: l.name,
-      orderIndex: l.orderIndex,
-      published: l.published,
-      levelType: l.levelType,
-      assignedStudentCount: l._count.studentAssignments,
-    })),
+    levels: levelsWithCounts,
     studentsWithCustomAssignments: studentsWithCustom,
     studentsWithoutCustomAssignments: studentsWithoutCustom,
     explanation:

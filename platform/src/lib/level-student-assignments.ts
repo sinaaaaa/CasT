@@ -4,7 +4,7 @@
 
 import { prisma } from "@/lib/prisma";
 import type { TeacherScope } from "@/lib/class-access";
-import { levelScopeWhere } from "@/lib/class-access";
+import { fetchTeacherVisibleLevels } from "@/lib/level-customization";
 
 /**
  * Resolve TeacherProfile id for assignment FK. Session JWT may carry a stale or
@@ -162,14 +162,15 @@ export async function deactivateStudentLevelAssignment(
 
 /** Published non-archived level ids assignable by this teacher (own items + platform shared). */
 export async function getAllAssignableLevelIds(scope?: TeacherScope): Promise<string[]> {
-  const rows = await prisma.level.findMany({
-    where: {
-      published: true,
-      isArchived: false,
-      ...(scope ? levelScopeWhere(scope) : {}),
-    },
-    orderBy: { orderIndex: "asc" },
-    select: { id: true },
-  });
+  if (!scope) {
+    const rows = await prisma.level.findMany({
+      where: { published: true, isArchived: false },
+      orderBy: { orderIndex: "asc" },
+      select: { id: true },
+    });
+    return rows.map((r) => r.id);
+  }
+
+  const rows = await fetchTeacherVisibleLevels(scope, { published: true });
   return rows.map((r) => r.id);
 }

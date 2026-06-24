@@ -18,6 +18,36 @@ async function uniqueLevelKey(base: string): Promise<string> {
   return candidate;
 }
 
+async function findExistingCustomization(
+  ownerTeacherId: string,
+  sourceId: string,
+  sourceLevelKey: string
+) {
+  const linked = await prisma.level.findFirst({
+    where: {
+      ownerTeacherId,
+      customizedFromLevelId: sourceId,
+      isArchived: false,
+    },
+  });
+  if (linked) return linked;
+
+  const legacy = await prisma.level.findFirst({
+    where: {
+      ownerTeacherId,
+      isArchived: false,
+      levelKey: { startsWith: `${sourceLevelKey}_copy` },
+    },
+  });
+  if (legacy && !legacy.customizedFromLevelId) {
+    return prisma.level.update({
+      where: { id: legacy.id },
+      data: { customizedFromLevelId: sourceId },
+    });
+  }
+  return legacy;
+}
+
 /** Copy a platform or shared item into this teacher's catalog so they can edit and assign it. */
 export async function POST(_request: NextRequest, { params }: RouteParams) {
   const { error, session, scope } = await requireTeacher();
@@ -58,11 +88,28 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
     return Response.json({ error: "Teacher profile required to customize items." }, { status: 400 });
   }
 
+  if (ownerTeacherId) {
+    const existing = await findExistingCustomization(ownerTeacherId, source.id, source.levelKey);
+    if (existing) {
+      return Response.json(
+        {
+          level: {
+            id: existing.id,
+            levelKey: existing.levelKey,
+            name: existing.name,
+          },
+          message: "You already customized this item — opening your version.",
+        },
+        { status: 200 }
+      );
+    }
+  }
+
   const levelKey = await uniqueLevelKey(source.levelKey);
   const level = await prisma.level.create({
     data: {
       levelKey,
-      name: source.name.startsWith("Copy of ") ? source.name : `Copy of ${source.name}`,
+      name: source.name,
       description: source.description,
       orderIndex: source.orderIndex,
       difficulty: source.difficulty,
@@ -70,6 +117,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       published: false,
       config: source.config as object,
       ownerTeacherId,
+      customizedFromLevelId: source.id,
     },
   });
 
@@ -80,7 +128,8 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
         levelKey: level.levelKey,
         name: level.name,
       },
-      message: "Item copied to your library. You can edit and assign this copy to your students.",
+      message:
+        "Item copied to your library. The shared default is hidden — publish your version when ready for students.",
     },
     { status: 201 }
   );

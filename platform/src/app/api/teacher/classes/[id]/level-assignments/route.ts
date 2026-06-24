@@ -2,7 +2,8 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireTeacher } from "@/lib/api-auth";
-import { requireClassAccess, levelScopeWhere } from "@/lib/class-access";
+import { requireClassAccess } from "@/lib/class-access";
+import { fetchTeacherVisibleLevels } from "@/lib/level-customization";
 import { assertLevelsAssignableByTeacher } from "@/lib/level-assignments";
 
 const putBodySchema = z.object({
@@ -28,18 +29,16 @@ export async function GET(
       where: { classId: id },
       select: { levelId: true },
     }),
-    prisma.level.findMany({
-      where: { isArchived: false, ...levelScopeWhere(scope!) },
-      orderBy: { orderIndex: "asc" },
-      select: {
-        id: true,
-        levelKey: true,
-        name: true,
-        orderIndex: true,
-        published: true,
-        levelType: true,
-      },
-    }),
+    fetchTeacherVisibleLevels(scope!, undefined, { orderIndex: "asc" }).then((rows) =>
+      rows.map((l) => ({
+        id: l.id,
+        levelKey: l.levelKey,
+        name: l.name,
+        orderIndex: l.orderIndex,
+        published: l.published,
+        levelType: l.levelType,
+      }))
+    ),
   ]);
 
   return Response.json({

@@ -1,7 +1,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { resolveTeacherScope, getScopedAttemptCountsByLevel, levelScopeWhere } from "@/lib/class-access";
-import { prisma } from "@/lib/prisma";
+import { resolveTeacherScope, getScopedAttemptCountsByLevel } from "@/lib/class-access";
+import { fetchTeacherVisibleLevels } from "@/lib/level-customization";
 import { TeacherShell } from "@/components/teacher/teacher-shell";
 import { LevelsHub, type LevelHubRow } from "@/components/teacher/levels-hub";
 import { LevelType } from "@prisma/client";
@@ -13,10 +13,7 @@ export default async function TeacherLevelsPage() {
   const scope = await resolveTeacherScope(session!.user);
 
   const [levels, attemptCounts] = await Promise.all([
-    prisma.level.findMany({
-      where: { isArchived: false, ...levelScopeWhere(scope) },
-      orderBy: { orderIndex: "asc" },
-    }),
+    fetchTeacherVisibleLevels(scope),
     getScopedAttemptCountsByLevel(scope),
   ]);
 

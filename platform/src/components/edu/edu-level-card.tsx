@@ -150,7 +150,14 @@ export function EduLevelCard({
         {error && <p className="text-xs text-destructive">{error}</p>}
         {isPlatformDefault && !canEdit && (
           <p className="text-xs text-muted-foreground">
-            Copies to your library so you can edit it for your students without changing the shared default.
+            Customize creates your own version of this item. The shared default is hidden from your
+            list once you customize it.
+          </p>
+        )}
+        {canEdit && !isPlatformDefault && (
+          <p className="text-xs text-muted-foreground">
+            Your customized version replaces the shared default for you and your students when
+            published.
           </p>
         )}
       </div>
