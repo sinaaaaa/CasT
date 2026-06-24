@@ -14,6 +14,11 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  buildStudentSlotPreviews,
+  parseApiError,
+  readApiJson,
+} from "@/lib/api-client";
 
 type ClassOption = { id: string; name: string };
 
@@ -22,17 +27,6 @@ type SlotPreview = {
   externalId: string;
   number: number;
 };
-
-function parseApiError(data: unknown, fallback: string): string {
-  if (!data || typeof data !== "object") return fallback;
-  const record = data as Record<string, unknown>;
-  if (typeof record.error === "string") return record.error;
-  if (record.error && typeof record.error === "object") {
-    const formErrors = (record.error as { formErrors?: string[] }).formErrors;
-    if (formErrors?.length) return formErrors.join(" ");
-  }
-  return fallback;
-}
 
 export function AddStudentDialog({
   open,
@@ -57,7 +51,8 @@ export function AddStudentDialog({
   const [busy, setBusy] = useState(false);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [rangePreview, setRangePreview] = useState<{
-    slots: SlotPreview[];
+    head: SlotPreview[];
+    tail: SlotPreview[];
     count: number;
     from: number;
     to: number;
@@ -83,7 +78,8 @@ export function AddStudentDialog({
   }
 
   async function generateRangePreview(): Promise<{
-    slots: SlotPreview[];
+    head: SlotPreview[];
+    tail: SlotPreview[];
     count: number;
     from: number;
     to: number;
@@ -109,16 +105,16 @@ export function AddStudentDialog({
         namePrefix: namePrefix.trim(),
       });
       const res = await fetch(`/api/teacher/students/suggest-id?${params}`);
-      const data = await res.json();
+      const data = await readApiJson(res);
       if (!res.ok) throw new Error(parseApiError(data, "Could not generate for this range"));
 
-      const slots = (data.slots as SlotPreview[]) ?? [];
-      const preview = {
-        slots,
-        count: data.count as number,
-        from: data.from as number,
-        to: data.to as number,
-      };
+      const record = data as Record<string, unknown>;
+      const from = record.from as number;
+      const to = record.to as number;
+      const count = record.count as number;
+      const prefix = String(record.namePrefix ?? namePrefix.trim());
+      const { head, tail } = buildStudentSlotPreviews(from, to, prefix);
+      const preview = { head, tail, count, from, to };
       setRangePreview(preview);
       return preview;
     } catch (err) {
@@ -155,7 +151,7 @@ export function AddStudentDialog({
           ...(classId ? { classId } : {}),
         }),
       });
-      const data = await res.json();
+      const data = await readApiJson(res);
       if (!res.ok) throw new Error(parseApiError(data, "Could not add students"));
 
       onOpenChange(false);
@@ -195,7 +191,7 @@ export function AddStudentDialog({
           ...(classId ? { classId } : {}),
         }),
       });
-      const data = await res.json();
+      const data = await readApiJson(res);
       if (!res.ok) throw new Error(parseApiError(data, "Could not add student"));
       onOpenChange(false);
       onCreated?.();
@@ -206,8 +202,8 @@ export function AddStudentDialog({
     }
   }
 
-  const previewHead = rangePreview?.slots.slice(0, 4) ?? [];
-  const previewTail = rangePreview?.slots.slice(-2) ?? [];
+  const previewHead = rangePreview?.head ?? [];
+  const previewTail = rangePreview?.tail ?? [];
   const showPreviewEllipsis =
     rangePreview != null && rangePreview.count > previewHead.length + previewTail.length;
 
