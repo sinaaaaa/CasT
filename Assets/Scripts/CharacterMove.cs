@@ -4055,7 +4055,7 @@ public class CharacterMove : MonoBehaviour
 
         string initial = BuildCommandsString(_telemetryInitialCommands);
         client.SetStudent(currentUserId);
-        client.StartLevel(levelKey, string.IsNullOrEmpty(initial) ? null : initial);
+        client.StartLevel(levelKey, string.IsNullOrEmpty(initial) ? null : initial, currentLevel);
     }
 
     private void ReportCurrentRunToPlatform(bool passed)
@@ -4081,6 +4081,7 @@ public class CharacterMove : MonoBehaviour
             ? _activeInLevelRunNumber
             : Mathf.Max(1, currentAttempt + (passed ? 1 : 0));
         assessmentExtras.maxLevelRuns = levelData != null ? levelData.maxAttempts : 0;
+        assessmentExtras.playSlot = currentLevel;
 
         _currentRunReportedToPlatform = true;
         GameAssessmentClient.Instance.ReportLevelComplete(

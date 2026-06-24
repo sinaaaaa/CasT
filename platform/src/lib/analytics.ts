@@ -1,6 +1,9 @@
 import { AttemptStatus } from "@prisma/client";
 import type { Prisma } from "@prisma/client";
 import { formatItemDisplayName } from "@/lib/item-display";
+import { getPlayableLevelsForStudent } from "@/lib/level-assignments";
+import { formatStudentAttemptItemLabel } from "@/lib/student-item-label";
+import { parsePlaySlot } from "@/lib/attempt-mistakes";
 import { formatAttemptRunLabel, parseAttemptRunMeta } from "@/lib/attempt-mistakes";
 import { levelsForTeachersWhere, getClassTeacherProfileIds, levelScopeWhere, type TeacherScope } from "@/lib/class-access";
 import { prisma } from "@/lib/prisma";
@@ -457,7 +460,13 @@ export async function getTeacherDashboardStats(filters?: {
 }
 
 export async function getStudentProgress(studentProfileId: string) {
-  const levels = await prisma.level.findMany({ orderBy: { orderIndex: "asc" } });
+  const student = await prisma.studentProfile.findUnique({
+    where: { id: studentProfileId },
+    select: { externalId: true },
+  });
+  const studentCode = student?.externalId ?? studentProfileId;
+  const playableLevels = await getPlayableLevelsForStudent(studentCode);
+
   const attempts = await prisma.levelAttempt.findMany({
     where: { studentId: studentProfileId },
     include: { level: true, assessmentResult: true },
@@ -471,7 +480,7 @@ export async function getStudentProgress(studentProfileId: string) {
     byLevel.set(a.levelId, list);
   }
 
-  const levelProgress = levels.map((level) => {
+  const levelProgress = playableLevels.map((level, index) => {
     const levelAttempts = byLevel.get(level.id) ?? [];
     const endedAttempts = levelAttempts.filter((a) => a.endedAt != null);
     const statusAttempts = endedAttempts.length > 0 ? endedAttempts : levelAttempts;
@@ -482,6 +491,7 @@ export async function getStudentProgress(studentProfileId: string) {
       levelKey: level.levelKey,
       name: formatItemDisplayName(level.name),
       orderIndex: level.orderIndex,
+      playSlot: index + 1,
       attempts: levelAttempts.length,
       status: levelPassed
         ? AttemptStatus.CORRECT
@@ -496,7 +506,7 @@ export async function getStudentProgress(studentProfileId: string) {
   });
 
   const summary = summarizeStudentListProgress(
-    levels.map((l) => l.id),
+    playableLevels.map((l) => l.id),
     attempts.map((a) => ({
       levelId: a.levelId,
       passed: a.passed,
@@ -506,6 +516,13 @@ export async function getStudentProgress(studentProfileId: string) {
       startedAt: a.startedAt,
     }))
   );
+
+  const playableRefs = playableLevels.map((l) => ({
+    id: l.id,
+    name: l.name,
+    levelKey: l.levelKey,
+    levelType: l.levelType,
+  }));
 
   return {
     summary: {
@@ -518,9 +535,15 @@ export async function getStudentProgress(studentProfileId: string) {
     levels: levelProgress,
     history: attempts.map((a) => ({
       id: a.id,
-      level: formatItemDisplayName(a.level.name),
+      level: formatStudentAttemptItemLabel(
+        playableRefs,
+        a.levelId,
+        a.level.name,
+        parsePlaySlot(a.mistakes)
+      ),
       levelKey: a.level.levelKey,
       levelId: a.levelId,
+      playSlot: parsePlaySlot(a.mistakes),
       attemptNumber: a.attemptNumber,
       status: a.status,
       passed: a.passed,

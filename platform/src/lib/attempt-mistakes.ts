@@ -2,7 +2,13 @@
 export type AttemptRunMeta = {
   inLevelRunNumber: number | null;
   maxLevelRuns: number | null;
+  playSlot: number | null;
 };
+
+export function parsePlaySlot(mistakes: unknown): number | null {
+  const o = readMistakesObject(mistakes);
+  return typeof o?.playSlot === "number" && o.playSlot >= 1 ? o.playSlot : null;
+}
 
 function readMistakesObject(mistakes: unknown): Record<string, unknown> | null {
   if (!mistakes || typeof mistakes !== "object" || Array.isArray(mistakes)) return null;
@@ -17,7 +23,8 @@ export function parseAttemptRunMeta(mistakes: unknown): AttemptRunMeta {
       : null;
   const maxLevelRuns =
     typeof o?.maxLevelRuns === "number" && o.maxLevelRuns >= 1 ? o.maxLevelRuns : null;
-  return { inLevelRunNumber, maxLevelRuns };
+  const playSlot = parsePlaySlot(mistakes);
+  return { inLevelRunNumber, maxLevelRuns, playSlot };
 }
 
 /** Label for dashboard tables, e.g. "Try 1 of 2" or "Session #3". */

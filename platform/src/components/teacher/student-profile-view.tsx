@@ -48,6 +48,7 @@ export type StudentProfileAttemptRow = {
   levelId: string;
   levelName: string;
   attemptNumber: number;
+  attemptLabel?: string;
   status: AttemptStatus;
   passed: boolean;
   score: number | null;
@@ -402,7 +403,7 @@ export function StudentProfileView({
                             {attempt.levelName}
                           </Link>
                           <Badge variant="outline" className="font-mono text-[10px]">
-                            Run #{attempt.attemptNumber}
+                            {attempt.attemptLabel ?? `Run #${attempt.attemptNumber}`}
                           </Badge>
                           <StatusBadge status={attempt.status} passed={attempt.passed} />
                         </div>

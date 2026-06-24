@@ -3,7 +3,9 @@ import { notFound } from "next/navigation";
 import { authOptions } from "@/lib/auth";
 import { assertStudentAccess, resolveTeacherScope } from "@/lib/class-access";
 import { getStudentProgress } from "@/lib/analytics";
-import { formatItemDisplayName } from "@/lib/item-display";
+import { formatStudentAttemptItemLabelFromAttempt } from "@/lib/student-item-label";
+import { getPlayableLevelsForStudent } from "@/lib/level-assignments";
+import { parseAttemptRunMeta, formatAttemptRunLabel } from "@/lib/attempt-mistakes";
 import { prisma } from "@/lib/prisma";
 import { TeacherShell } from "@/components/teacher/teacher-shell";
 import { StudentProfileView } from "@/components/teacher/student-profile-view";
@@ -26,6 +28,15 @@ export default async function StudentProfilePage({
   if (!student) notFound();
 
   const progress = await getStudentProgress(student.id);
+  const studentCode = student.externalId ?? student.id;
+  const playableLevels = await getPlayableLevelsForStudent(studentCode);
+  const playableRefs = playableLevels.map((l) => ({
+    id: l.id,
+    name: l.name,
+    levelKey: l.levelKey,
+    levelType: l.levelType,
+  }));
+
   const recentAttempts = await prisma.levelAttempt.findMany({
     where: { studentId: student.id },
     include: { level: true },
@@ -55,17 +66,25 @@ export default async function StudentProfilePage({
           finalCommand: l.finalCommand,
           lastAttemptAt: l.lastAttemptAt?.toISOString() ?? null,
         }))}
-        attempts={recentAttempts.map((a) => ({
-          id: a.id,
-          levelId: a.levelId,
-          levelName: formatItemDisplayName(a.level.name),
-          attemptNumber: a.attemptNumber,
-          status: a.status,
-          passed: a.passed,
-          score: a.score,
-          startedAt: a.startedAt.toISOString(),
-          totalTimeSeconds: a.totalTimeSeconds,
-        }))}
+        attempts={recentAttempts.map((a) => {
+          const runMeta = parseAttemptRunMeta(a.mistakes);
+          return {
+            id: a.id,
+            levelId: a.levelId,
+            levelName: formatStudentAttemptItemLabelFromAttempt(playableRefs, {
+              levelId: a.levelId,
+              levelName: a.level.name,
+              mistakes: a.mistakes,
+            }),
+            attemptNumber: a.attemptNumber,
+            attemptLabel: formatAttemptRunLabel(a.attemptNumber, runMeta),
+            status: a.status,
+            passed: a.passed,
+            score: a.score,
+            startedAt: a.startedAt.toISOString(),
+            totalTimeSeconds: a.totalTimeSeconds,
+          };
+        })}
       />
     </TeacherShell>
   );

@@ -8,6 +8,7 @@ import {
 import { resolveAttemptEndScore } from "@/lib/game/resolve-attempt-score";
 import { resolveAttemptDurationSeconds } from "@/lib/game/resolve-attempt-duration";
 import { analyzeAttemptConstructs } from "@/lib/ct/scoring";
+import { parsePlaySlot } from "@/lib/attempt-mistakes";
 import { AttemptStatus, Prisma } from "@prisma/client";
 
 export async function POST(request: NextRequest) {
@@ -90,6 +91,8 @@ export async function POST(request: NextRequest) {
 
   await syncRobotTouchStats(attemptId);
 
+  const storedPlaySlot = parsePlaySlot(attempt.mistakes);
+
   const baseMessages = Array.isArray(mistakes) ? mistakes : mistakes != null ? [mistakes] : [];
   const extras =
     assessmentExtras && typeof assessmentExtras === "object" ? assessmentExtras : null;
@@ -110,6 +113,8 @@ export async function POST(request: NextRequest) {
         extras.expectedCellY >= 0
           ? { x: extras.expectedCellX, y: extras.expectedCellY }
           : undefined;
+      const playSlotFromExtras =
+        typeof extras?.playSlot === "number" && extras.playSlot >= 1 ? extras.playSlot : null;
       return {
         messages: baseMessages,
         ...(objectVisit ? { objectVisit } : {}),
@@ -133,6 +138,8 @@ export async function POST(request: NextRequest) {
         ...(typeof extras?.maxLevelRuns === "number" && extras.maxLevelRuns >= 1
           ? { maxLevelRuns: extras.maxLevelRuns }
           : {}),
+        ...(storedPlaySlot != null ? { playSlot: storedPlaySlot } : {}),
+        ...(playSlotFromExtras != null ? { playSlot: playSlotFromExtras } : {}),
       } as Prisma.InputJsonValue;
     }
     return ((mistakes ?? attempt.mistakes) as Prisma.InputJsonValue) ?? [];

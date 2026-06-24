@@ -4,7 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { gameApiUnauthorized, verifyGameApiKey } from "@/lib/game-api";
 import { levelGameplayConfigSchema } from "@/lib/level-config";
 import { studentHasLevelAccess } from "@/lib/level-assignments";
-import { normalizeExternalStudentId, resolveLevel, resolveStudent } from "@/lib/game-service";
+import { normalizeExternalStudentId, resolveStudent } from "@/lib/game-service";
+import {
+  parseSlotNumber,
+  resolveLevelForStudentRun,
+} from "@/lib/game/resolve-student-run-level";
 
 function optionalString(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
@@ -16,22 +20,24 @@ export async function POST(request: NextRequest) {
   if (!verifyGameApiKey(request)) return gameApiUnauthorized();
 
   try {
-    const body = await request.json();
+    const body = (await request.json()) as Record<string, unknown>;
     const studentId = optionalString(body.studentId);
     const levelId = optionalString(body.levelId);
     const classId = optionalString(body.classId);
     const initialCommand = optionalString(body.initialCommand);
+    const playSlot = parseSlotNumber(body);
 
     if (!studentId || !levelId) {
       return Response.json({ error: "studentId and levelId are required" }, { status: 400 });
     }
 
-    const student = await resolveStudent(normalizeExternalStudentId(studentId));
+    const normalizedStudentId = normalizeExternalStudentId(studentId);
+    const student = await resolveStudent(normalizedStudentId);
     if (!student) {
       return Response.json({ error: `Student not found: ${studentId}` }, { status: 404 });
     }
 
-    const level = await resolveLevel(levelId);
+    const level = await resolveLevelForStudentRun(normalizedStudentId, levelId, body);
     if (!level) {
       return Response.json({ error: `Level not found: ${levelId}` }, { status: 404 });
     }
@@ -56,7 +62,6 @@ export async function POST(request: NextRequest) {
       where: { studentId: student.id, levelId: level.id },
     });
 
-    // Close abandoned in-progress rows so dashboard/history show Incomplete instead of hanging forever.
     await prisma.levelAttempt.updateMany({
       where: { studentId: student.id, levelId: level.id, endedAt: null },
       data: { endedAt: new Date(), status: AttemptStatus.INCOMPLETE },
@@ -70,6 +75,7 @@ export async function POST(request: NextRequest) {
         attemptNumber: previousAttempts + 1,
         initialCommand: initialCommand ?? null,
         startedAt: new Date(),
+        ...(playSlot != null ? { mistakes: { playSlot } } : {}),
       },
     });
 
@@ -77,6 +83,8 @@ export async function POST(request: NextRequest) {
       attemptId: attempt.id,
       attemptNumber: attempt.attemptNumber,
       levelKey: level.levelKey,
+      levelId: level.id,
+      playSlot,
       startedAt: attempt.startedAt,
     });
   } catch (error) {

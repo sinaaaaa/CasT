@@ -94,7 +94,7 @@ public class GameAssessmentClient : MonoBehaviour
         _startInFlight = false;
     }
 
-    public void StartLevel(string levelIdOrKey, string initialCommand = null, Action<bool> onComplete = null)
+    public void StartLevel(string levelIdOrKey, string initialCommand = null, int slotNumber = 0, Action<bool> onComplete = null)
     {
         _currentLevelId = levelIdOrKey;
         SyncStudentFromPlayerPrefs();
@@ -104,7 +104,8 @@ public class GameAssessmentClient : MonoBehaviour
         {
             studentId = studentId,
             levelId = levelIdOrKey,
-            initialCommand = initialCommand ?? ""
+            initialCommand = initialCommand ?? "",
+            slotNumber = slotNumber > 0 ? slotNumber : 0
         };
         StartCoroutine(PostJson("/api/game/level-start", payload, (ok, body, code) =>
         {
@@ -418,6 +419,7 @@ public class GameAssessmentClient : MonoBehaviour
         public string studentId;
         public string levelId;
         public string initialCommand;
+        public int slotNumber;
     }
 
     [Serializable]
@@ -488,6 +490,8 @@ public class GameAssessmentClient : MonoBehaviour
         public int inLevelRunNumber;
         /// <summary>maxAttempts configured for this level.</summary>
         public int maxLevelRuns;
+        /// <summary>1-based slot in the student's assigned item list (for accurate reporting).</summary>
+        public int playSlot;
     }
 
     [Serializable]
