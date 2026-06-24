@@ -89,6 +89,8 @@ public class GameAssessmentClient : MonoBehaviour
     public bool HasPendingReports =>
         _processingEndQueue || _endQueue.Count > 0 || _endPostInFlight > 0;
 
+    public bool StartInFlight => _startInFlight;
+
     /// <summary>Wait until queued level-end calls finish (call before advancing to the next item).</summary>
     public IEnumerator WaitForPendingReports(float timeoutSeconds = 25f)
     {

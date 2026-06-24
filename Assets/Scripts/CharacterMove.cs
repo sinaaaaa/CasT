@@ -3569,6 +3569,68 @@ public class CharacterMove : MonoBehaviour
 
         if (actionBlockIntro != null)
             actionBlockIntro.TryBeginAfterLevelSetup(levelNumber, ld);
+
+        StartCoroutine(PrewarmPlatformRunAttemptAfterLevelReady(levelNumber));
+    }
+
+    /// <summary>Start level-start in the background so RUN feels instant when possible.</summary>
+    public void SchedulePrewarmPlatformRunAttempt()
+    {
+        StartCoroutine(PrewarmPlatformRunAttemptAfterLevelReady(currentLevel));
+    }
+
+    private IEnumerator PrewarmPlatformRunAttemptAfterLevelReady(int levelNumber)
+    {
+        yield return null;
+
+        float introWait = 0f;
+        while (IsActionBlockIntroActive && introWait < 120f)
+        {
+            introWait += Time.unscaledDeltaTime;
+            yield return null;
+        }
+
+        if (currentLevel != levelNumber) yield break;
+
+        LevelData ld = GetCurrentLevelData();
+        if (ld == null || IsIntroLevel(ld)) yield break;
+
+        var client = GameAssessmentClient.Instance;
+        if (client != null)
+            yield return client.WaitForPendingReports();
+
+        if (currentLevel != levelNumber) yield break;
+
+        EnsurePlatformRunAttemptStarted();
+    }
+
+    private bool _runStartupInFlight;
+    private bool _allItemsCompleteActive;
+
+    private void SetRunStartupUI(bool active, string message = "Get ready… Robo is starting.")
+    {
+        _runStartupInFlight = active;
+        if (active)
+        {
+            if (chatGPTResponseText != null)
+                chatGPTResponseText.text = message;
+            if (runButton != null)
+                runButton.interactable = false;
+        }
+        else
+        {
+            RefreshRunButtonState();
+        }
+    }
+
+    private void RefreshRunButtonState()
+    {
+        if (runButton == null) return;
+        if (_runStartupInFlight || isProcessing) return;
+        if (IsActionBlockIntroActive && actionBlockIntro != null && !actionBlockIntro.CanStartRun())
+            return;
+        if (!UsesGuidedBlankFlow(GetCurrentLevelData()))
+            runButton.interactable = !IsRunBlockedByFlagRequirement();
     }
 
     private void EnsureCornerHintPanel()
@@ -4029,6 +4091,13 @@ public class CharacterMove : MonoBehaviour
 
     private IEnumerator OnSuccessPopupContinueRoutine()
     {
+        if (_allItemsCompleteActive)
+        {
+            successPopup.SetActive(false);
+            _allItemsCompleteActive = false;
+            yield break;
+        }
+
         successPopup.SetActive(false);
         if (!_skipNextPlatformReport && !_currentRunReportedToPlatform)
             yield return ReportCurrentRunToPlatformRoutine(pendingLevelPassed);
@@ -4039,6 +4108,51 @@ public class CharacterMove : MonoBehaviour
             yield return GameAssessmentClient.Instance.WaitForPendingReports();
 
         AdvanceToNextLevel();
+    }
+
+    private bool IsOnLastPlayableItem()
+    {
+        return allLevelsData != null && allLevelsData.Count > 0 && currentLevel >= allLevelsData.Count;
+    }
+
+    private void ShowAllItemsCompleteScreen(LevelData completedLevel = null)
+    {
+        _allItemsCompleteActive = true;
+        SavePlayerLevel();
+
+        int total = allLevelsData != null ? allLevelsData.Count : currentLevel;
+        string levelLine = "";
+        if (completedLevel != null)
+        {
+            string configured = GetConfiguredPopupText(completedLevel.attemptSuccessMessage, completedLevel);
+            if (!string.IsNullOrWhiteSpace(configured))
+                levelLine = configured.Trim() + "\n\n";
+        }
+
+        string message =
+            levelLine +
+            "You completed all " + total + " items!\n\n" +
+            "Great work — your results are saved. You can close the game or ask your teacher what to try next.";
+
+        if (successPopup != null && successPopupText != null)
+        {
+            successPopupText.text = message;
+            if (!successPopup.activeSelf)
+                successPopup.SetActive(true);
+            GameInteractionSounds.PlaySuccessPopup();
+        }
+        else if (chatGPTResponseText != null)
+        {
+            chatGPTResponseText.text = message;
+        }
+
+        if (runButton != null)
+            runButton.interactable = false;
+        ClearActionQueueVisual();
+        RefreshStudentResetButtonState();
+        RefreshRunButtonState();
+        levelStartTime = -1f;
+        Debug.Log("[CharacterMove] All items completed!");
     }
 
     private string GetPlatformLevelKey(int levelNumber)
@@ -4058,7 +4172,7 @@ public class CharacterMove : MonoBehaviour
         return string.Join("; ", commands);
     }
 
-    private void EnsurePlatformRunAttemptStarted()
+    private void EnsurePlatformRunAttemptStarted(bool forceNewAttempt = false)
     {
         if (string.IsNullOrEmpty(currentUserId) || currentUserId == "UnknownUser") return;
         if (GameAssessmentClient.Instance == null) return;
@@ -4067,6 +4181,12 @@ public class CharacterMove : MonoBehaviour
         var client = GameAssessmentClient.Instance;
         if (!string.IsNullOrEmpty(client.CurrentAttemptId) && client.CurrentLevelId != levelKey)
             client.ClearCurrentAttempt();
+
+        if (!forceNewAttempt &&
+            !string.IsNullOrEmpty(client.CurrentAttemptId) &&
+            client.CurrentLevelId == levelKey &&
+            !_currentRunReportedToPlatform)
+            return;
 
         string initial = BuildCommandsString(_telemetryInitialCommands);
         client.SetStudent(currentUserId);
@@ -4236,9 +4356,7 @@ public class CharacterMove : MonoBehaviour
         }
         else
         {
-            chatGPTResponseText.text = "";
-            Debug.Log("[CharacterMove] All levels completed!");
-            levelStartTime = -1f;
+            ShowAllItemsCompleteScreen();
         }
         foreach (var obj in activeObstacles) { if (obj != null) Destroy(obj); }
         activeObstacles.Clear();
@@ -4960,6 +5078,8 @@ public class CharacterMove : MonoBehaviour
         if (IsActionBlockIntroActive && actionBlockIntro != null && !actionBlockIntro.CanStartRun())
             yield break;
 
+        SetRunStartupUI(true);
+
         if (IsActionBlockIntroActive && actionBlockIntro != null)
             actionBlockIntro.NotifyRunStarted();
 
@@ -4975,12 +5095,20 @@ public class CharacterMove : MonoBehaviour
 
         _activeInLevelRunNumber = currentAttempt + 1;
         _runAttemptStartTime = Time.time;
+        bool forceNewAttempt = _currentRunReportedToPlatform;
         _currentRunReportedToPlatform = false;
         _lastMoveBlocked = false;
-        EnsurePlatformRunAttemptStarted();
 
-        if (client != null)
-            yield return client.WaitForAttemptReady(GetPlatformLevelKey(currentLevel));
+        string levelKey = GetPlatformLevelKey(currentLevel);
+        EnsurePlatformRunAttemptStarted(forceNewAttempt: forceNewAttempt);
+
+        if (client != null &&
+            (string.IsNullOrEmpty(client.CurrentAttemptId) ||
+             client.CurrentLevelId != levelKey ||
+             client.StartInFlight))
+            yield return client.WaitForAttemptReady(levelKey);
+
+        SetRunStartupUI(false);
 
         RecordTelemetryBeforeRun();
 
@@ -5057,7 +5185,7 @@ public class CharacterMove : MonoBehaviour
         bool popupOpen =
             (successPopup != null && successPopup.activeSelf) ||
             (wrongAnswerPopup != null && wrongAnswerPopup.activeSelf);
-        studentResetButton.interactable = !popupOpen && !isProcessing;
+        studentResetButton.interactable = !popupOpen && !isProcessing && !_runStartupInFlight;
     }
 
     /// <summary>Student-facing reset: stop RUN if active, clear program strip, robot to start (same attempt).</summary>
@@ -6500,7 +6628,11 @@ public class CharacterMove : MonoBehaviour
             yield return GameAssessmentClient.Instance.WaitForPendingReports();
         
         LevelData completedLevel = GetCurrentLevelData();
-        if (successPopup != null && successPopupText != null)
+        if (IsOnLastPlayableItem())
+        {
+            ShowAllItemsCompleteScreen(completedLevel);
+        }
+        else if (successPopup != null && successPopupText != null)
         {
             successPopupText.text = GetConfiguredPopupText(completedLevel?.attemptSuccessMessage, completedLevel);
             successPopup.SetActive(true);

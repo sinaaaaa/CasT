@@ -659,6 +659,8 @@ public class ActionBlockIntroManager : MonoBehaviour
         characterMove.RefreshLevelCornerHint();
         if (CharacterMove.IsIntroLevel(characterMove.GetCurrentLevelData()))
             characterMove.OnIntroLevelComplete();
+        else
+            characterMove.SchedulePrewarmPlatformRunAttempt();
         Debug.Log("[ActionBlockIntro] Completed.");
     }
 
