@@ -474,31 +474,53 @@ export async function getStudentProgress(studentProfileId: string) {
   });
 
   const byLevel = new Map<string, (typeof attempts)[number][]>();
+  const bySlot = new Map<number, (typeof attempts)[number][]>();
+  const levelIdToSlot = new Map(playableLevels.map((l, i) => [l.id, i + 1]));
+
   for (const a of attempts) {
     const list = byLevel.get(a.levelId) ?? [];
     list.push(a);
     byLevel.set(a.levelId, list);
+
+    const explicitSlot = parsePlaySlot(a.mistakes);
+    const slot = explicitSlot ?? levelIdToSlot.get(a.levelId);
+    if (slot != null) {
+      const slotList = bySlot.get(slot) ?? [];
+      slotList.push(a);
+      bySlot.set(slot, slotList);
+    }
   }
 
   const levelProgress = playableLevels.map((level, index) => {
-    const levelAttempts = byLevel.get(level.id) ?? [];
+    const slot = index + 1;
+    const levelAttempts = (bySlot.get(slot) ?? byLevel.get(level.id) ?? []).sort(
+      (a, b) => b.startedAt.getTime() - a.startedAt.getTime()
+    );
     const endedAttempts = levelAttempts.filter((a) => a.endedAt != null);
-    const statusAttempts = endedAttempts.length > 0 ? endedAttempts : levelAttempts;
+    const scoredAttempts = endedAttempts.filter((a) => a.status !== AttemptStatus.INCOMPLETE);
+    const statusAttempts = scoredAttempts.length > 0 ? scoredAttempts : endedAttempts.length > 0 ? endedAttempts : levelAttempts;
     const best = statusAttempts.find((a) => a.passed) ?? statusAttempts[0];
-    const levelPassed = endedAttempts.some((a) => a.passed);
+    const levelPassed = scoredAttempts.some((a) => a.passed);
+    const levelFailed =
+      !levelPassed &&
+      scoredAttempts.some((a) => !a.passed && a.status === AttemptStatus.INCORRECT);
     const displayAttempts =
-      endedAttempts.length > 0 ? endedAttempts.length : levelAttempts.length;
+      scoredAttempts.length > 0
+        ? scoredAttempts.length
+        : endedAttempts.length > 0
+          ? endedAttempts.length
+          : levelAttempts.length;
     return {
       levelId: level.id,
       levelKey: level.levelKey,
       name: formatItemDisplayName(level.name),
       orderIndex: level.orderIndex,
-      playSlot: index + 1,
+      playSlot: slot,
       attempts: displayAttempts,
       status: levelPassed
         ? AttemptStatus.CORRECT
-        : endedAttempts.length > 0
-          ? (best?.status ?? AttemptStatus.INCOMPLETE)
+        : levelFailed
+          ? AttemptStatus.INCORRECT
           : levelAttempts.length > 0
             ? AttemptStatus.INCOMPLETE
             : AttemptStatus.INCOMPLETE,
@@ -511,17 +533,12 @@ export async function getStudentProgress(studentProfileId: string) {
     };
   });
 
-  const summary = summarizeStudentListProgress(
-    playableLevels.map((l) => l.id),
-    attempts.map((a) => ({
-      levelId: a.levelId,
-      passed: a.passed,
-      status: a.status,
-      score: a.score,
-      endedAt: a.endedAt,
-      startedAt: a.startedAt,
-    }))
-  );
+  const passed = levelProgress.filter((l) => l.passed).length;
+  const failed = levelProgress.filter(
+    (l) => !l.passed && l.status === AttemptStatus.INCORRECT
+  ).length;
+  const notStarted = levelProgress.filter((l) => l.attempts === 0).length;
+  const totalLevels = playableLevels.length;
 
   const playableRefs = playableLevels.map((l) => ({
     id: l.id,
@@ -532,11 +549,11 @@ export async function getStudentProgress(studentProfileId: string) {
 
   return {
     summary: {
-      totalLevels: summary.totalLevels,
-      passed: summary.passed,
-      failed: summary.failed,
-      incomplete: summary.incomplete,
-      completionPercent: summary.completionPercent,
+      totalLevels,
+      passed,
+      failed,
+      incomplete: notStarted,
+      completionPercent: totalLevels ? Math.round((passed / totalLevels) * 100) : 0,
     },
     levels: levelProgress,
     history: filterSupersededIncompleteAttempts(attempts).map((a) => ({

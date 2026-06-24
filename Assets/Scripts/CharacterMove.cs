@@ -4060,12 +4060,31 @@ public class CharacterMove : MonoBehaviour
 
     private void ReportCurrentRunToPlatform(bool passed)
     {
-        if (currentLevel < 1 || currentLevel > allLevelsData.Count) return;
-        if (string.IsNullOrEmpty(currentUserId) || currentUserId == "UnknownUser") return;
-        if (GameAssessmentClient.Instance == null) return;
+        StartCoroutine(ReportCurrentRunToPlatformRoutine(passed));
+    }
+
+    private IEnumerator ReportCurrentRunToPlatformRoutine(bool passed)
+    {
+        if (currentLevel < 1 || currentLevel > allLevelsData.Count) yield break;
+        if (string.IsNullOrEmpty(currentUserId) || currentUserId == "UnknownUser") yield break;
+        if (GameAssessmentClient.Instance == null) yield break;
 
         LevelData levelData = GetCurrentLevelData();
         string levelKey = GetPlatformLevelKey(currentLevel);
+        var client = GameAssessmentClient.Instance;
+
+        if (string.IsNullOrEmpty(client.CurrentAttemptId))
+        {
+            EnsurePlatformRunAttemptStarted();
+            yield return client.WaitForAttemptReady(levelKey);
+        }
+
+        if (string.IsNullOrEmpty(client.CurrentAttemptId))
+        {
+            Debug.LogWarning("[CharacterMove] level-end skipped: no attempt id after RUN.");
+            yield break;
+        }
+
         string finalCmd = BuildCommandsString(_telemetryFinalCommands);
         if (string.IsNullOrEmpty(finalCmd))
             finalCmd = passed ? "Level Completed" : "Run failed";
@@ -4084,7 +4103,7 @@ public class CharacterMove : MonoBehaviour
         assessmentExtras.playSlot = currentLevel;
 
         _currentRunReportedToPlatform = true;
-        GameAssessmentClient.Instance.ReportLevelComplete(
+        client.ReportLevelComplete(
             levelKey,
             currentUserId,
             initial,
@@ -4211,10 +4230,11 @@ public class CharacterMove : MonoBehaviour
 
     private IEnumerator SetupNextLevel()
     {
-        // Wait for end of frame to ensure all cleanup is complete
         yield return new WaitForEndOfFrame();
-        
-        // Setup the new level
+
+        if (GameAssessmentClient.Instance != null)
+            yield return GameAssessmentClient.Instance.WaitForPendingReports();
+
         SetupLevel(currentLevel);
     }
 
@@ -4907,20 +4927,29 @@ public class CharacterMove : MonoBehaviour
 
     private void StartActionProcessing()
     {
+        StartCoroutine(StartActionProcessingRoutine());
+    }
+
+    private IEnumerator StartActionProcessingRoutine()
+    {
         LevelData runLevel = GetCurrentLevelData();
         if (IsRunBlockedByFlagRequirement())
         {
             if (chatGPTResponseText != null)
                 chatGPTResponseText.text = "Place the flag on a cell first — that cell is your goal.";
             Debug.Log("[CharacterMove] RUN blocked: flag not placed yet (flag-placement level only).");
-            return;
+            yield break;
         }
 
         if (IsActionBlockIntroActive && actionBlockIntro != null && !actionBlockIntro.CanStartRun())
-            return;
+            yield break;
 
         if (IsActionBlockIntroActive && actionBlockIntro != null)
             actionBlockIntro.NotifyRunStarted();
+
+        var client = GameAssessmentClient.Instance;
+        if (client != null)
+            yield return client.WaitForPendingReports();
 
         StopFadingAndResetSpriteColor();
         CleanupInsertionPlaceholders();
@@ -4934,13 +4963,16 @@ public class CharacterMove : MonoBehaviour
         _lastMoveBlocked = false;
         EnsurePlatformRunAttemptStarted();
 
+        if (client != null)
+            yield return client.WaitForAttemptReady(GetPlatformLevelKey(currentLevel));
+
         RecordTelemetryBeforeRun();
 
         ResetRobotToLevelStart();
 
         attemptStartGridPos = robotGridPosition;
         attemptStartFacing = facingDirection;
-        movesUsedInCurrentAttempt = 0; // Reset move counter for new attempt
+        movesUsedInCurrentAttempt = 0;
         Debug.Log($"[StartActionProcessing] Recording attempt start: pos={attemptStartGridPos}, facing={attemptStartFacing}, movesUsed=0, currentAttempt={currentAttempt}");
         if (!isProcessing && actionQueue.Count > 0)
         {

@@ -62,9 +62,8 @@ export async function POST(request: NextRequest) {
       where: { studentId: student.id, levelId: level.id },
     });
 
-    // Close any open runs (including other items) so orphans do not pile up when advancing.
     await prisma.levelAttempt.updateMany({
-      where: { studentId: student.id, endedAt: null },
+      where: { studentId: student.id, levelId: level.id, endedAt: null },
       data: { endedAt: new Date(), status: AttemptStatus.INCOMPLETE },
     });
 

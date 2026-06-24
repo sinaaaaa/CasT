@@ -49,6 +49,7 @@ public class GameAssessmentClient : MonoBehaviour
     private bool _startInFlight;
     private readonly Queue<LevelEndRequest> _endQueue = new Queue<LevelEndRequest>();
     private bool _processingEndQueue;
+    private int _endPostInFlight;
 
     private void Awake()
     {
@@ -84,6 +85,38 @@ public class GameAssessmentClient : MonoBehaviour
 
     public string CurrentAttemptId => _currentAttemptId;
     public string CurrentLevelId => _currentLevelId;
+
+    public bool HasPendingReports =>
+        _processingEndQueue || _endQueue.Count > 0 || _endPostInFlight > 0;
+
+    /// <summary>Wait until queued level-end calls finish (call before advancing to the next item).</summary>
+    public IEnumerator WaitForPendingReports(float timeoutSeconds = 25f)
+    {
+        float elapsed = 0f;
+        while (HasPendingReports && elapsed < timeoutSeconds)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            yield return null;
+        }
+    }
+
+    /// <summary>Wait until RUN's level-start has assigned an attempt for this item.</summary>
+    public IEnumerator WaitForAttemptReady(string levelKey, float timeoutSeconds = 15f)
+    {
+        float elapsed = 0f;
+        while (elapsed < timeoutSeconds)
+        {
+            if (!string.IsNullOrEmpty(_currentAttemptId) &&
+                (string.IsNullOrEmpty(levelKey) || _currentLevelId == levelKey))
+                yield break;
+
+            if (!_startInFlight && string.IsNullOrEmpty(_currentAttemptId) && elapsed > 1f)
+                yield break;
+
+            elapsed += Time.unscaledDeltaTime;
+            yield return null;
+        }
+    }
 
     /// <summary>Clears the active attempt when loading a new item (prevents cross-item telemetry).</summary>
     public void ClearCurrentAttempt()
@@ -297,16 +330,20 @@ public class GameAssessmentClient : MonoBehaviour
 
         if (request.waitForAttemptStart && string.IsNullOrEmpty(attemptId))
         {
-            float elapsed = 0f;
-            while (string.IsNullOrEmpty(_currentAttemptId) && (_startInFlight || elapsed < 15f))
-            {
-                elapsed += Time.unscaledDeltaTime;
-                yield return null;
-            }
+            yield return WaitForAttemptReady(request.levelKey);
 
             attemptId = !string.IsNullOrEmpty(request.attemptId)
                 ? request.attemptId
                 : _currentAttemptId;
+
+            if (!string.IsNullOrEmpty(attemptId) &&
+                !string.IsNullOrEmpty(request.levelKey) &&
+                _currentLevelId != request.levelKey)
+            {
+                Debug.LogWarning(
+                    $"[Assessment] Active attempt is for {_currentLevelId}, not {request.levelKey} — starting level before end.");
+                attemptId = null;
+            }
 
             if (string.IsNullOrEmpty(attemptId))
             {
@@ -318,12 +355,13 @@ public class GameAssessmentClient : MonoBehaviour
                     startOk = ok;
                     started = true;
                 });
-                elapsed = 0f;
+                float elapsed = 0f;
                 while (!started && elapsed < 15f)
                 {
                     elapsed += Time.unscaledDeltaTime;
                     yield return null;
                 }
+                yield return WaitForAttemptReady(request.levelKey);
                 attemptId = _currentAttemptId;
                 if (!startOk || string.IsNullOrEmpty(attemptId))
                 {
@@ -363,8 +401,10 @@ public class GameAssessmentClient : MonoBehaviour
 
         bool done = false;
         bool success = false;
+        _endPostInFlight++;
         StartCoroutine(PostJson("/api/game/level-end", payload, (ok, body, code) =>
         {
+            _endPostInFlight = Math.Max(0, _endPostInFlight - 1);
             success = ok;
             if (ok)
             {

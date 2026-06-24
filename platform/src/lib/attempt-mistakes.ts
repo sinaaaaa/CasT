@@ -32,24 +32,35 @@ type AttemptDisplayRow = {
   startedAt: Date | string;
   endedAt: Date | string | null;
   status: string;
+  mistakes?: unknown;
 };
 
-/** Hide orphan INCOMPLETE rows superseded by a later ended run on the same item. */
+export function attemptItemGroupKey(attempt: {
+  levelId: string;
+  mistakes?: unknown;
+}): string {
+  const slot = parsePlaySlot(attempt.mistakes);
+  return slot != null ? `slot:${slot}` : `level:${attempt.levelId}`;
+}
+
+/** Hide orphan INCOMPLETE rows when the same item already has a scored ended run. */
 export function filterSupersededIncompleteAttempts<T extends AttemptDisplayRow>(
   attempts: T[]
 ): T[] {
+  const completedKeys = new Set<string>();
+  for (const attempt of attempts) {
+    if (
+      attempt.endedAt != null &&
+      attempt.status !== "INCOMPLETE"
+    ) {
+      completedKeys.add(attemptItemGroupKey(attempt));
+    }
+  }
+
   return attempts.filter((attempt) => {
     if (attempt.endedAt != null) return true;
     if (attempt.status !== "INCOMPLETE") return true;
-
-    const startedMs = new Date(attempt.startedAt).getTime();
-    const superseded = attempts.some(
-      (other) =>
-        other.levelId === attempt.levelId &&
-        other.endedAt != null &&
-        new Date(other.startedAt).getTime() > startedMs
-    );
-    return !superseded;
+    return !completedKeys.has(attemptItemGroupKey(attempt));
   });
 }
 
