@@ -52,6 +52,10 @@ public class DragDropTutorialController : MonoBehaviour
     [Range(2, 4)] public int runTapDemoRepeatCount = 2;
     public float pauseBetweenDragRepeatsSeconds = 0.35f;
     public float pauseBeforeRunDemoSeconds = 0.5f;
+    [Tooltip("After the student drops a block, brief beat before the Play-tap demo.")]
+    public float pauseAfterStudentDropBeforeRunDemoSeconds = 0.45f;
+    [Tooltip("Max seconds to wait for the student to drag after the hand demo.")]
+    public float studentPracticeTimeoutSeconds = 90f;
     [Range(3f, 8f)] public float tutorialVisibleSeconds = 3f;
     public float fadeOutSeconds = 0.65f;
     public float dragAnimationSeconds = 1.2f;
@@ -89,6 +93,8 @@ public class DragDropTutorialController : MonoBehaviour
     private int _lastPlaySlot = -1;
     private bool _studentHasDragged;
     private bool _stepDemoCancelled;
+    private bool _waitingForStudentPractice;
+    private bool _studentPlacedForStepDemo;
     private bool _tutorialRunning;
     private GameObject _runtimeHand;
     private GameObject _runtimeGhost;
@@ -150,26 +156,63 @@ public class DragDropTutorialController : MonoBehaviour
         if (Active == null) return;
         if (Active.IsStepDemoPlaying)
         {
-            // Student is trying the real command — end the ghost demo and let them interact.
-            Active._stepDemoCancelled = true;
-            Active.StopIntroStepDemo();
+            // Student is trying the real command — stop the ghost hand, keep the step demo
+            // alive so we can wait for the drop and then show the Play-tap demo.
+            Active._studentHasDragged = true;
+            Active.CleanupDragVisualsOnly();
             return;
         }
         Active.OnStudentStartedDragging();
     }
 
+    /// <summary>Called when a real block is inserted during an intro step (after the hand demo).</summary>
+    public void NotifyStudentPlacedBlockForIntro()
+    {
+        _studentPlacedForStepDemo = true;
+        _studentHasDragged = true;
+        CleanupDragVisualsOnly();
+    }
+
     /// <summary>Plays drag + run tap ghost animation for one action-block intro step (dashboard-driven).</summary>
     public void PlayIntroStepDemo(ActionBlockIntroStepData step)
     {
+        // Only stop the opening loop — never leave leftover cancel flags from a prior HideTutorial.
+        StopTutorialRoutine();
         StopIntroStepDemo();
-        if (step == null || characterMove == null) return;
+        if (step == null || characterMove == null)
+        {
+            Debug.LogWarning("[DragDropTutorial] PlayIntroStepDemo skipped — missing step or CharacterMove.");
+            return;
+        }
         bool showDrag = step.tutorial == null || step.tutorial.showDragAnimation;
         bool showRun = step.tutorial == null || step.tutorial.showRunTapAnimation;
-        if (!showDrag && !showRun) return;
-        // Per-step demos must not inherit "student dragged" from the opening sequence or a prior step.
+        if (!showDrag && !showRun)
+        {
+            Debug.LogWarning("[DragDropTutorial] PlayIntroStepDemo skipped — both drag and run demos disabled.");
+            return;
+        }
         _stepDemoCancelled = false;
         _studentHasDragged = false;
+        _waitingForStudentPractice = false;
+        _studentPlacedForStepDemo = false;
+        EnsureReferences();
+        EnsureOverlayUI();
+        EnsureDragVisualsLayer();
+        BringDragVisualsToFront();
         _introStepDemoRoutine = StartCoroutine(IntroStepDemoRoutine(step));
+        Debug.Log($"[DragDropTutorial] Started intro step demo for '{step.action}'.");
+    }
+
+    /// <summary>Call before starting an intro step demo — clears opening tutorial without eating the step demo.</summary>
+    public void PrepareForIntroStepDemo()
+    {
+        StopTutorialRoutine();
+        _tutorialRunning = false;
+        _studentHasDragged = false;
+        _stepDemoCancelled = false;
+        _waitingForStudentPractice = false;
+        _studentPlacedForStepDemo = false;
+        HideInstructionPanelOnly();
     }
 
     public void StopIntroStepDemo()
@@ -180,6 +223,7 @@ public class DragDropTutorialController : MonoBehaviour
             _introStepDemoRoutine = null;
         }
         IsStepDemoPlaying = false;
+        _waitingForStudentPractice = false;
         CleanupDragVisualsOnly();
         if (_stripGlowImage != null)
         {
@@ -245,6 +289,12 @@ public class DragDropTutorialController : MonoBehaviour
         CleanupVisuals();
         if (hadDeferredIntro)
             InvokeOpeningComplete();
+        HideInstructionPanelOnly();
+    }
+
+    /// <summary>Hides instruction text without cancelling an in-progress intro step ghost demo.</summary>
+    private void HideInstructionPanelOnly()
+    {
         if (instructionPanel != null)
         {
             instructionPanel.alpha = 0f;
@@ -451,11 +501,31 @@ public class DragDropTutorialController : MonoBehaviour
         EnsureReferences();
         EnsureOverlayUI();
 
-        DraggableActionBlock.ActionKind kind = ActionBlockIntroManager.ParseAction(step.action);
-        RectTransform paletteBtn = ResolveButtonForKind(kind);
-        RectTransform strip = ResolveYellowStrip();
-        if (paletteBtn == null || strip == null)
+        // Wait for transition cover to finish so the ghost isn't animating under a fade.
+        float waitGuard = 0f;
+        while (LevelTransitionController.ShouldMuteGameplayAudio() && waitGuard < 3f)
         {
+            waitGuard += Time.unscaledDeltaTime;
+            yield return null;
+        }
+
+        DraggableActionBlock.ActionKind kind = ActionBlockIntroManager.ParseAction(step.action);
+        RectTransform paletteBtn = null;
+        RectTransform strip = null;
+
+        for (int i = 0; i < 16; i++)
+        {
+            EnsureReferences();
+            paletteBtn = ResolveButtonForKind(kind);
+            strip = ResolveYellowStrip();
+            if (IsAliveRect(paletteBtn) && paletteBtn.gameObject.activeInHierarchy && IsAliveRect(strip))
+                break;
+            yield return null;
+        }
+
+        if (!IsAliveRect(paletteBtn) || !IsAliveRect(strip))
+        {
+            Debug.LogWarning("[DragDropTutorial] Intro step demo skipped — palette button or strip missing.");
             IsStepDemoPlaying = false;
             _introStepDemoRoutine = null;
             yield break;
@@ -463,8 +533,9 @@ public class DragDropTutorialController : MonoBehaviour
 
         bool showDrag = step.tutorial == null || step.tutorial.showDragAnimation;
         bool showRun = step.tutorial == null || step.tutorial.showRunTapAnimation;
-        int dragRepeats = step.tutorial != null ? Mathf.Clamp(step.tutorial.dragRepeatCount, 1, 4) : 2;
-        int runRepeats = step.tutorial != null ? Mathf.Clamp(step.tutorial.runTapRepeatCount, 1, 4) : 2;
+        // One clear demo, then the student tries — extra repeats make the hand→practice jump confusing.
+        int dragRepeats = step.tutorial != null ? Mathf.Clamp(step.tutorial.dragRepeatCount, 1, 2) : 1;
+        int runRepeats = step.tutorial != null ? Mathf.Clamp(step.tutorial.runTapRepeatCount, 1, 2) : 1;
 
         AddStripGlow(strip);
         Coroutine pulseRoutine = StartCoroutine(PulseForwardButton(paletteBtn));
@@ -475,6 +546,7 @@ public class DragDropTutorialController : MonoBehaviour
         if (showDrag)
         {
             // ActionBlockIntroManager already set corner hint + bottom bar for this step.
+            // Do NOT call HideTutorial() here — it StopIntroStepDemo() and kills this coroutine.
             if (characterMove == null || !characterMove.IsActionBlockIntroActive)
             {
                 ShowDemoInstruction(string.IsNullOrEmpty(step.dragInstruction)
@@ -483,53 +555,82 @@ public class DragDropTutorialController : MonoBehaviour
             }
             else
             {
-                HideTutorial();
+                HideInstructionPanelOnly();
             }
+
+            Canvas.ForceUpdateCanvases();
+            yield return null;
+            dragStart = GetRectCenterInCanvas(paletteBtn);
+            dragEnd = GetDropPointInStrip(strip, appendToEnd: false);
 
             for (int r = 0; r < dragRepeats; r++)
             {
-                if (_stepDemoCancelled) break;
+                if (_stepDemoCancelled || _studentHasDragged || _studentPlacedForStepDemo) break;
+                // Re-resolve in case UI rebuilt mid-demo.
+                if (!IsAliveRect(paletteBtn) || !paletteBtn.gameObject.activeInHierarchy)
+                {
+                    paletteBtn = ResolveButtonForKind(kind);
+                    if (!IsAliveRect(paletteBtn)) break;
+                    dragStart = GetRectCenterInCanvas(paletteBtn);
+                    if (pulseRoutine != null) StopCoroutine(pulseRoutine);
+                    pulseRoutine = StartCoroutine(PulseForwardButton(paletteBtn));
+                }
+                if (!IsAliveRect(strip))
+                {
+                    strip = ResolveYellowStrip();
+                    if (!IsAliveRect(strip)) break;
+                    dragEnd = GetDropPointInStrip(strip, appendToEnd: false);
+                }
+
                 yield return AnimateHandDrag(paletteBtn, dragStart, dragEnd, kind);
+                if (_studentHasDragged || _studentPlacedForStepDemo) break;
                 yield return PlaySnapPop(dragEnd);
-                if (r < dragRepeats - 1)
+                if (r < dragRepeats - 1 && !_studentHasDragged && !_studentPlacedForStepDemo)
                     yield return new WaitForSeconds(pauseBetweenDragRepeatsSeconds);
+            }
+
+            CleanupDragVisualsOnly();
+
+            // --- Your turn: student must drag before we show Play ---
+            if (!_stepDemoCancelled && !_studentPlacedForStepDemo)
+            {
+                _waitingForStudentPractice = true;
+                if (characterMove != null && characterMove.IsActionBlockIntroActive &&
+                    characterMove.actionBlockIntro != null)
+                {
+                    characterMove.actionBlockIntro.BeginStudentDragPractice();
+                }
+                else
+                {
+                    ShowDemoInstruction(string.IsNullOrEmpty(step.dragInstruction)
+                        ? "Your turn — drag the block into the yellow strip!"
+                        : "Your turn! " + step.dragInstruction);
+                }
+
+                float practiceGuard = 0f;
+                float timeout = Mathf.Max(5f, studentPracticeTimeoutSeconds);
+                while (!_studentPlacedForStepDemo && !_stepDemoCancelled && practiceGuard < timeout)
+                {
+                    // Keep button pulsing so “what to drag” stays obvious.
+                    if (!IsAliveRect(paletteBtn) || !paletteBtn.gameObject.activeInHierarchy)
+                    {
+                        paletteBtn = ResolveButtonForKind(kind);
+                        if (IsAliveRect(paletteBtn))
+                        {
+                            if (pulseRoutine != null) StopCoroutine(pulseRoutine);
+                            pulseRoutine = StartCoroutine(PulseForwardButton(paletteBtn));
+                        }
+                    }
+                    practiceGuard += Time.unscaledDeltaTime;
+                    yield return null;
+                }
+
+                _waitingForStudentPractice = false;
             }
         }
 
         if (pulseRoutine != null) StopCoroutine(pulseRoutine);
         CleanupDragVisualsOnly();
-
-        if (showRun && !_stepDemoCancelled)
-        {
-            yield return new WaitForSeconds(pauseBeforeRunDemoSeconds);
-            InvalidateDestroyedUiRefs();
-            runButton = null;
-            EnsureReferences();
-            BringDragVisualsToFront();
-
-            RectTransform runRt = ResolveRunButton();
-            if (!IsAliveRect(runRt))
-            {
-                if (debugLogs) Debug.LogWarning("[DragDropTutorial] Run button not found — skipping Play tap demo.");
-            }
-            else
-            {
-                if (characterMove?.runButton != null)
-                    characterMove.runButton.gameObject.SetActive(true);
-
-                int savedRunRepeats = runTapDemoRepeatCount;
-                runTapDemoRepeatCount = runRepeats;
-                string runMsg = string.IsNullOrEmpty(step.runInstruction) ? "Tap Play to run!" : step.runInstruction;
-                if (characterMove != null && characterMove.IsActionBlockIntroActive &&
-                    characterMove.actionBlockIntro != null)
-                {
-                    characterMove.actionBlockIntro.NotifyRunTapDemoStarting(runMsg);
-                }
-
-                yield return AnimateRunButtonTapDemo(runMsg, pulseRunButton: true);
-                runTapDemoRepeatCount = savedRunRepeats;
-            }
-        }
 
         if (_stripGlowImage != null)
         {
@@ -537,6 +638,45 @@ public class DragDropTutorialController : MonoBehaviour
             _stripGlowImage = null;
         }
 
+        if (showRun && !_stepDemoCancelled)
+        {
+            // Only show Play after the student actually placed a block (or drag demo was skipped).
+            bool studentReady = _studentPlacedForStepDemo || !showDrag;
+            if (studentReady)
+            {
+                float beat = Mathf.Max(0.15f, pauseAfterStudentDropBeforeRunDemoSeconds);
+                yield return new WaitForSeconds(beat);
+                InvalidateDestroyedUiRefs();
+                runButton = null;
+                EnsureReferences();
+                BringDragVisualsToFront();
+
+                RectTransform runRt = ResolveRunButton();
+                if (!IsAliveRect(runRt))
+                {
+                    if (debugLogs) Debug.LogWarning("[DragDropTutorial] Run button not found — skipping Play tap demo.");
+                }
+                else
+                {
+                    if (characterMove?.runButton != null)
+                        characterMove.runButton.gameObject.SetActive(true);
+
+                    int savedRunRepeats = runTapDemoRepeatCount;
+                    runTapDemoRepeatCount = runRepeats;
+                    string runMsg = string.IsNullOrEmpty(step.runInstruction) ? "Now tap Play!" : step.runInstruction;
+                    if (characterMove != null && characterMove.IsActionBlockIntroActive &&
+                        characterMove.actionBlockIntro != null)
+                    {
+                        characterMove.actionBlockIntro.NotifyRunTapDemoStarting(runMsg);
+                    }
+
+                    yield return AnimateRunButtonTapDemo(runMsg, pulseRunButton: true);
+                    runTapDemoRepeatCount = savedRunRepeats;
+                }
+            }
+        }
+
+        _waitingForStudentPractice = false;
         IsStepDemoPlaying = false;
         _introStepDemoRoutine = null;
     }
@@ -560,28 +700,41 @@ public class DragDropTutorialController : MonoBehaviour
     private IEnumerator AnimateHandDrag(RectTransform sourceBtn, Vector2 start, Vector2 end,
         DraggableActionBlock.ActionKind kind = DraggableActionBlock.ActionKind.Forward)
     {
+        EnsureDragVisualsLayer();
+        BringDragVisualsToFront();
         EnsureHand();
+        // Always rebuild ghost so sprite/size match the current step button.
+        if (_runtimeGhost != null)
+        {
+            Destroy(_runtimeGhost);
+            _runtimeGhost = null;
+        }
         EnsureGhost(sourceBtn, kind);
 
         if (_runtimeHand != null) _runtimeHand.SetActive(true);
         if (_runtimeGhost != null) _runtimeGhost.SetActive(true);
 
+        if (start.sqrMagnitude < 0.01f && end.sqrMagnitude < 0.01f)
+            Debug.LogWarning("[DragDropTutorial] Drag points look invalid (0,0). Check button/strip RectTransforms.");
+
+        Debug.Log($"[DragDropTutorial] AnimateHandDrag {kind} from {start} to {end}");
+
         float t = 0f;
         while (t < dragAnimationSeconds)
         {
-            if (ShouldAbortDemo()) yield break;
+            if (ShouldAbortDemo() || _studentHasDragged || _studentPlacedForStepDemo) yield break;
             t += Time.deltaTime;
             float k = EaseInOutCubic(Mathf.Clamp01(t / Mathf.Max(0.001f, dragAnimationSeconds)));
             Vector2 p = Vector2.Lerp(start, end, k);
             PlaceOverlayAt(_runtimeHand, p);
-            PlaceOverlayAt(_runtimeGhost, p + new Vector2(0f, 8f));
+            PlaceOverlayAt(_runtimeGhost, p + new Vector2(0f, 12f));
             yield return null;
         }
 
-        if (!ShouldAbortDemo())
+        if (!ShouldAbortDemo() && !_studentHasDragged && !_studentPlacedForStepDemo)
         {
             PlaceOverlayAt(_runtimeHand, end);
-            PlaceOverlayAt(_runtimeGhost, end + new Vector2(0f, 8f));
+            PlaceOverlayAt(_runtimeGhost, end + new Vector2(0f, 12f));
         }
     }
 
@@ -621,7 +774,7 @@ public class DragDropTutorialController : MonoBehaviour
         if (characterMove == null || !characterMove.IsActionBlockIntroActive)
             ShowDemoInstruction(runMessage);
         else
-            HideTutorial();
+            HideInstructionPanelOnly();
 
         if (characterMove?.runButton != null)
             characterMove.runButton.gameObject.SetActive(true);
@@ -800,14 +953,23 @@ public class DragDropTutorialController : MonoBehaviour
         if (handSprite == null)
             handSprite = CreateSoftCircleSprite();
         img.sprite = handSprite;
+        // High-contrast so it reads on green playfield / yellow strip.
+        img.color = new Color(1f, 0.92f, 0.2f, 1f);
         var rt = _runtimeHand.GetComponent<RectTransform>();
-        rt.sizeDelta = new Vector2(72f, 72f);
+        rt.sizeDelta = new Vector2(110f, 110f);
         ParentToTutorialCanvas(_runtimeHand);
+        _runtimeHand.SetActive(true);
+        _runtimeHand.transform.SetAsLastSibling();
     }
 
     private void EnsureGhost(RectTransform sourceBtn, DraggableActionBlock.ActionKind kind)
     {
-        if (_runtimeGhost != null) return;
+        if (_runtimeGhost != null)
+        {
+            ParentToTutorialCanvas(_runtimeGhost);
+            _runtimeGhost.SetActive(true);
+            return;
+        }
 
         if (ghostCommandPrefab != null)
         {
@@ -829,16 +991,20 @@ public class DragDropTutorialController : MonoBehaviour
         Sprite s = ResolveSpriteForKind(kind);
         var srcImg = sourceBtn != null ? sourceBtn.GetComponent<Image>() : null;
         if (s == null && srcImg != null) s = srcImg.sprite;
+        if (s == null)
+            s = CreateSoftCircleSprite();
         img.sprite = s;
-        img.color = Color.white;
+        img.color = new Color(1f, 1f, 1f, 0.95f);
 
         var rt = _runtimeGhost.GetComponent<RectTransform>();
-        if (sourceBtn != null)
+        if (sourceBtn != null && sourceBtn.rect.width > 4f && sourceBtn.rect.height > 4f)
             rt.sizeDelta = sourceBtn.rect.size;
         else
-            rt.sizeDelta = new Vector2(64f, 64f);
+            rt.sizeDelta = new Vector2(72f, 72f);
 
         ParentToTutorialCanvas(_runtimeGhost);
+        _runtimeGhost.SetActive(true);
+        _runtimeGhost.transform.SetAsLastSibling();
     }
 
     private Sprite ResolveSpriteForKind(DraggableActionBlock.ActionKind kind)
@@ -977,28 +1143,92 @@ public class DragDropTutorialController : MonoBehaviour
 
     private void EnsureOverlayUI()
     {
+        ResolveRootCanvas();
         if (instructionPanel != null) return;
         AutoBuildInstructionOverlay();
     }
 
-    private void AutoBuildInstructionOverlay()
+    private void ResolveRootCanvas()
     {
+        if (_rootCanvas != null) return;
+
         Canvas canvas = null;
         if (characterMove != null)
             canvas = characterMove.GetComponentInChildren<Canvas>(true);
+        if (canvas == null && instructionPanel != null)
+            canvas = instructionPanel.GetComponentInParent<Canvas>();
         if (canvas == null)
             canvas = FindObjectOfType<Canvas>();
-        if (canvas == null)
+        if (canvas != null)
+            _rootCanvas = canvas.rootCanvas != null ? canvas.rootCanvas : canvas;
+    }
+
+    private void EnsureDragVisualsLayer()
+    {
+        // IMPORTANT: do not call BringDragVisualsToFront() from here — that caused StackOverflowException.
+        if (_dragVisualsLayer != null)
+            return;
+
+        // Dedicated overlay canvas so the hand/ghost is ALWAYS visible above gameplay UI,
+        // even when instructionPanel was assigned in the Inspector (old bug: _rootCanvas stayed null).
+        var cgo = new GameObject(
+            "_DragTutorialDragCanvas",
+            typeof(RectTransform),
+            typeof(Canvas),
+            typeof(CanvasScaler),
+            typeof(GraphicRaycaster));
+        var canvas = cgo.GetComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.overrideSorting = true;
+        canvas.sortingOrder = 850;
+        var scaler = cgo.GetComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1920, 1080);
+        scaler.matchWidthOrHeight = 0.5f;
+
+        _dragVisualsLayer = cgo.GetComponent<RectTransform>();
+        _dragVisualsLayer.anchorMin = Vector2.zero;
+        _dragVisualsLayer.anchorMax = Vector2.one;
+        _dragVisualsLayer.offsetMin = Vector2.zero;
+        _dragVisualsLayer.offsetMax = Vector2.zero;
+
+        if (_rootCanvas == null)
+            _rootCanvas = canvas;
+
+        Debug.Log("[DragDropTutorial] Created dedicated drag-visuals canvas (sorting 850).");
+    }
+
+    private void BringDragVisualsToFront()
+    {
+        EnsureDragVisualsLayer();
+        if (_dragVisualsLayer == null) return;
+
+        _dragVisualsLayer.gameObject.SetActive(true);
+        _dragVisualsLayer.SetAsLastSibling();
+
+        var layerCanvas = _dragVisualsLayer.GetComponent<Canvas>();
+        if (layerCanvas != null)
+        {
+            // Stay above boot/welcome/transition overlays (those use ~450–520).
+            layerCanvas.overrideSorting = true;
+            layerCanvas.sortingOrder = 850;
+        }
+    }
+
+    private void AutoBuildInstructionOverlay()
+    {
+        ResolveRootCanvas();
+        if (_rootCanvas == null)
         {
             var cgo = new GameObject("_DragTutorialCanvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
-            canvas = cgo.GetComponent<Canvas>();
+            var canvas = cgo.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             var scaler = cgo.GetComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1280, 720);
             scaler.matchWidthOrHeight = 0.5f;
+            _rootCanvas = canvas;
         }
-        _rootCanvas = canvas.rootCanvas != null ? canvas.rootCanvas : canvas;
 
         var rootGo = new GameObject("_DragDropTutorialUI", typeof(RectTransform), typeof(CanvasGroup));
         var rt = rootGo.GetComponent<RectTransform>();
@@ -1015,7 +1245,7 @@ public class DragDropTutorialController : MonoBehaviour
 
         var instructionCanvas = rootGo.AddComponent<Canvas>();
         instructionCanvas.overrideSorting = true;
-        instructionCanvas.sortingOrder = ComputeTopCanvasSortingOrder(_rootCanvas) + 50;
+        instructionCanvas.sortingOrder = Mathf.Max(ComputeTopCanvasSortingOrder(_rootCanvas) + 50, 860);
 
         var bubble = new GameObject("InstructionBubble", typeof(RectTransform), typeof(Image));
         var bubbleRt = bubble.GetComponent<RectTransform>();
@@ -1043,26 +1273,6 @@ public class DragDropTutorialController : MonoBehaviour
         instructionText.raycastTarget = false;
 
         if (debugLogs) Debug.Log("[DragDropTutorial] Auto-built instruction overlay.");
-    }
-
-    private void EnsureDragVisualsLayer()
-    {
-        EnsureOverlayUI();
-        if (_dragVisualsLayer != null) return;
-        if (_rootCanvas == null) return;
-
-        var layerGo = new GameObject("_DragTutorialDragLayer", typeof(RectTransform), typeof(Canvas));
-        _dragVisualsLayer = layerGo.GetComponent<RectTransform>();
-        _dragVisualsLayer.SetParent(_rootCanvas.transform, false);
-        _dragVisualsLayer.anchorMin = Vector2.zero;
-        _dragVisualsLayer.anchorMax = Vector2.one;
-        _dragVisualsLayer.offsetMin = Vector2.zero;
-        _dragVisualsLayer.offsetMax = Vector2.zero;
-        _dragVisualsLayer.SetAsLastSibling();
-
-        var overlayCanvas = layerGo.GetComponent<Canvas>();
-        overlayCanvas.overrideSorting = true;
-        overlayCanvas.sortingOrder = ComputeTopCanvasSortingOrder(_rootCanvas);
     }
 
     private int ComputeTopCanvasSortingOrder(Canvas fallback)
@@ -1100,16 +1310,6 @@ public class DragDropTutorialController : MonoBehaviour
         go.transform.SetAsLastSibling();
     }
 
-    private void BringDragVisualsToFront()
-    {
-        EnsureDragVisualsLayer();
-        if (_dragVisualsLayer == null) return;
-        _dragVisualsLayer.SetAsLastSibling();
-        var layerCanvas = _dragVisualsLayer.GetComponent<Canvas>();
-        if (layerCanvas != null && _rootCanvas != null)
-            layerCanvas.sortingOrder = ComputeTopCanvasSortingOrder(_rootCanvas);
-    }
-
     private RectTransform GetOverlayCoordinateSpace()
     {
         EnsureDragVisualsLayer();
@@ -1121,14 +1321,25 @@ public class DragDropTutorialController : MonoBehaviour
     private Vector2 GetRectCenterInOverlaySpace(RectTransform rect)
     {
         if (rect == null) return Vector2.zero;
+        EnsureDragVisualsLayer();
         RectTransform space = GetOverlayCoordinateSpace();
         if (space == null) return Vector2.zero;
-        Canvas canvas = space.GetComponentInParent<Canvas>();
-        if (canvas == null) return Vector2.zero;
+
+        // Always convert via screen space — works across different canvases.
+        Canvas srcCanvas = rect.GetComponentInParent<Canvas>();
+        Camera srcCam = null;
+        if (srcCanvas != null && srcCanvas.renderMode != RenderMode.ScreenSpaceOverlay)
+            srcCam = srcCanvas.worldCamera != null ? srcCanvas.worldCamera : Camera.main;
+
         Vector3 world = rect.TransformPoint(rect.rect.center);
-        Camera cam = canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
-        Vector2 screen = RectTransformUtility.WorldToScreenPoint(cam, world);
-        RectTransformUtility.ScreenPointToLocalPointInRectangle(space, screen, cam, out Vector2 local);
+        Vector2 screen = RectTransformUtility.WorldToScreenPoint(srcCam, world);
+
+        Camera dstCam = null; // Screen Space Overlay layer
+        if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(space, screen, dstCam, out Vector2 local))
+        {
+            Debug.LogWarning("[DragDropTutorial] Failed to map UI point into drag overlay space.");
+            return Vector2.zero;
+        }
         return local;
     }
 

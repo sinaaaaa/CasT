@@ -150,6 +150,8 @@ public class GameInteractionSoundsSettings : MonoBehaviour
     private void PlayClip(AudioClip clip, float volumeScale)
     {
         if (clip == null || _source == null) return;
+        if (LevelTransitionController.ShouldMuteGameplayAudio())
+            return;
         _source.PlayOneShot(clip, Mathf.Clamp01(masterVolume * volumeScale));
     }
 

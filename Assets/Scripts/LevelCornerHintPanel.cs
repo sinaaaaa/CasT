@@ -144,6 +144,24 @@ public class LevelCornerHintPanel : MonoBehaviour
         ApplyHintAudio(hint);
     }
 
+    /// <summary>Stops tip narration immediately (e.g. when a level transition cover starts).</summary>
+    public void StopHintAudio()
+    {
+        if (_deferredTipPlayRoutine != null)
+        {
+            StopCoroutine(_deferredTipPlayRoutine);
+            _deferredTipPlayRoutine = null;
+        }
+        if (_audioLoadRoutine != null)
+        {
+            StopCoroutine(_audioLoadRoutine);
+            _audioLoadRoutine = null;
+        }
+        _loadingAudioUrl = null;
+        if (hintAudioSource != null && hintAudioSource.isPlaying)
+            hintAudioSource.Stop();
+    }
+
     public void Show(LevelCornerHint hint, bool introMode)
     {
         EnsureBuilt();
@@ -613,12 +631,44 @@ public class LevelCornerHintPanel : MonoBehaviour
     private void OnTipAudioReady(LevelCornerHint hint, AudioClip clip)
     {
         if (hint == null || clip == null || hintAudioSource == null) return;
-        if (_currentHint == null || !string.Equals(_currentHint.audioUrl, hint.audioUrl, StringComparison.Ordinal))
+        if (_currentHint == null || !string.Equals(_currentHint.audioUrl, hint.audioUrl, System.StringComparison.Ordinal))
             return;
 
         hintAudioSource.clip = clip;
-        if (hint.playAudioAutomatically)
-            hintAudioSource.Play();
+        if (!hint.playAudioAutomatically) return;
+
+        if (LevelTransitionController.ShouldMuteGameplayAudio())
+        {
+            if (_deferredTipPlayRoutine != null)
+                StopCoroutine(_deferredTipPlayRoutine);
+            _deferredTipPlayRoutine = StartCoroutine(PlayTipWhenTransitionDone(hint, clip));
+            return;
+        }
+
+        hintAudioSource.Play();
+    }
+
+    private Coroutine _deferredTipPlayRoutine;
+
+    private System.Collections.IEnumerator PlayTipWhenTransitionDone(LevelCornerHint hint, AudioClip clip)
+    {
+        float guard = 0f;
+        while (LevelTransitionController.ShouldMuteGameplayAudio() && guard < 4f)
+        {
+            guard += Time.unscaledDeltaTime;
+            yield return null;
+        }
+        // Small settle so fade is fully gone.
+        yield return new WaitForSecondsRealtime(0.08f);
+
+        if (hint == null || clip == null || hintAudioSource == null) yield break;
+        if (_currentHint == null || !string.Equals(_currentHint.audioUrl, hint.audioUrl, System.StringComparison.Ordinal))
+            yield break;
+        if (LevelTransitionController.ShouldMuteGameplayAudio()) yield break;
+
+        hintAudioSource.clip = clip;
+        hintAudioSource.Play();
+        _deferredTipPlayRoutine = null;
     }
 
     public void PlayTipAudio()

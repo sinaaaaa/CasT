@@ -106,7 +106,13 @@ public class ActionBlockIntroManager : MonoBehaviour
 
     [Header("Welcome popup — timing")]
     [Tooltip("Seconds after step 1 UI is visible before the drag ghost demo starts.")]
-    public float delayBeforeStepDemoSeconds = 0.35f;
+    public float delayBeforeStepDemoSeconds = 0.55f;
+    [Tooltip("Pause after a finished intro RUN before the next teaching step.")]
+    public float delayBetweenIntroStepsSeconds = 0.7f;
+    [Tooltip("Pause after Welcome \"Let's go\" before step 1.")]
+    public float delayAfterWelcomeSeconds = 0.35f;
+    [Tooltip("When on, soft-fade when swapping intro playfields between steps.")]
+    public bool usePlayfieldTransitionBetweenSteps = true;
 
     public bool IsActive { get; private set; }
 
@@ -246,7 +252,8 @@ public class ActionBlockIntroManager : MonoBehaviour
             if (characterMove.cornerHintPanel != null)
             {
                 characterMove.cornerHintPanel.SetSkipVisible(false, null);
-                characterMove.cornerHintPanel.PlayHintAudioOnly(levelData.cornerHint);
+                // Defer welcome audio until boot/transition cover is gone.
+                characterMove.StartCoroutine(PlayWelcomeAudioWhenReady(levelData.cornerHint));
             }
             ShowWelcomeLetsGoPopup(levelData);
             return;
@@ -257,16 +264,50 @@ public class ActionBlockIntroManager : MonoBehaviour
         ApplyCurrentStep();
     }
 
+    private IEnumerator PlayWelcomeAudioWhenReady(LevelCornerHint hint)
+    {
+        float guard = 0f;
+        while (LevelTransitionController.ShouldMuteGameplayAudio() && guard < 4f)
+        {
+            guard += Time.unscaledDeltaTime;
+            yield return null;
+        }
+        yield return new WaitForSecondsRealtime(0.1f);
+        if (!IsActive || _phase != Phase.Welcome) yield break;
+        if (characterMove?.cornerHintPanel != null)
+            characterMove.cornerHintPanel.PlayHintAudioOnly(hint);
+    }
+
     private void OnWelcomeContinueToStep1()
     {
         if (!IsActive || _phase != Phase.Welcome) return;
+
+        // Clear any leftover boot/transition cover so it cannot ghost UI underneath.
+        if (characterMove != null && characterMove.levelTransition != null)
+            characterMove.levelTransition.ForceHide();
+        if (characterMove?.cornerHintPanel != null)
+            characterMove.cornerHintPanel.StopHintAudio();
+
         DestroyWelcomePopup();
         StopStepApplyRoutine();
         if (characterMove?.dragDropTutorial != null)
             characterMove.dragDropTutorial.HideTutorial();
         _phase = Phase.TeachDrag;
         ApplyIntroChrome();
-        ApplyCurrentStep();
+        StopStepApplyRoutine();
+        _stepApplyRoutine = StartCoroutine(BeginFirstStepAfterWelcome());
+    }
+
+    private IEnumerator BeginFirstStepAfterWelcome()
+    {
+        float delay = delayAfterWelcomeSeconds;
+        if (characterMove != null && characterMove.levelTransition != null)
+            delay = Mathf.Max(delay, characterMove.levelTransition.delayAfterWelcomeSeconds);
+        if (delay > 0f)
+            yield return new WaitForSeconds(delay);
+        if (!IsActive) yield break;
+        yield return ApplyCurrentStepRoutine();
+        _stepApplyRoutine = null;
     }
 
     private void ApplyIntroChrome()
@@ -334,7 +375,9 @@ public class ActionBlockIntroManager : MonoBehaviour
     private void ShowWelcomeLetsGoPopup(LevelData levelData)
     {
         DestroyWelcomePopup();
-        Canvas canvas = FindOverlayCanvas();
+
+        // Dedicated canvas above the boot/transition overlay so START stays fully visible.
+        Canvas canvas = GetOrCreateWelcomePopupCanvas();
         if (canvas == null)
         {
             Debug.LogWarning("[ActionBlockIntro] No overlay canvas — starting step 1 without welcome popup.");
@@ -342,11 +385,16 @@ public class ActionBlockIntroManager : MonoBehaviour
             return;
         }
 
-        _welcomePopupRoot = new GameObject("IntroWelcomePopup", typeof(RectTransform));
+        _welcomePopupRoot = new GameObject("IntroWelcomePopup", typeof(RectTransform), typeof(CanvasGroup));
         var rootRt = _welcomePopupRoot.GetComponent<RectTransform>();
         rootRt.SetParent(canvas.transform, false);
         StretchRectFull(rootRt);
         rootRt.SetAsLastSibling();
+
+        var rootGroup = _welcomePopupRoot.GetComponent<CanvasGroup>();
+        rootGroup.alpha = 1f;
+        rootGroup.interactable = true;
+        rootGroup.blocksRaycasts = true;
 
         var backdrop = _welcomePopupRoot.AddComponent<Image>();
         backdrop.raycastTarget = true;
@@ -372,7 +420,7 @@ public class ActionBlockIntroManager : MonoBehaviour
         CreateWelcomePopupText(panelRt, "Body", welcomePopupBody, body);
 
         var btnLayout = welcomePopupButtonLayout ?? new WelcomePopupButtonLayout();
-        var btnGo = new GameObject("LetsGoButton", typeof(RectTransform), typeof(Image), typeof(Button));
+        var btnGo = new GameObject("LetsGoButton", typeof(RectTransform), typeof(Image), typeof(Button), typeof(CanvasGroup));
         var btnRt = btnGo.GetComponent<RectTransform>();
         btnRt.SetParent(panelRt, false);
         btnRt.anchorMin = btnLayout.anchorMin;
@@ -380,9 +428,25 @@ public class ActionBlockIntroManager : MonoBehaviour
         btnRt.pivot = btnLayout.pivot;
         btnRt.anchoredPosition = btnLayout.anchoredPosition;
         btnRt.sizeDelta = btnLayout.sizeDelta;
+
+        var btnGroup = btnGo.GetComponent<CanvasGroup>();
+        btnGroup.alpha = 1f;
+        btnGroup.interactable = true;
+        btnGroup.blocksRaycasts = true;
+
         var btnImg = btnGo.GetComponent<Image>();
+        btnImg.raycastTarget = true;
         var btn = btnGo.GetComponent<Button>();
         btn.targetGraphic = btnImg;
+        btn.interactable = true;
+        var colors = btn.colors;
+        colors.normalColor = Color.white;
+        colors.highlightedColor = Color.white;
+        colors.pressedColor = new Color(0.92f, 0.92f, 0.92f, 1f);
+        colors.selectedColor = Color.white;
+        colors.disabledColor = new Color(1f, 1f, 1f, 1f);
+        colors.colorMultiplier = 1f;
+        btn.colors = colors;
 
         var btnLabelGo = new GameObject("Label", typeof(RectTransform), typeof(TextMeshProUGUI));
         var btnLabelRt = btnLabelGo.GetComponent<RectTransform>();
@@ -401,8 +465,55 @@ public class ActionBlockIntroManager : MonoBehaviour
         });
 
         ApplyWelcomeLetsGoButtonStyle(btnImg, btnLabel);
+        // Always keep START fully visible (inspector alpha mistakes used to ghost the button).
+        ForceOpaqueUiColor(btnImg);
+        if (btnLabel != null && btnLabel.gameObject.activeSelf)
+            ForceOpaqueTmpColor(btnLabel);
 
         btn.onClick.AddListener(OnWelcomeContinueToStep1);
+    }
+
+    private Canvas GetOrCreateWelcomePopupCanvas()
+    {
+        const string canvasName = "IntroWelcomePopupCanvas";
+        var existing = GameObject.Find(canvasName);
+        if (existing != null)
+        {
+            var c = existing.GetComponent<Canvas>();
+            if (c != null)
+            {
+                c.overrideSorting = true;
+                c.sortingOrder = 520; // above LevelTransitionOverlay (480)
+                return c;
+            }
+        }
+
+        var go = new GameObject(canvasName, typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+        var canvas = go.GetComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.overrideSorting = true;
+        canvas.sortingOrder = 520;
+        var scaler = go.GetComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1920, 1080);
+        return canvas;
+    }
+
+    private static void ForceOpaqueUiColor(Image img)
+    {
+        if (img == null) return;
+        var c = img.color;
+        if (c.a < 0.99f)
+            img.color = new Color(c.r, c.g, c.b, 1f);
+        else
+            img.color = new Color(c.r, c.g, c.b, 1f);
+    }
+
+    private static void ForceOpaqueTmpColor(TextMeshProUGUI tmp)
+    {
+        if (tmp == null) return;
+        var c = tmp.color;
+        tmp.color = new Color(c.r, c.g, c.b, 1f);
     }
 
     private TextMeshProUGUI CreateWelcomePopupText(
@@ -500,10 +611,15 @@ public class ActionBlockIntroManager : MonoBehaviour
     {
         if (btnImg == null) return;
 
+        // Never allow a washed-out / ghost START button.
+        Color tint = welcomeLetsGoButtonColor;
+        if (tint.a < 0.99f)
+            tint.a = 1f;
+
         if (welcomeLetsGoButtonSprite != null)
         {
             btnImg.sprite = welcomeLetsGoButtonSprite;
-            btnImg.color = welcomeLetsGoButtonColor;
+            btnImg.color = tint;
             btnImg.preserveAspect = true;
             btnImg.type = Image.Type.Simple;
             if (welcomeLetsGoUseSpriteSize)
@@ -534,6 +650,8 @@ public class ActionBlockIntroManager : MonoBehaviour
             if (welcomeLetsGoButtonSize.x > 0f)
                 btnImg.rectTransform.sizeDelta = welcomeLetsGoButtonSize;
         }
+
+        btnImg.color = new Color(btnImg.color.r, btnImg.color.g, btnImg.color.b, 1f);
     }
 
     private void DestroyWelcomePopup()
@@ -568,10 +686,29 @@ public class ActionBlockIntroManager : MonoBehaviour
         _phase = Phase.TeachRun;
         StopHighlight();
 
+        if (characterMove?.dragDropTutorial != null)
+            characterMove.dragDropTutorial.NotifyStudentPlacedBlockForIntro();
+
         var step = CurrentStep();
-        SetBottomInstruction(step != null ? step.runInstruction : "Now tap Run!");
+        SetBottomInstruction(step != null ? step.runInstruction : "Now tap Play!");
         SetRunInteractable(true);
         StartHighlight(characterMove.runButton);
+    }
+
+    /// <summary>
+    /// After the hand finishes showing the drag, unlock the button and prompt the student to try.
+    /// </summary>
+    public void BeginStudentDragPractice()
+    {
+        if (!IsActive || _phase != Phase.TeachDrag) return;
+        var step = CurrentStep();
+        string baseMsg = step != null && !string.IsNullOrEmpty(step.dragInstruction)
+            ? step.dragInstruction
+            : "Drag the block into the yellow strip.";
+        if (!baseMsg.StartsWith("Your turn", System.StringComparison.OrdinalIgnoreCase))
+            baseMsg = "Your turn! " + baseMsg;
+        SetBottomInstruction(baseMsg);
+        FinishCurrentStepInteraction(step);
     }
 
     public void OnIntroRunFinished()
@@ -594,7 +731,22 @@ public class ActionBlockIntroManager : MonoBehaviour
         if (characterMove?.dragDropTutorial != null)
             characterMove.dragDropTutorial.HideTutorial();
         _phase = Phase.TeachDrag;
-        ApplyCurrentStep();
+        _stepApplyRoutine = StartCoroutine(BeginNextIntroStepAfterDelay());
+    }
+
+    private IEnumerator BeginNextIntroStepAfterDelay()
+    {
+        float delay = delayBetweenIntroStepsSeconds;
+        if (characterMove != null && characterMove.levelTransition != null)
+            delay = Mathf.Max(delay, characterMove.levelTransition.delayBetweenIntroStepsSeconds);
+
+        SetBottomInstruction("Nice! Next action…");
+        if (delay > 0f)
+            yield return new WaitForSeconds(delay);
+        if (!IsActive) yield break;
+
+        yield return ApplyCurrentStepRoutine();
+        _stepApplyRoutine = null;
     }
 
     /// <summary>Bottom instruction while the Play-button tap ghost runs.</summary>
@@ -643,18 +795,24 @@ public class ActionBlockIntroManager : MonoBehaviour
         RestoreButtonStates();
         DestroyIntroOverlay();
         SetRunInteractable(true);
-
-        if (characterMove.cornerHintPanel != null)
+        if (characterMove?.cornerHintPanel != null)
             characterMove.cornerHintPanel.SetSkipVisible(false, null);
+
+        if (characterMove?.dragDropTutorial != null)
+            characterMove.dragDropTutorial.HideTutorial();
 
         if (markPrefs && _config != null && _config.showOnlyOnce)
             MarkIntroCompletedForStudent(_config);
 
-        if (characterMove.chatGPTResponseText != null && _config != null &&
-            !string.IsNullOrEmpty(_config.completeMessage))
+        if (characterMove != null && characterMove.chatGPTResponseText != null)
         {
-            characterMove.chatGPTResponseText.text = _config.completeMessage;
+            if (_config != null && !string.IsNullOrEmpty(_config.completeMessage))
+                characterMove.chatGPTResponseText.text = _config.completeMessage;
+            else
+                characterMove.chatGPTResponseText.text = "Introduction complete — starting Item 1…";
         }
+
+        if (characterMove == null) return;
 
         characterMove.RefreshLevelCornerHint();
         if (CharacterMove.IsIntroLevel(characterMove.GetCurrentLevelData()))
@@ -691,7 +849,13 @@ public class ActionBlockIntroManager : MonoBehaviour
         }
 
         if (characterMove != null)
-            characterMove.ApplyIntroStepPlayfield(step);
+        {
+            bool useTransition = usePlayfieldTransitionBetweenSteps && _stepIndex > 0;
+            if (useTransition)
+                yield return characterMove.ApplyIntroStepPlayfieldWithTransition(step);
+            else
+                characterMove.ApplyIntroStepPlayfield(step);
+        }
 
         PrepareStepButtonsForDemo(step);
         SetPaletteInteractable(false);
@@ -702,29 +866,74 @@ public class ActionBlockIntroManager : MonoBehaviour
         // Step corner hint + bottom text must appear before the ghost drag demo.
         ApplyCurrentStepPresentation(step);
 
-        if (characterMove?.dragDropTutorial != null)
-            characterMove.dragDropTutorial.HideTutorial();
+        var dragTutorial = characterMove != null ? characterMove.dragDropTutorial : null;
+        if (dragTutorial == null && characterMove != null)
+        {
+            dragTutorial = characterMove.GetComponent<DragDropTutorialController>();
+            if (dragTutorial == null)
+                dragTutorial = characterMove.gameObject.AddComponent<DragDropTutorialController>();
+            characterMove.dragDropTutorial = dragTutorial;
+            dragTutorial.characterMove = characterMove;
+        }
+        if (dragTutorial != null)
+            dragTutorial.PrepareForIntroStepDemo();
 
-        if (delayBeforeStepDemoSeconds > 0f)
-            yield return new WaitForSeconds(delayBeforeStepDemoSeconds);
-        else
+        // Never start the help ghost while a fade cover is still up.
+        float coverWait = 0f;
+        while (LevelTransitionController.ShouldMuteGameplayAudio() && coverWait < 3f)
+        {
+            coverWait += Time.unscaledDeltaTime;
             yield return null;
+        }
+        // Extra settle after ForceHide so canvases are interactable/visible.
+        yield return new WaitForSecondsRealtime(0.15f);
+        yield return null;
+        Canvas.ForceUpdateCanvases();
+        yield return null;
+
+        float demoDelay = Mathf.Max(delayBeforeStepDemoSeconds, 0.55f);
+        if (demoDelay > 0f)
+            yield return new WaitForSeconds(demoDelay);
 
         if (!IsActive) yield break;
 
-        var dragTutorial = characterMove != null ? characterMove.dragDropTutorial : null;
+        // Re-show palette button in case a transition wiped UI state.
+        PrepareStepButtonsForDemo(step);
+        SetPaletteInteractable(false);
+        yield return null;
+        Canvas.ForceUpdateCanvases();
+        yield return null;
+
         bool playTutorial = step.tutorial == null || step.tutorial.showDragAnimation ||
                             step.tutorial.showRunTapAnimation;
         if (dragTutorial != null && playTutorial)
         {
+            if (characterMove != null && characterMove.useDragAndDropForActions)
+                characterMove.AutoWireDragAndDrop();
+
             dragTutorial.PlayIntroStepDemo(step);
-            while (dragTutorial.IsStepDemoPlaying)
+            // Includes hand demo + student practice wait + Play tap — do not use a short cap.
+            float demoGuard = 0f;
+            float demoTimeout = 120f;
+            while (dragTutorial.IsStepDemoPlaying && demoGuard < demoTimeout)
+            {
+                demoGuard += Time.unscaledDeltaTime;
                 yield return null;
+            }
+
+            if (demoGuard <= 0.05f)
+                Debug.LogWarning("[ActionBlockIntro] Intro step demo ended immediately — check palette/strip refs.");
+        }
+        else
+        {
+            Debug.LogWarning("[ActionBlockIntro] No DragDropTutorialController — cannot play help animation.");
         }
 
         if (!IsActive) yield break;
 
-        FinishCurrentStepInteraction(step);
+        // Practice unlock usually already happened mid-demo; only finish if still waiting for a drag.
+        if (_phase == Phase.TeachDrag)
+            FinishCurrentStepInteraction(step);
         _stepApplyRoutine = null;
     }
 
@@ -776,6 +985,9 @@ public class ActionBlockIntroManager : MonoBehaviour
     {
         if (step == null) return;
         SetPaletteInteractable(true);
+        // Don't disable Play if the student already dropped a block (TeachRun).
+        if (_phase == Phase.TeachRun)
+            return;
         if (characterMove?.runButton != null)
             characterMove.runButton.interactable = false;
         StartHighlight(_activeButton);

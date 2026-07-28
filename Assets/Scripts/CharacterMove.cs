@@ -590,6 +590,14 @@ public class CharacterMove : MonoBehaviour
     public TextMeshProUGUI successPopupText; // Text for the success popup message
     public Button successPopupContinueButton; // Button to proceed from success popup
 
+    [Header("Item / intro transitions")]
+    [Tooltip("Soft fade cover when switching items so the previous level never flashes. Auto-created if empty.")]
+    public LevelTransitionController levelTransition;
+    [Tooltip("If on, fade between items. Turn off only for debugging.")]
+    public bool useLevelTransitionFades = true;
+    [Tooltip("Minimum seconds to keep the cover up while waiting for platform reports (avoids a flashy quick cut).")]
+    [Range(0f, 1.5f)] public float minTransitionCoverSeconds = 0.35f;
+
     private Animator animator;
     private Queue<CharacterAction> actionQueue = new Queue<CharacterAction>();
     private Queue<CharacterAction> actionHistory = new Queue<CharacterAction>();
@@ -900,6 +908,10 @@ public class CharacterMove : MonoBehaviour
     private bool _skipNextPlatformReport;
     /// <summary>True after this RUN's result was sent to the platform (avoids duplicate end on popup continue).</summary>
     private bool _currentRunReportedToPlatform;
+    /// <summary>True while fading / clearing / loading the next item — blocks double advance.</summary>
+    private bool _isLevelTransitioning;
+    /// <summary>False only for the very first SetupLevel after bootstrap (no fade-out needed).</summary>
+    private bool _hasShownAnyLevel;
     private Vector2Int startObjectPosition = Vector2Int.zero;
     private Vector2Int endObjectPosition = Vector2Int.zero;
     /// <summary>Goal cell from LevelData <c>isEndObject</c> / <c>guidedEndPosition</c> while in flag-placement mode.</summary>
@@ -1659,6 +1671,31 @@ public class CharacterMove : MonoBehaviour
 
     /// <summary>Applies per-step playfield from dashboard (robot cell, facing, props) before each intro teaching step.</summary>
     public void ApplyIntroStepPlayfield(ActionBlockIntroStepData step)
+    {
+        ApplyIntroStepPlayfieldInternal(step);
+    }
+
+    /// <summary>
+    /// Soft cover → swap intro playfield → reveal. Use between intro teaching steps so props do not pop.
+    /// </summary>
+    public IEnumerator ApplyIntroStepPlayfieldWithTransition(ActionBlockIntroStepData step)
+    {
+        EnsureLevelTransitionController();
+        bool useCustom = step?.playfield != null && step.playfield.useCustomPlayfield;
+        bool shouldCover = useLevelTransitionFades && levelTransition != null && (_hasShownAnyLevel || useCustom);
+
+        if (shouldCover)
+        {
+            yield return levelTransition.CoverBrieflyForIntroStep(() => ApplyIntroStepPlayfieldInternal(step));
+        }
+        else
+        {
+            ApplyIntroStepPlayfieldInternal(step);
+            yield return null;
+        }
+    }
+
+    private void ApplyIntroStepPlayfieldInternal(ActionBlockIntroStepData step)
     {
         LevelData ld = GetCurrentLevelData();
         if (ld == null) return;
@@ -2971,6 +3008,10 @@ public class CharacterMove : MonoBehaviour
 
         if (GameAssessmentClient.Instance != null)
             GameAssessmentClient.Instance.ClearCurrentAttempt();
+
+        // Always wipe leftovers first so a previous item cannot linger into this setup.
+        // (SetupNextLevel already clears under the fade cover; this also covers first load / reset paths.)
+        ClearPlayfieldForLevelTransition();
         
         // Clean up any old AppleCluster scripts from the scene
         CleanupOldAppleClusterScripts();
@@ -3061,20 +3102,11 @@ public class CharacterMove : MonoBehaviour
         if (autoFitRobotToCell) FitRobotToCell();
         Debug.Log($"[CharacterMove] Robot positioned at grid {robotGridPosition} -> world position {targetPosition}");
 
-        // NEW: Update camera targets to include character and grid objects
+        // Camera follows robot only until new props are spawned (avoids tracking destroyed previous objects).
         if (multiTargetCamera != null)
         {
             multiTargetCamera.targets.Clear();
-            multiTargetCamera.targets.Add(this.transform); // Character
-            
-            // Add grid objects as camera targets
-            foreach (var obj in activeGridObjects)
-            {
-                if (obj != null && obj.activeInHierarchy)
-                {
-                    multiTargetCamera.targets.Add(obj.transform);
-                }
-            }
+            multiTargetCamera.targets.Add(this.transform);
         }
 
         UpdateLevelDisplay(); // Update UI for level info
@@ -3571,6 +3603,7 @@ public class CharacterMove : MonoBehaviour
             actionBlockIntro.TryBeginAfterLevelSetup(levelNumber, ld);
 
         StartCoroutine(PrewarmPlatformRunAttemptAfterLevelReady(levelNumber));
+        _hasShownAnyLevel = true;
     }
 
     /// <summary>Start level-start in the background so RUN feels instant when possible.</summary>
@@ -3817,6 +3850,11 @@ public class CharacterMove : MonoBehaviour
 
     private void Start()
     {
+        // Cover immediately so the unfinished scene never flashes while levels load.
+        EnsureLevelTransitionController();
+        if (useLevelTransitionFades && levelTransition != null)
+            levelTransition.BeginBootCoverImmediate();
+
         // Check if user is logged in
         if (!PlayerPrefs.HasKey("UserId"))
         {
@@ -3870,6 +3908,12 @@ public class CharacterMove : MonoBehaviour
         {
             AutoWireDragAndDrop();
             ConfigureEventSystemForTouch();
+            if (dragDropTutorial == null)
+                dragDropTutorial = GetComponent<DragDropTutorialController>();
+            if (dragDropTutorial == null)
+                dragDropTutorial = gameObject.AddComponent<DragDropTutorialController>();
+            dragDropTutorial.characterMove = this;
+            dragDropTutorial.enabled = true;
         }
 
         runButton.onClick.AddListener(StartActionProcessing);
@@ -3921,12 +3965,24 @@ public class CharacterMove : MonoBehaviour
 
     private IEnumerator BootstrapLevelsThenSetup()
     {
+        // Cover the very first frames so nothing half-loaded is visible.
+        EnsureLevelTransitionController();
+        if (useLevelTransitionFades && levelTransition != null)
+            levelTransition.BeginBootCoverImmediate();
+
+        ClearPlayfieldForLevelTransition();
+
         var loader = PlatformLevelLoader.Instance;
         if (loader == null)
         {
             var go = new GameObject("PlatformLevelLoader");
             loader = go.AddComponent<PlatformLevelLoader>();
         }
+
+        if (useLevelTransitionFades && levelTransition != null)
+            levelTransition.SetStatus("SPARC", "Loading your items…");
+
+        float bootStarted = Time.unscaledTime;
 
         List<LevelData> remote = null;
         yield return loader.LoadLevelsCoroutine(list => remote = list);
@@ -3935,6 +3991,8 @@ public class CharacterMove : MonoBehaviour
         {
             allLevelsData = remote;
             Debug.Log($"[CharacterMove] Using {remote.Count} level(s) from teacher dashboard.");
+            if (levelTransition != null)
+                levelTransition.SetStatus("SPARC", $"Loaded {remote.Count} item{(remote.Count == 1 ? "" : "s")}");
         }
         else if (loader != null && loader.usePlatformLevels)
         {
@@ -3944,6 +4002,13 @@ public class CharacterMove : MonoBehaviour
                 "Will not fall back to built-in introduction.");
             if (chatGPTResponseText != null)
                 chatGPTResponseText.text = "Could not load your assigned items. Please ask your teacher to check the dashboard.";
+            if (useLevelTransitionFades && levelTransition != null)
+            {
+                levelTransition.SetStatus("Unable to load", "Please ask your teacher for help");
+                yield return new WaitForSecondsRealtime(1.2f);
+                yield return levelTransition.FadeTo(0f, 0.45f, blockInput: false);
+            }
+            yield break;
         }
         else
         {
@@ -3956,6 +4021,8 @@ public class CharacterMove : MonoBehaviour
 
         if (allLevelsData == null || allLevelsData.Count == 0)
         {
+            if (useLevelTransitionFades && levelTransition != null)
+                yield return levelTransition.FadeTo(0f, 0.4f, blockInput: false);
             yield break;
         }
 
@@ -3964,7 +4031,97 @@ public class CharacterMove : MonoBehaviour
         MaybeSkipCompletedIntroLevel();
         if (currentLevel > allLevelsData.Count)
             currentLevel = 1;
+
+        // Build the first playable item under the boot cover.
         SetupLevel(currentLevel);
+        yield return null;
+        Canvas.ForceUpdateCanvases();
+        yield return null;
+        yield return null; // one more frame so camera / layout settle
+
+        float minBoot = levelTransition != null ? levelTransition.bootMinCoverSeconds : 0.85f;
+        float elapsed = Time.unscaledTime - bootStarted;
+        if (elapsed < minBoot)
+            yield return new WaitForSecondsRealtime(minBoot - elapsed);
+
+        // If the Welcome / START popup is already up, just clear the boot cover
+        // (do not leave a semi-transparent overlay that ghosts the START button).
+        bool welcomeUp = actionBlockIntro != null && actionBlockIntro.IsActive;
+        if (useLevelTransitionFades && levelTransition != null)
+        {
+            if (welcomeUp)
+            {
+                levelTransition.ForceHide();
+            }
+            else
+            {
+                string title, subtitle;
+                GetTransitionLabelsForSlot(currentLevel, out title, out subtitle);
+                yield return levelTransition.FinishBootAndReveal(title, subtitle);
+            }
+        }
+        else if (levelTransition != null)
+        {
+            levelTransition.ForceHide();
+        }
+
+        _hasShownAnyLevel = true;
+        _isLevelTransitioning = false;
+        NotifyTutorialsAfterLevelReveal();
+    }
+
+    /// <summary>Starts flag / drag help only after the fade cover is fully gone.</summary>
+    private void NotifyTutorialsAfterLevelReveal()
+    {
+        EnsureFlagTaskTutorial();
+        var flagTutorials = FindObjectsOfType<FlagTaskTutorialController>();
+        for (int i = 0; i < flagTutorials.Length; i++)
+        {
+            if (flagTutorials[i] != null)
+                flagTutorials[i].NotifyLevelReadyForTutorial();
+        }
+    }
+
+    private void EnsureFlagTaskTutorial()
+    {
+        if (FindObjectOfType<FlagTaskTutorialController>() != null) return;
+        var ft = gameObject.AddComponent<FlagTaskTutorialController>();
+        ft.characterMove = this;
+        ft.debugLogs = true;
+    }
+
+    /// <summary>Title/subtitle shown on modern transition cards.</summary>
+    private void GetTransitionLabelsForSlot(int slot, out string title, out string subtitle)
+    {
+        title = "Next item";
+        subtitle = "Get ready";
+        if (allLevelsData == null || slot < 1 || slot > allLevelsData.Count)
+            return;
+
+        LevelData ld = allLevelsData[slot - 1];
+        if (ld == null) return;
+
+        if (IsIntroLevel(ld))
+        {
+            title = string.IsNullOrWhiteSpace(ld.levelName) ? "Introduction" : ld.levelName;
+            subtitle = "Learn the action blocks";
+            return;
+        }
+
+        // Slot number among non-intro items when possible.
+        int playableIndex = 0;
+        for (int i = 0; i < slot; i++)
+        {
+            if (allLevelsData[i] != null && !IsIntroLevel(allLevelsData[i]))
+                playableIndex++;
+        }
+
+        string name = string.IsNullOrWhiteSpace(ld.levelName) ? $"Item {playableIndex}" : ld.levelName;
+        if (playableIndex > 0 && !name.StartsWith("Item", System.StringComparison.OrdinalIgnoreCase))
+            title = $"Item {playableIndex}";
+        else
+            title = name;
+        subtitle = name;
     }
 
     /// <summary>
@@ -4072,6 +4229,23 @@ public class CharacterMove : MonoBehaviour
 
     private IEnumerator IntroCompleteReportAndAdvance()
     {
+        // Cinematic handoff: intro complete → Item 1 title card → reveal.
+        _isLevelTransitioning = true;
+        EnsureLevelTransitionController();
+
+        LevelData leavingIntro = GetCurrentLevelData();
+        bool leavingWasIntro = leavingIntro != null && IsIntroLevel(leavingIntro);
+
+        if (useLevelTransitionFades && levelTransition != null)
+        {
+            if (leavingWasIntro)
+                yield return levelTransition.PlayIntroToFirstItemCover();
+            else
+                yield return levelTransition.FadeOutForItemChange();
+        }
+
+        ClearPlayfieldForLevelTransition();
+
         if (!_skipNextPlatformReport && !_currentRunReportedToPlatform)
             yield return ReportCurrentRunToPlatformRoutine(true);
 
@@ -4081,7 +4255,42 @@ public class CharacterMove : MonoBehaviour
         if (GameAssessmentClient.Instance != null)
             GameAssessmentClient.Instance.ClearCurrentAttempt();
 
-        AdvanceToNextLevel();
+        int nextLevel = currentLevel + 1;
+        if (nextLevel <= MAX_LEVELS && nextLevel <= allLevelsData.Count)
+        {
+            currentLevel = nextLevel;
+            SavePlayerLevel();
+
+            if (minTransitionCoverSeconds > 0f)
+                yield return new WaitForSecondsRealtime(minTransitionCoverSeconds);
+
+            SetupLevel(currentLevel);
+            yield return null;
+            Canvas.ForceUpdateCanvases();
+            yield return null;
+            yield return null;
+
+            string title, subtitle;
+            GetTransitionLabelsForSlot(currentLevel, out title, out subtitle);
+
+            if (useLevelTransitionFades && levelTransition != null)
+            {
+                if (leavingWasIntro)
+                    yield return levelTransition.PlayIntroToFirstItemReveal(title, subtitle);
+                else
+                    yield return levelTransition.PlayItemTransitionReveal(title, subtitle);
+            }
+
+            _isLevelTransitioning = false;
+            NotifyTutorialsAfterLevelReveal();
+        }
+        else
+        {
+            _isLevelTransitioning = false;
+            if (useLevelTransitionFades && levelTransition != null)
+                yield return levelTransition.FadeTo(0f, levelTransition.fadeInSeconds, blockInput: false);
+            ShowAllItemsCompleteScreen();
+        }
     }
 
     private void OnSuccessPopupContinue()
@@ -4098,7 +4307,17 @@ public class CharacterMove : MonoBehaviour
             yield break;
         }
 
+        if (_isLevelTransitioning)
+            yield break;
+
         successPopup.SetActive(false);
+
+        _isLevelTransitioning = true;
+        EnsureLevelTransitionController();
+        if (useLevelTransitionFades && levelTransition != null)
+            yield return levelTransition.FadeOutForItemChange();
+        ClearPlayfieldForLevelTransition();
+
         if (!_skipNextPlatformReport && !_currentRunReportedToPlatform)
             yield return ReportCurrentRunToPlatformRoutine(pendingLevelPassed);
         else
@@ -4107,7 +4326,36 @@ public class CharacterMove : MonoBehaviour
         if (GameAssessmentClient.Instance != null)
             yield return GameAssessmentClient.Instance.WaitForPendingReports();
 
-        AdvanceToNextLevel();
+        int nextLevel = currentLevel + 1;
+        if (nextLevel <= MAX_LEVELS && nextLevel <= allLevelsData.Count)
+        {
+            currentLevel = nextLevel;
+            SavePlayerLevel();
+
+            if (minTransitionCoverSeconds > 0f)
+                yield return new WaitForSecondsRealtime(minTransitionCoverSeconds);
+
+            SetupLevel(currentLevel);
+            yield return null;
+            Canvas.ForceUpdateCanvases();
+            yield return null;
+            yield return null;
+
+            string title, subtitle;
+            GetTransitionLabelsForSlot(currentLevel, out title, out subtitle);
+            if (useLevelTransitionFades && levelTransition != null)
+                yield return levelTransition.PlayItemTransitionReveal(title, subtitle);
+
+            _isLevelTransitioning = false;
+            NotifyTutorialsAfterLevelReveal();
+        }
+        else
+        {
+            _isLevelTransitioning = false;
+            if (useLevelTransitionFades && levelTransition != null)
+                yield return levelTransition.FadeTo(0f, levelTransition.fadeInSeconds, blockInput: false);
+            ShowAllItemsCompleteScreen();
+        }
     }
 
     private bool IsOnLastPlayableItem()
@@ -4347,6 +4595,12 @@ public class CharacterMove : MonoBehaviour
     
     private void AdvanceToNextLevel()
     {
+        if (_isLevelTransitioning)
+        {
+            Debug.LogWarning("[CharacterMove] Ignoring AdvanceToNextLevel — transition already in progress.");
+            return;
+        }
+
         int nextLevel = currentLevel + 1;
         if (nextLevel <= MAX_LEVELS && nextLevel <= allLevelsData.Count)
         {
@@ -4356,20 +4610,118 @@ public class CharacterMove : MonoBehaviour
         }
         else
         {
+            // Clear leftover props when finishing the last item.
+            ClearPlayfieldForLevelTransition();
             ShowAllItemsCompleteScreen();
         }
-        foreach (var obj in activeObstacles) { if (obj != null) Destroy(obj); }
-        activeObstacles.Clear();
     }
 
     private IEnumerator SetupNextLevel()
     {
-        yield return new WaitForEndOfFrame();
+        _isLevelTransitioning = true;
+        EnsureLevelTransitionController();
 
+        // 1) Cover the screen FIRST so the previous item cannot flash.
+        if (useLevelTransitionFades && levelTransition != null)
+            yield return levelTransition.FadeOutForItemChange();
+        else
+            yield return null;
+
+        // 2) Wipe previous playfield while covered.
+        ClearPlayfieldForLevelTransition();
+        yield return null;
+
+        float coverStart = Time.unscaledTime;
+
+        // 3) Finish platform reports while the cover is up.
         if (GameAssessmentClient.Instance != null)
             yield return GameAssessmentClient.Instance.WaitForPendingReports();
 
+        float elapsed = Time.unscaledTime - coverStart;
+        if (minTransitionCoverSeconds > 0f && elapsed < minTransitionCoverSeconds)
+            yield return new WaitForSecondsRealtime(minTransitionCoverSeconds - elapsed);
+
+        // 4) Build the next item under the cover.
         SetupLevel(currentLevel);
+
+        yield return null;
+        Canvas.ForceUpdateCanvases();
+        yield return null;
+        yield return null;
+
+        // 5) Title card + soft reveal.
+        string title, subtitle;
+        GetTransitionLabelsForSlot(currentLevel, out title, out subtitle);
+        if (useLevelTransitionFades && levelTransition != null)
+            yield return levelTransition.PlayItemTransitionReveal(title, subtitle);
+
+        _isLevelTransitioning = false;
+        NotifyTutorialsAfterLevelReveal();
+    }
+
+    private void EnsureLevelTransitionController()
+    {
+        if (levelTransition == null)
+            levelTransition = GetComponent<LevelTransitionController>();
+        if (levelTransition == null)
+            levelTransition = gameObject.AddComponent<LevelTransitionController>();
+        levelTransition.EnsureBuilt();
+    }
+
+    /// <summary>
+    /// Immediately removes previous-item visuals (props, obstacles, flag, blinks, queue).
+    /// Call while the transition cover is up so students never see a mixed playfield.
+    /// </summary>
+    public void ClearPlayfieldForLevelTransition()
+    {
+        StopAllGridObjectFades();
+
+        if (cornerHintPanel != null)
+            cornerHintPanel.Hide();
+
+        ClearFlag();
+        ClearCellBlinkHighlights();
+        ClearActionQueueVisual();
+        ClearUserActionQueue();
+
+        if (actionQueue != null)
+            actionQueue.Clear();
+        if (playerActions != null)
+            playerActions.Clear();
+
+        foreach (var obj in activeGridObjects)
+        {
+            if (obj != null) Destroy(obj);
+        }
+        activeGridObjects.Clear();
+
+        foreach (var obj in activeObstacles)
+        {
+            if (obj != null) Destroy(obj);
+        }
+        activeObstacles.Clear();
+
+        if (multiTargetCamera != null)
+        {
+            multiTargetCamera.targets.Clear();
+            multiTargetCamera.targets.Add(transform);
+        }
+
+        hasReachedStartObject = false;
+        hasReachedEndObject = false;
+        startObjectPosition = Vector2Int.zero;
+        endObjectPosition = Vector2Int.zero;
+        designatedEndObjectCell = new Vector2Int(-1, -1);
+    }
+
+    private void StopAllGridObjectFades()
+    {
+        for (int i = 0; i < _gridObjectFadeCoroutines.Count; i++)
+        {
+            if (_gridObjectFadeCoroutines[i] != null)
+                StopCoroutine(_gridObjectFadeCoroutines[i]);
+        }
+        _gridObjectFadeCoroutines.Clear();
     }
 
     void Update()
@@ -4440,7 +4792,7 @@ public class CharacterMove : MonoBehaviour
     /// an <see cref="ActionQueueDropZone"/> to the action-queue panel at runtime, so
     /// drag-and-drop works without any manual Inspector setup. Idempotent.
     /// </summary>
-    private void AutoWireDragAndDrop()
+    public void AutoWireDragAndDrop()
     {
         AttachDraggable(moveForwardButton, DraggableActionBlock.ActionKind.Forward);
         AttachDraggable(moveDownButton,    DraggableActionBlock.ActionKind.Backward);
