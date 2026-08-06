@@ -67,6 +67,7 @@ public class CanvasLessonPanel : MonoBehaviour
         _current = lesson;
         bool hasContent = lesson != null && HasAnyContent(lesson);
         panelRoot.gameObject.SetActive(hasContent);
+        EnsureBehindGameplayChrome();
         if (!hasContent)
         {
             StopAudio();
@@ -85,13 +86,35 @@ public class CanvasLessonPanel : MonoBehaviour
         if (_chunkCardRoot != null)
             _chunkCardRoot.gameObject.SetActive(hasChunk);
         if (exampleChunkLabel != null)
-            exampleChunkLabel.gameObject.SetActive(hasChunk);
+        {
+            string chunkText = ResolveSectionLabel(lesson.chunkLabel, "CHUNK");
+            bool showChunkLabel = hasChunk && !string.IsNullOrEmpty(chunkText);
+            exampleChunkLabel.gameObject.SetActive(showChunkLabel);
+            if (showChunkLabel) exampleChunkLabel.text = chunkText;
+        }
         PopulateTokenRow(exampleChunkRow, lesson.exampleChunk);
 
         bool hasPattern = lesson.patternPreview != null && lesson.patternPreview.Count > 0;
         if (_patternLabel != null)
-            _patternLabel.gameObject.SetActive(hasPattern);
+        {
+            // Default: hide "PATTERN" — only show when teacher sets a non-empty label.
+            string patternText = ResolveSectionLabel(lesson.patternLabel, null);
+            bool showPatternLabel = hasPattern && !string.IsNullOrEmpty(patternText);
+            _patternLabel.gameObject.SetActive(showPatternLabel);
+            if (showPatternLabel) _patternLabel.text = patternText;
+        }
         PopulateTokenRow(patternRow, lesson.patternPreview);
+    }
+
+    /// <summary>
+    /// Null/omitted → <paramref name="fallbackWhenOmitted"/> (null = hide).
+    /// Empty/whitespace → hide. Otherwise trimmed custom text.
+    /// </summary>
+    private static string ResolveSectionLabel(string configured, string fallbackWhenOmitted)
+    {
+        if (configured == null) return fallbackWhenOmitted;
+        string t = configured.Trim();
+        return t.Length > 0 ? t : null;
     }
 
     public void Hide()
@@ -117,6 +140,19 @@ public class CanvasLessonPanel : MonoBehaviour
         blankSprite = blank;
     }
 
+    /// <summary>
+    /// Keep the lesson card under RUN / strip / result popups on the overlay canvas.
+    /// </summary>
+    public void EnsureBehindGameplayChrome()
+    {
+        if (panelRoot == null) return;
+        // Remove accidental override canvas from older builds so sorting matches siblings.
+        var panelCanvas = panelRoot.GetComponent<Canvas>();
+        if (panelCanvas != null && panelRoot.GetComponent<GraphicRaycaster>() == null)
+            Destroy(panelCanvas);
+        panelRoot.SetAsFirstSibling();
+    }
+
     private static bool HasAnyContent(CanvasLessonData lesson)
     {
         if (!string.IsNullOrWhiteSpace(lesson.prompt)) return true;
@@ -132,16 +168,20 @@ public class CanvasLessonPanel : MonoBehaviour
         var rootGo = new GameObject("CanvasLessonPanel", typeof(RectTransform), typeof(Image), typeof(VerticalLayoutGroup), typeof(ContentSizeFitter));
         rootGo.transform.SetParent(canvasParent, false);
         panelRoot = rootGo.GetComponent<RectTransform>();
-        // Sit in the upper-middle of the playfield (above yellow strip).
-        panelRoot.anchorMin = new Vector2(0.5f, 0.62f);
-        panelRoot.anchorMax = new Vector2(0.5f, 0.62f);
+        // Upper playfield — keep clear of the center RUN button.
+        panelRoot.anchorMin = new Vector2(0.5f, 0.74f);
+        panelRoot.anchorMax = new Vector2(0.5f, 0.74f);
         panelRoot.pivot = new Vector2(0.5f, 0.5f);
-        panelRoot.sizeDelta = new Vector2(720f, 420f);
+        panelRoot.sizeDelta = new Vector2(640f, 280f);
         panelRoot.anchoredPosition = Vector2.zero;
 
         var bg = rootGo.GetComponent<Image>();
         bg.color = new Color(1f, 1f, 1f, 0.98f);
         bg.raycastTarget = false;
+
+        // Behind palette / RUN / strip / result popups on the same overlay canvas.
+        // (Green playfield is world geometry, so this stays visible above it.)
+        rootGo.transform.SetAsFirstSibling();
 
         // Soft outline card feel
         var outline = rootGo.AddComponent<Outline>();

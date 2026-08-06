@@ -34,6 +34,16 @@ export const canvasLessonSchema = z.object({
   patternPreview: z.array(z.string()).optional(),
   /** Optional fixed chunk chip (e.g. Item 3 style). */
   exampleChunk: z.array(z.string()).optional(),
+  /**
+   * Label above the example chunk. Omit/`undefined` → "CHUNK".
+   * Empty string → hide the label.
+   */
+  chunkLabel: z.string().optional(),
+  /**
+   * Label above the pattern preview. Omit/`undefined` or empty → hide
+   * (no "PATTERN" word by default). Non-empty → show that text.
+   */
+  patternLabel: z.string().optional(),
   /** For BLANKS: number of underscore slots students fill by drag. */
   blankSlotCount: z.number().int().min(1).max(20).optional(),
 });
@@ -45,7 +55,23 @@ export const DEFAULT_CANVAS_LESSON: CanvasLessonConfig = {
   prompt: "Build a program that matches the pattern.",
   playAudioAutomatically: true,
   blankSlotCount: 4,
+  chunkLabel: "CHUNK",
+  patternLabel: "",
 };
+
+/** Assessment items count toward reports; Intro items are practice only. */
+export const itemPurposeSchema = z.enum(["ASSESSMENT", "INTRO"]).default("ASSESSMENT");
+export type ItemPurpose = z.infer<typeof itemPurposeSchema>;
+
+/** Resolved section label for Unity / preview. `null` = hide. */
+export function resolveCanvasSectionLabel(
+  configured: string | undefined,
+  fallbackWhenOmitted: string | null
+): string | null {
+  if (configured === undefined) return fallbackWhenOmitted;
+  const t = configured.trim();
+  return t.length > 0 ? t : null;
+}
 
 export const layoutModeSchema = z.enum(["GRID", "NUMBER_LINE", "CANVAS"]).default("GRID");
 
@@ -191,6 +217,11 @@ export const levelGameplayConfigSchema = z.object({
   allowRobotDrag: z.boolean().default(true),
   allowGridObjectDrag: z.boolean().default(false),
   cornerHint: levelCornerHintSchema.optional(),
+  /**
+   * ASSESSMENT (default) = counts toward scores / stealth reports.
+   * INTRO = practice / teaching item — playable but not counted as assessment.
+   */
+  itemPurpose: itemPurposeSchema.optional(),
   /** Canvas layout: prompt / media / pattern on white board + strip seeding mode. */
   canvasLesson: canvasLessonSchema.optional(),
   actionBlockIntro: actionBlockIntroSchema.optional(),
@@ -262,6 +293,16 @@ export const levelGameplayConfigSchema = z.object({
 });
 
 export type LevelGameplayConfig = z.infer<typeof levelGameplayConfigSchema>;
+
+export function isIntroItem(config: LevelGameplayConfig | null | undefined): boolean {
+  return config?.itemPurpose === "INTRO";
+}
+
+export function countsTowardAssessment(
+  config: LevelGameplayConfig | null | undefined
+): boolean {
+  return !isIntroItem(config);
+}
 
 /** Commands allowed in-game and in route / assessment BFS for this level. */
 export function resolveEnabledActionButtons(

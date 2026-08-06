@@ -3,7 +3,8 @@
  */
 
 import { prisma } from "@/lib/prisma";
-import { levelGameplayConfigSchema } from "@/lib/level-config";
+import { levelGameplayConfigSchema, isIntroItem } from "@/lib/level-config";
+import { LevelType } from "@prisma/client";
 import { runStealthAssessment } from "@/lib/assessment/assessmentEngine";
 import { ASSESSMENT_VERSION } from "@/lib/assessment/assessmentConfig";
 import type { AttemptEvidenceInput } from "@/lib/assessment/assessmentTypes";
@@ -23,6 +24,18 @@ export async function analyzeStealthAssessment(attemptId: string) {
   const parsed = levelGameplayConfigSchema.safeParse(attempt.level.config);
   if (!parsed.success) {
     return { attemptId, skipped: true as const, reason: "Invalid level config", performances: [] };
+  }
+
+  if (
+    isIntroItem(parsed.data) ||
+    attempt.level.levelType === LevelType.INTRO
+  ) {
+    return {
+      attemptId,
+      skipped: true as const,
+      reason: "Intro / practice item — not counted as assessment",
+      performances: [],
+    };
   }
 
   const input: AttemptEvidenceInput = {

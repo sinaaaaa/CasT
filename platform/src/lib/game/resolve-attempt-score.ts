@@ -12,7 +12,7 @@ import {
   simulateProgram,
 } from "@/lib/assessment/routeAnalysis";
 import { matchesAnyCorrectProgram, suggestProgramVariants } from "@/lib/assessment/expand-repeats";
-import { levelGameplayConfigSchema, type LevelGameplayConfig, isCanvasLayout } from "@/lib/level-config";
+import { levelGameplayConfigSchema, type LevelGameplayConfig, isCanvasLayout, isIntroItem } from "@/lib/level-config";
 
 /** Unity JsonUtility may send 0/1 or string booleans — normalize for scoring. */
 export function parseUnityBoolean(value: unknown): boolean | null {
@@ -182,6 +182,25 @@ export function resolveAttemptEndScore(params: {
   let resolvedScore = params.score ?? null;
 
   const config = parseLevelConfigForScoring(params.levelConfig);
+
+  // Intro / practice items: still resolve pass for progression, but never store a grade.
+  if (isIntroItem(config)) {
+    if (config && isCanvasLayout(config)) {
+      const studentRaw = (params.finalCommand ?? "")
+        .split(/[;,]/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      let accepted = config.assessment?.correctPrograms ?? [];
+      if (!accepted.length && config.canvasLesson?.patternPreview?.length) {
+        accepted = suggestProgramVariants(config.canvasLesson.patternPreview);
+      }
+      if (accepted.length) {
+        const matched = matchesAnyCorrectProgram(studentRaw, accepted);
+        return { score: null, passed: matched };
+      }
+    }
+    return { score: null, passed: unityPassed };
+  }
 
   // Canvas / pattern levels: accept exact nested OR expanded-equivalent programs.
   // If teacher only authored a pattern preview, treat its smart variants as accepted.

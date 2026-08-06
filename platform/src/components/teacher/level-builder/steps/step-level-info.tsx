@@ -83,6 +83,46 @@ export function StepLevelInfo(props: Props) {
       </ItemBuilderStepFrame>
 
       <ItemBuilderPanel
+        title="Item purpose"
+        description="Intros are for teaching / practice. Assessment items count toward scores and reports."
+      >
+        <div className="grid gap-3 sm:grid-cols-2">
+          {(
+            [
+              {
+                value: "ASSESSMENT" as const,
+                title: "Assessment item",
+                hint: "Scored and included in teacher reports",
+              },
+              {
+                value: "INTRO" as const,
+                title: "Intro / practice",
+                hint: "Playable, but not counted as assessment",
+              },
+            ] as const
+          ).map((opt) => {
+            const selected = (config.itemPurpose ?? "ASSESSMENT") === opt.value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setConfig({ ...config, itemPurpose: opt.value })}
+                className={cn(
+                  "rounded-2xl border-2 p-4 text-left transition",
+                  selected
+                    ? "border-indigo-500 bg-indigo-50/60 ring-2 ring-indigo-200"
+                    : "border-slate-200 bg-white hover:border-indigo-200"
+                )}
+              >
+                <p className="text-sm font-bold text-slate-900">{opt.title}</p>
+                <p className="mt-1 text-xs leading-relaxed text-slate-600">{opt.hint}</p>
+              </button>
+            );
+          })}
+        </div>
+      </ItemBuilderPanel>
+
+      <ItemBuilderPanel
         title="Name & identity"
         description="Students see the display name. The item code is for your records and exports."
       >

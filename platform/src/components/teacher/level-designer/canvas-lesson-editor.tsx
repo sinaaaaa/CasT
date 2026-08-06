@@ -5,6 +5,7 @@ import Image from "next/image";
 import { motion, Reorder, AnimatePresence } from "framer-motion";
 import {
   DEFAULT_CANVAS_LESSON,
+  resolveCanvasSectionLabel,
   resolveEnabledActionButtons,
   type CanvasLessonConfig,
   type LevelGameplayConfig,
@@ -393,9 +394,11 @@ function StudentCanvasPreview({
 
           {(lesson.exampleChunk?.length ?? 0) > 0 && (
             <div className="w-full max-w-md rounded-xl border border-teal-200 bg-teal-50/60 px-3 py-2">
-              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-teal-700">
-                Chunk
-              </p>
+              {resolveCanvasSectionLabel(lesson.chunkLabel, "CHUNK") && (
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-teal-700">
+                  {resolveCanvasSectionLabel(lesson.chunkLabel, "CHUNK")}
+                </p>
+              )}
               <div className="flex flex-wrap justify-center gap-1.5">
                 {lesson.exampleChunk!.map((t, i) => (
                   <TokenChip key={`${t}-${i}`} action={t} size="sm" />
@@ -406,9 +409,11 @@ function StudentCanvasPreview({
 
           {(lesson.patternPreview?.length ?? 0) > 0 && (
             <div className="w-full max-w-md">
-              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-violet-600">
-                Pattern
-              </p>
+              {resolveCanvasSectionLabel(lesson.patternLabel, null) && (
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-violet-600">
+                  {resolveCanvasSectionLabel(lesson.patternLabel, null)}
+                </p>
+              )}
               <div className="flex flex-wrap justify-center gap-1.5">
                 {lesson.patternPreview!.map((t, i) => (
                   <TokenChip key={`${t}-${i}`} action={t} size="sm" />
@@ -649,6 +654,19 @@ export function CanvasLessonEditor({ config, onChange }: Props) {
             accent="violet"
           />
 
+          <label className="block space-y-1.5">
+            <span className="text-sm font-semibold text-slate-800">Pattern label</span>
+            <Input
+              value={lesson.patternLabel ?? ""}
+              onChange={(e) => patch({ patternLabel: e.target.value })}
+              placeholder="Leave blank to hide (recommended)"
+              className="h-10 rounded-xl"
+            />
+            <p className="text-xs text-slate-500">
+              Empty = no “PATTERN” word on the board. Type a label only if students need one.
+            </p>
+          </label>
+
           {(lesson.patternPreview?.length ?? 0) > 0 && (
             <Button
               type="button"
@@ -680,6 +698,18 @@ export function CanvasLessonEditor({ config, onChange }: Props) {
             accent="teal"
           />
 
+          <label className="block space-y-1.5">
+            <span className="text-sm font-semibold text-slate-800">Chunk label</span>
+            <Input
+              value={lesson.chunkLabel ?? "CHUNK"}
+              onChange={(e) => patch({ chunkLabel: e.target.value })}
+              placeholder="CHUNK"
+              className="h-10 rounded-xl"
+            />
+            <p className="text-xs text-slate-500">
+              Clear the field to hide the chunk heading. Default is “CHUNK”.
+            </p>
+          </label>
           {lesson.stripMode === "SEED_PROGRAM" && (
             <p className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2.5 text-xs leading-relaxed text-sky-900">
               Seeded strip uses the <strong>starter program</strong> section below. Accepted

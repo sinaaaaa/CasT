@@ -180,6 +180,8 @@ public class LevelData
     public string levelName;
     /// <summary>GRID (default), NUMBER_LINE, or CANVAS (no playfield — pattern / strip only).</summary>
     public string layoutMode = "GRID";
+    /// <summary>ASSESSMENT (default) or INTRO — intros are practice and not counted as assessment.</summary>
+    public string itemPurpose = "ASSESSMENT";
     public NumberLineConfig numberLine;
     /// <summary>
     /// Accepted programs for pattern / canvas assessment. Each entry is semicolon-joined tokens
@@ -289,6 +291,10 @@ public class CanvasLessonData
     public List<string> patternPreview = new List<string>();
     public List<string> exampleChunk = new List<string>();
     public int blankSlotCount;
+    /// <summary>Null/omit → "CHUNK". Empty → hide. Otherwise custom text.</summary>
+    public string chunkLabel;
+    /// <summary>Null/omit or empty → hide. Non-empty → show that label (no default "PATTERN").</summary>
+    public string patternLabel;
 }
 
 /// <summary>Top-right text/image hint â€” used for levels and intro steps.</summary>
@@ -4071,12 +4077,55 @@ public class CharacterMove : MonoBehaviour
             return;
         }
         canvasLessonPanel.Show(levelData.canvasLesson);
+        canvasLessonPanel.EnsureBehindGameplayChrome();
+        EnsureCanvasChromeAboveLessonPanel();
     }
 
     private void HideCanvasLessonPanel()
     {
         if (canvasLessonPanel != null)
             canvasLessonPanel.Hide();
+    }
+
+    /// <summary>
+    /// RUN / strip / palette must draw above the white Canvas lesson card.
+    /// </summary>
+    private void EnsureCanvasChromeAboveLessonPanel()
+    {
+        void Raise(Component c)
+        {
+            if (c == null) return;
+            c.transform.SetAsLastSibling();
+        }
+
+        Raise(dropZonePanel);
+        Raise(actionQueueTransform);
+        Raise(moveForwardButton);
+        Raise(moveDownButton);
+        Raise(rotateLeftButton);
+        Raise(rotateRightButton);
+        Raise(repeatButton);
+        Raise(runButton);
+        Raise(studentResetButton);
+        BringUiPopupToFront(wrongAnswerPopup);
+        BringUiPopupToFront(successPopup);
+    }
+
+    /// <summary>
+    /// Result popups (Correct / Try again / Next) must sit above the Canvas lesson board.
+    /// </summary>
+    private void BringUiPopupToFront(GameObject popup)
+    {
+        if (popup == null) return;
+        popup.transform.SetAsLastSibling();
+
+        Canvas popupCanvas = popup.GetComponent<Canvas>();
+        if (popupCanvas == null)
+            popupCanvas = popup.AddComponent<Canvas>();
+        popupCanvas.overrideSorting = true;
+        popupCanvas.sortingOrder = 2000;
+        if (popup.GetComponent<GraphicRaycaster>() == null)
+            popup.AddComponent<GraphicRaycaster>();
     }
 
     private static string ResolveCanvasStripMode(LevelData levelData)
@@ -4395,7 +4444,8 @@ public class CharacterMove : MonoBehaviour
             studentResetButton.onClick.AddListener(StudentResetLevel);
         }
 
-        successPopup.SetActive(false); 
+        successPopup.SetActive(false);
+        BringUiPopupToFront(successPopup);
         if (successPopupContinueButton != null) 
         {
             successPopupContinueButton.onClick.AddListener(OnSuccessPopupContinue);
@@ -4404,6 +4454,8 @@ public class CharacterMove : MonoBehaviour
         {
             Debug.LogWarning("[CharacterMove] successPopupContinueButton is not assigned in the inspector!");
         }
+        if (wrongAnswerPopup != null)
+            BringUiPopupToFront(wrongAnswerPopup);
         // appleObject.SetActive(false); // This might be an old reference
 
         if (spriteRenderer == null) spriteRenderer = GetComponent<SpriteRenderer>();
@@ -4858,6 +4910,7 @@ public class CharacterMove : MonoBehaviour
             successPopupText.text = message;
             if (!successPopup.activeSelf)
                 successPopup.SetActive(true);
+            BringUiPopupToFront(successPopup);
             GameInteractionSounds.PlaySuccessPopup();
         }
         else if (chatGPTResponseText != null)
@@ -5945,6 +5998,7 @@ public class CharacterMove : MonoBehaviour
             pendingLevelPassed = true;
             if (chatGPTResponseText != null)
                 chatGPTResponseText.text = "Correct!";
+            BringUiPopupToFront(successPopup);
             StartCoroutine(CompleteLevelSuccessfully());
             yield break;
         }
@@ -5955,6 +6009,7 @@ public class CharacterMove : MonoBehaviour
                 ? "Not yet — try another way"
                 : "Not quite — check your arrows and repeat.";
         }
+        EnsureCanvasChromeAboveLessonPanel();
         HandleRunFailure(levelData, "pattern");
     }
 
@@ -6627,6 +6682,7 @@ public class CharacterMove : MonoBehaviour
             {
                 successPopupText.text = GetConfiguredPopupText(levelData.maxAttemptsMessage, levelData, failureReason);
                 successPopup.SetActive(true);
+                BringUiPopupToFront(successPopup);
                 GameInteractionSounds.PlayFailPopup();
             }
             else
@@ -6641,6 +6697,7 @@ public class CharacterMove : MonoBehaviour
         if (wrongAnswerPopup != null)
         {
             wrongAnswerPopup.SetActive(true);
+            BringUiPopupToFront(wrongAnswerPopup);
             GameInteractionSounds.PlayFailPopup();
             var popupText = wrongAnswerPopup.GetComponentInChildren<TextMeshProUGUI>();
             if (popupText != null)
@@ -7601,18 +7658,8 @@ public class CharacterMove : MonoBehaviour
 
     private void ConfigureSuccessPopup()
     {
-        Canvas popupCanvas = successPopup.GetComponent<Canvas>();
-        if (popupCanvas == null)
-        {
-            popupCanvas = successPopup.AddComponent<Canvas>();
-            popupCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            popupCanvas.sortingOrder = 999; 
-        }
-        if (successPopup.GetComponent<GraphicRaycaster>() == null)
-        {
-            successPopup.AddComponent<GraphicRaycaster>();
-        }
-        Button closeButton = successPopup.GetComponentInChildren<Button>();
+        BringUiPopupToFront(successPopup);
+        Button closeButton = successPopup != null ? successPopup.GetComponentInChildren<Button>() : null;
         if (closeButton != null)
         {
             closeButton.onClick.RemoveAllListeners();
@@ -8008,6 +8055,7 @@ public class CharacterMove : MonoBehaviour
         {
             successPopupText.text = GetConfiguredPopupText(completedLevel?.attemptSuccessMessage, completedLevel);
             successPopup.SetActive(true);
+            BringUiPopupToFront(successPopup);
             GameInteractionSounds.PlaySuccessPopup();
             RefreshStudentResetButtonState();
         }

@@ -10,6 +10,7 @@ public class LevelConfigDto
 {
     public string levelName;
     public string layoutMode = "GRID";
+    public string itemPurpose = "ASSESSMENT";
     public NumberLineConfigDto numberLine;
     public int maxAttempts = 3;
     public Vec2Dto robotStartPosition;
@@ -115,6 +116,8 @@ public class CanvasLessonDto
     public string[] patternPreview;
     public string[] exampleChunk;
     public int blankSlotCount;
+    public string chunkLabel;
+    public string patternLabel;
 }
 
 [Serializable]
@@ -176,6 +179,7 @@ public static class LevelConfigMapper
             levelType = levelType,
             levelName = dto.levelName ?? "Item",
             layoutMode = string.IsNullOrEmpty(dto.layoutMode) ? "GRID" : dto.layoutMode,
+            itemPurpose = string.IsNullOrEmpty(dto.itemPurpose) ? "ASSESSMENT" : dto.itemPurpose,
             maxAttempts = dto.maxAttempts > 0 ? dto.maxAttempts : 3,
             robotStartPosition = dto.robotStartPosition != null
                 ? dto.robotStartPosition.ToVector2Int()
@@ -307,6 +311,8 @@ public static class LevelConfigMapper
                 audioUrl = dto.canvasLesson.audioUrl,
                 playAudioAutomatically = dto.canvasLesson.playAudioAutomatically,
                 blankSlotCount = dto.canvasLesson.blankSlotCount,
+                chunkLabel = dto.canvasLesson.chunkLabel,
+                patternLabel = dto.canvasLesson.patternLabel,
             };
             if (dto.canvasLesson.patternPreview != null && dto.canvasLesson.patternPreview.Length > 0)
                 ld.canvasLesson.patternPreview = new List<string>(dto.canvasLesson.patternPreview);
