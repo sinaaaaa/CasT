@@ -86,16 +86,13 @@ export async function POST(request: NextRequest) {
   } catch (e) {
     console.error("[level-assignments bulk]", e);
     const message = e instanceof Error ? e.message : String(e);
-    const missingColumn =
-      /assignmentOrder/i.test(message) ||
-      /column .* does not exist/i.test(message) ||
-      /P2022/i.test(message);
+    const prismaCode =
+      e && typeof e === "object" && "code" in e ? String((e as { code?: unknown }).code) : undefined;
     return Response.json(
       {
-        error: missingColumn
-          ? "Database is missing assignment columns. Run prisma/migrations/add_assignment_order.sql on production (Neon), then retry."
-          : "Failed to save assignments",
-        details: message.slice(0, 500),
+        error: "Failed to save assignments",
+        details: message.slice(0, 800),
+        prismaCode,
       },
       { status: 500 }
     );
