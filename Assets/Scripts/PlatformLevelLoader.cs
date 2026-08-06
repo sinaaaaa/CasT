@@ -117,6 +117,32 @@ public class PlatformLevelLoader : MonoBehaviour
                     ld.orderIndex = item["orderIndex"]?.Value<int>() ?? result.Count;
                     if (!string.IsNullOrEmpty(layoutFromJson))
                         ld.layoutMode = layoutFromJson;
+                    // Pattern / canvas assessment programs (semicolon-joined per accepted program).
+                    var correctProgramsToken = configToken["assessment"]?["correctPrograms"] as JArray;
+                    if (correctProgramsToken != null && correctProgramsToken.Count > 0)
+                    {
+                        ld.correctPrograms = new List<string>();
+                        foreach (var prog in correctProgramsToken)
+                        {
+                            if (prog is JArray arr)
+                            {
+                                var parts = new List<string>();
+                                foreach (var t in arr)
+                                {
+                                    string s = t?.ToString();
+                                    if (!string.IsNullOrWhiteSpace(s)) parts.Add(s.Trim());
+                                }
+                                if (parts.Count > 0)
+                                    ld.correctPrograms.Add(string.Join(";", parts));
+                            }
+                            else if (prog != null && prog.Type == JTokenType.String)
+                            {
+                                string s = prog.ToString();
+                                if (!string.IsNullOrWhiteSpace(s))
+                                    ld.correctPrograms.Add(s.Trim());
+                            }
+                        }
+                    }
                     if (string.IsNullOrEmpty(ld.layoutMode) && dto.numberLine != null)
                         ld.layoutMode = "NUMBER_LINE";
                     if (string.IsNullOrEmpty(ld.levelName))

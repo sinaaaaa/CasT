@@ -118,6 +118,9 @@ export function LevelAssignmentEditor(props: Props) {
       const data = await res.json();
       if (!res.ok) {
         setError(data.error ?? "Save failed");
+        if (typeof data.details === "string" && data.details.length > 0) {
+          console.error("[level-assignments save]", data.details);
+        }
         return;
       }
       setHasCustom(Boolean(data.hasCustomAssignments));

@@ -22,6 +22,7 @@ public class LevelConfigDto
     public bool allowRobotDrag = true;
     public bool allowGridObjectDrag;
     public LevelCornerHintDto cornerHint;
+    public CanvasLessonDto canvasLesson;
     public ActionBlockIntroConfigDto actionBlockIntro;
     public string[] guidedActions;
     public BlankDataDto[] blanks;
@@ -101,6 +102,19 @@ public class LevelCornerHintDto
     public string imageUrl;
     public string audioUrl;
     public bool playAudioAutomatically = true;
+}
+
+[Serializable]
+public class CanvasLessonDto
+{
+    public string stripMode = "EMPTY";
+    public string prompt;
+    public string imageUrl;
+    public string audioUrl;
+    public bool playAudioAutomatically = true;
+    public string[] patternPreview;
+    public string[] exampleChunk;
+    public int blankSlotCount;
 }
 
 [Serializable]
@@ -279,6 +293,25 @@ public static class LevelConfigMapper
         if (dto.cornerHint != null)
         {
             ld.cornerHint = MapCornerHint(dto.cornerHint);
+        }
+
+        if (dto.canvasLesson != null)
+        {
+            ld.canvasLesson = new CanvasLessonData
+            {
+                stripMode = string.IsNullOrEmpty(dto.canvasLesson.stripMode)
+                    ? "EMPTY"
+                    : dto.canvasLesson.stripMode,
+                prompt = dto.canvasLesson.prompt,
+                imageUrl = dto.canvasLesson.imageUrl,
+                audioUrl = dto.canvasLesson.audioUrl,
+                playAudioAutomatically = dto.canvasLesson.playAudioAutomatically,
+                blankSlotCount = dto.canvasLesson.blankSlotCount,
+            };
+            if (dto.canvasLesson.patternPreview != null && dto.canvasLesson.patternPreview.Length > 0)
+                ld.canvasLesson.patternPreview = new List<string>(dto.canvasLesson.patternPreview);
+            if (dto.canvasLesson.exampleChunk != null && dto.canvasLesson.exampleChunk.Length > 0)
+                ld.canvasLesson.exampleChunk = new List<string>(dto.canvasLesson.exampleChunk);
         }
 
         if (dto.actionBlockIntro != null && dto.actionBlockIntro.enabled)

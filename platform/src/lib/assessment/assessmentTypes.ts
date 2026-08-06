@@ -56,7 +56,7 @@ export interface TaskAssessmentConfig {
   hasObstacle: boolean;
   compareWithOptimalRoute: boolean;
   taskEnvironmentType: TaskEnvironmentType;
-  layoutMode: "GRID" | "NUMBER_LINE";
+  layoutMode: "GRID" | "NUMBER_LINE" | "CANVAS";
   levelConfig: LevelGameplayConfig;
 }
 

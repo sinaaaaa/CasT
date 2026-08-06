@@ -23,7 +23,9 @@ public class DraggableActionBlock : MonoBehaviour, IBeginDragHandler, IDragHandl
         Forward,
         Backward,
         TurnLeft,
-        TurnRight
+        TurnRight,
+        /// <summary>Inserts a Repeat Start + Repeat End pair into the yellow strip.</summary>
+        Repeat
     }
 
     [Header("Action")]
@@ -73,6 +75,9 @@ public class DraggableActionBlock : MonoBehaviour, IBeginDragHandler, IDragHandl
             case ActionKind.Backward:  return characterMove.backwardSprite;
             case ActionKind.TurnLeft:  return characterMove.rotateLeftSprite;
             case ActionKind.TurnRight: return characterMove.rotateRightSprite;
+            case ActionKind.Repeat:    return characterMove.repeatSprite != null
+                ? characterMove.repeatSprite
+                : characterMove.forwardSprite;
         }
         return null;
     }

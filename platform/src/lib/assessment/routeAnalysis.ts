@@ -45,7 +45,7 @@ function vecEqual(a: Vec2, b: Vec2): boolean {
 function cellMatchesForLayout(
   pos: Vec2,
   goalPos: Vec2,
-  layoutMode: "GRID" | "NUMBER_LINE" = "GRID"
+  layoutMode: "GRID" | "NUMBER_LINE" | "CANVAS" = "GRID"
 ): boolean {
   if (layoutMode === "NUMBER_LINE") return pos.x === goalPos.x;
   return vecEqual(pos, goalPos);
@@ -110,7 +110,7 @@ export function blockedCells(config: LevelGameplayConfig): Set<string> {
   return set;
 }
 
-function inBounds(p: Vec2, layoutMode: "GRID" | "NUMBER_LINE", tickCount?: number): boolean {
+function inBounds(p: Vec2, layoutMode: "GRID" | "NUMBER_LINE" | "CANVAS", tickCount?: number): boolean {
   if (layoutMode === "NUMBER_LINE") {
     const maxX = (tickCount ?? 9) - 1;
     return p.x >= 0 && p.x <= maxX && p.y >= 0 && p.y < GRID_BOUNDS.rows;
@@ -189,7 +189,7 @@ export function analyzeGoalRelationship(params: {
   goalPosition: Vec2;
   finalDirection: Vec2;
   requiredFinalDirection?: Vec2;
-  layoutMode?: "GRID" | "NUMBER_LINE";
+  layoutMode?: "GRID" | "NUMBER_LINE" | "CANVAS";
 }): GoalRelationshipAnalysis {
   const { pathVisited, finalPosition, goalPosition, finalDirection, requiredFinalDirection } =
     params;
@@ -286,7 +286,7 @@ function applyCommand(
   facing: Vec2,
   cmd: RobotCommand,
   blocked: Set<string>,
-  bounds: { layoutMode: "GRID" | "NUMBER_LINE"; tickCount?: number }
+  bounds: { layoutMode: "GRID" | "NUMBER_LINE" | "CANVAS"; tickCount?: number }
 ): {
   pos: Vec2;
   facing: Vec2;
@@ -418,7 +418,7 @@ function advanceGoalProgress(
   facing: Vec2,
   goals: AssessmentGoal[],
   task: TaskAssessmentConfig,
-  layoutMode: "GRID" | "NUMBER_LINE" = "GRID"
+  layoutMode: "GRID" | "NUMBER_LINE" | "CANVAS" = "GRID"
 ): number {
   if (goals.length === 0) return progress;
 
@@ -459,7 +459,7 @@ function isGoalProgressComplete(
   facing: Vec2,
   goals: AssessmentGoal[],
   task: TaskAssessmentConfig,
-  layoutMode: "GRID" | "NUMBER_LINE" = "GRID"
+  layoutMode: "GRID" | "NUMBER_LINE" | "CANVAS" = "GRID"
 ): boolean {
   if (goals.length === 0) {
     const gc = task.levelConfig.goalCell;
@@ -493,7 +493,7 @@ function initialGoalProgress(
   facing: Vec2,
   goals: AssessmentGoal[],
   task: TaskAssessmentConfig,
-  layoutMode: "GRID" | "NUMBER_LINE" = "GRID"
+  layoutMode: "GRID" | "NUMBER_LINE" | "CANVAS" = "GRID"
 ): number {
   if (goals.length === 0) return 0;
 

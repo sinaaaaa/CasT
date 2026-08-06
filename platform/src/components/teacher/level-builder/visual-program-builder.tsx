@@ -8,12 +8,20 @@ import {
   CornerDownLeft,
   CornerDownRight,
   HelpCircle,
+  Minus,
   Play,
+  Plus,
   RotateCcw,
   Sparkles,
 } from "lucide-react";
 import type { LevelGameplayConfig } from "@/lib/level-config";
 import { GUIDED_ACTIONS } from "@/lib/level-editor-constants";
+import {
+  enrichCorrectProgramsWithVariants,
+  formatRepeatStart,
+  parseRepeatStart,
+  suggestProgramVariants,
+} from "@/lib/assessment/expand-repeats";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -21,6 +29,8 @@ type Props = {
   config: LevelGameplayConfig;
   onChange: (config: LevelGameplayConfig) => void;
   showBlanks?: boolean;
+  /** guidedActions (default) or assessment.correctPrograms[0] for canvas patterns */
+  storage?: "guided" | "correctProgram";
 };
 
 type ProgramBlock = { id: string; action: string };
@@ -51,15 +61,33 @@ const ACTION_STYLES: Record<string, { bg: string; border: string; icon: React.Re
     border: "border-violet-400 border-dashed",
     icon: <HelpCircle className="h-4 w-4 text-violet-600" />,
   },
+  "repeat:1": {
+    bg: "bg-purple-100",
+    border: "border-purple-400",
+    icon: <RotateCcw className="h-4 w-4 text-purple-700" />,
+  },
+  "repeat:2": {
+    bg: "bg-purple-100",
+    border: "border-purple-400",
+    icon: <RotateCcw className="h-4 w-4 text-purple-700" />,
+  },
+  "repeat-end": {
+    bg: "bg-orange-100",
+    border: "border-orange-400",
+    icon: <RotateCcw className="h-4 w-4 text-orange-700" />,
+  },
 };
 
 const CATEGORIES = [
   { id: "move", label: "Move", actions: ["forward", "backward"] as const },
   { id: "turn", label: "Turn", actions: ["turn left", "turn right"] as const },
+  { id: "loop", label: "Repeat", actions: ["repeat:1", "repeat-end"] as const },
   { id: "student", label: "Student choice", actions: ["blank"] as const },
 ];
 
 function actionLabel(value: string) {
+  const count = parseRepeatStart(value);
+  if (count != null) return `Repeat start (×${count})`;
   return GUIDED_ACTIONS.find((g) => g.value === value)?.label ?? value;
 }
 
@@ -67,14 +95,110 @@ function toBlocks(actions: string[]): ProgramBlock[] {
   return actions.map((action, i) => ({ id: `block-${i}-${action}`, action }));
 }
 
-export function VisualProgramBuilder({ config, onChange, showBlanks = true }: Props) {
-  const actions = config.guidedActions ?? [];
+export function VisualProgramBuilder({
+  config,
+  onChange,
+  showBlanks = true,
+  storage = "guided",
+}: Props) {
+  const programs = config.assessment?.correctPrograms ?? [];
+  const [activeProgramIndex, setActiveProgramIndex] = useState(0);
+  const safeIndex =
+    storage === "correctProgram"
+      ? Math.min(Math.max(0, activeProgramIndex), Math.max(0, programs.length - 1))
+      : 0;
+
+  const actions =
+    storage === "correctProgram"
+      ? (programs[safeIndex] ?? [])
+      : (config.guidedActions ?? []);
   const blanks = config.blanks ?? [];
   const [previewRun, setPreviewRun] = useState(false);
   const blocks = useMemo(() => toBlocks(actions), [actions]);
 
   function setActions(next: string[]) {
+    if (storage === "correctProgram") {
+      const list = [...(config.assessment?.correctPrograms ?? [])];
+      if (list.length === 0) list.push([]);
+      const idx = Math.min(safeIndex, list.length - 1);
+      list[idx] = next;
+      onChange({
+        ...config,
+        assessment: {
+          ...config.assessment,
+          correctPrograms: list,
+        },
+      });
+      return;
+    }
     onChange({ ...config, guidedActions: next });
+  }
+
+  function addAcceptedProgram() {
+    const list = [...(config.assessment?.correctPrograms ?? [[]])];
+    if (list.length === 0) list.push([]);
+    list.push([]);
+    onChange({
+      ...config,
+      assessment: { ...config.assessment, correctPrograms: list },
+    });
+    setActiveProgramIndex(list.length - 1);
+  }
+
+  function removeAcceptedProgram(index: number) {
+    const list = [...(config.assessment?.correctPrograms ?? [])];
+    if (list.length <= 1) {
+      onChange({
+        ...config,
+        assessment: { ...config.assessment, correctPrograms: [[]] },
+      });
+      setActiveProgramIndex(0);
+      return;
+    }
+    list.splice(index, 1);
+    onChange({
+      ...config,
+      assessment: { ...config.assessment, correctPrograms: list },
+    });
+    setActiveProgramIndex(Math.min(index, list.length - 1));
+  }
+
+  function setRepeatCountAt(index: number, nextCount: number) {
+    const count = Math.max(1, Math.min(9, nextCount));
+    const next = [...actions];
+    if (parseRepeatStart(next[index]) == null) return;
+    next[index] = formatRepeatStart(count);
+    setActions(next);
+  }
+
+  function addSmartVariants() {
+    const source =
+      storage === "correctProgram"
+        ? (programs[safeIndex]?.length
+            ? programs[safeIndex]
+            : (config.canvasLesson?.patternPreview ?? []))
+        : actions;
+    if (!source.length && !(config.canvasLesson?.patternPreview?.length)) return;
+
+    const seed = source.length
+      ? source
+      : (config.canvasLesson?.patternPreview ?? []);
+    const variants = suggestProgramVariants(seed);
+    if (!variants.length) return;
+
+    if (storage === "correctProgram") {
+      const merged = enrichCorrectProgramsWithVariants([
+        ...(config.assessment?.correctPrograms ?? []),
+        ...variants,
+      ]);
+      onChange({
+        ...config,
+        assessment: { ...config.assessment, correctPrograms: merged },
+      });
+      setActiveProgramIndex(0);
+      return;
+    }
+    setActions(variants[0] ?? actions);
   }
 
   function setBlocks(next: ProgramBlock[]) {
@@ -99,13 +223,78 @@ export function VisualProgramBuilder({ config, onChange, showBlanks = true }: Pr
     setTimeout(() => setPreviewRun(false), 2400);
   }, []);
 
+  const programCount = Math.max(1, programs.length);
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+      {storage === "correctProgram" && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-violet-200 bg-violet-50/50 p-3">
+          <span className="mr-1 text-xs font-semibold uppercase tracking-wide text-violet-700">
+            Accepted answers
+          </span>
+          {Array.from({ length: programCount }).map((_, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => setActiveProgramIndex(i)}
+              className={cn(
+                "rounded-lg px-3 py-1.5 text-xs font-medium transition",
+                safeIndex === i
+                  ? "bg-violet-600 text-white shadow-sm"
+                  : "bg-white text-violet-800 hover:bg-violet-100"
+              )}
+            >
+              Program {i + 1}
+              {(programs[i]?.length ?? 0) > 0 ? ` (${programs[i].length})` : ""}
+            </button>
+          ))}
+          <Button type="button" size="sm" variant="outline" className="h-8 gap-1 text-xs" onClick={addAcceptedProgram}>
+            <Sparkles className="h-3 w-3" />
+            Add another accepted program
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-8 gap-1 border-emerald-300 bg-emerald-50 text-xs text-emerald-900 hover:bg-emerald-100"
+            onClick={addSmartVariants}
+            title="Detect repeating chunks and add both expanded and Repeat forms"
+          >
+            <Sparkles className="h-3 w-3" />
+            Smart: add Repeat ↔ expanded variants
+          </Button>
+          {programCount > 1 && (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-8 text-xs text-red-600"
+              onClick={() => removeAcceptedProgram(safeIndex)}
+            >
+              Remove program {safeIndex + 1}
+            </Button>
+          )}
+          <p className="w-full text-xs text-violet-700/80">
+            Students pass if their strip matches any accepted program (exact Repeat nesting or same
+            expanded motions). Use <strong>Smart variants</strong> to auto-add both forms from the
+            pattern (e.g. F·R·F·R and Repeat×2 [F·R]).
+          </p>
+        </div>
+      )}
+
       <motion.div className="overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-sky-50/40 p-5 shadow-sm">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h4 className="text-sm font-semibold text-slate-900">Command sequence</h4>
-            <p className="text-xs text-slate-500">What students will see in the action queue</p>
+            <h4 className="text-sm font-semibold text-slate-900">
+              {storage === "correctProgram"
+                ? `Accepted program ${safeIndex + 1}`
+                : "Command sequence"}
+            </h4>
+            <p className="text-xs text-slate-500">
+              {storage === "correctProgram"
+                ? "One valid way students can answer — add more for Repeat vs expanded variants"
+                : "What students will see in the action queue"}
+            </p>
           </div>
           <Button
             type="button"
@@ -138,7 +327,12 @@ export function VisualProgramBuilder({ config, onChange, showBlanks = true }: Pr
           ) : (
             <Reorder.Group axis="x" values={blocks} onReorder={setBlocks} className="flex flex-wrap gap-2">
               {blocks.map((block, i) => {
-                const style = ACTION_STYLES[block.action] ?? ACTION_STYLES.forward;
+                const repeatCount = parseRepeatStart(block.action);
+                const style =
+                  ACTION_STYLES[block.action] ??
+                  (repeatCount != null
+                    ? ACTION_STYLES["repeat:1"]
+                    : ACTION_STYLES.forward);
                 return (
                   <Reorder.Item
                     key={block.id}
@@ -156,6 +350,35 @@ export function VisualProgramBuilder({ config, onChange, showBlanks = true }: Pr
                     </span>
                     {style.icon}
                     <span>{actionLabel(block.action)}</span>
+                    {repeatCount != null && (
+                      <span className="ml-1 inline-flex items-center gap-0.5 rounded-lg bg-white/90 p-0.5 ring-1 ring-purple-200">
+                        <button
+                          type="button"
+                          className="rounded p-0.5 text-purple-700 hover:bg-purple-100"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setRepeatCountAt(i, repeatCount - 1);
+                          }}
+                          aria-label="Decrease repeat count"
+                        >
+                          <Minus className="h-3.5 w-3.5" />
+                        </button>
+                        <span className="min-w-[1.25rem] text-center text-xs font-bold tabular-nums text-purple-900">
+                          {repeatCount}
+                        </span>
+                        <button
+                          type="button"
+                          className="rounded p-0.5 text-purple-700 hover:bg-purple-100"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setRepeatCountAt(i, repeatCount + 1);
+                          }}
+                          aria-label="Increase repeat count"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                        </button>
+                      </span>
+                    )}
                     <button
                       type="button"
                       className="ml-1 rounded-md p-0.5 text-slate-400 hover:bg-white/80 hover:text-red-500"

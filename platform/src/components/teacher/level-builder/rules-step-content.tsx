@@ -99,8 +99,13 @@ export function RulesStepContent({ levelType, config, onChange }: Props) {
     const next = new Set(enabledActions);
     if (checked) next.add(action);
     else next.delete(action);
-    if (next.size === 0) return;
-    const list = ALL_ROBOT_ACTION_BUTTONS.filter((a) => next.has(a));
+    const motions = ALL_ROBOT_ACTION_BUTTONS.filter((a) => next.has(a));
+    // Always keep at least one motion button (Repeat alone is not enough to play).
+    if (motions.length === 0) return;
+    const list: RobotActionButton[] = [
+      ...motions,
+      ...(next.has("repeat") ? (["repeat"] as RobotActionButton[]) : []),
+    ];
     patch({ enabledActionButtons: list });
   }
 
@@ -132,13 +137,17 @@ export function RulesStepContent({ levelType, config, onChange }: Props) {
             onToggle={toggleAction}
             onEnableAll={() =>
               patch({
-                enabledActionButtons: [...DEFAULT_ENABLED_ACTION_BUTTONS],
+                enabledActionButtons: [
+                  ...DEFAULT_ENABLED_ACTION_BUTTONS,
+                  ...(enabledActions.has("repeat") ? (["repeat"] as const) : []),
+                ],
                 ...(onNumberLine && config.numberLine
                   ? { numberLine: { ...config.numberLine, forwardBackwardOnly: false } }
                   : {}),
               })
             }
             showNumberLinePreset={onNumberLine}
+            showRepeatToggle
             onForwardBackwardOnly={
               onNumberLine
                 ? () =>

@@ -212,12 +212,15 @@ export function ActionButtonChips({
   onEnableAll,
   onForwardBackwardOnly,
   showNumberLinePreset,
+  showRepeatToggle = true,
 }: {
   enabled: Set<RobotActionButton>;
   onToggle: (action: RobotActionButton, checked: boolean) => void;
   onEnableAll: () => void;
   onForwardBackwardOnly?: () => void;
   showNumberLinePreset?: boolean;
+  /** Show Repeat palette visibility control (Canvas / loop items). */
+  showRepeatToggle?: boolean;
 }) {
   const actions: { id: RobotActionButton; label: string; emoji: string }[] = [
     { id: "forward", label: "Forward", emoji: "↑" },
@@ -225,13 +228,17 @@ export function ActionButtonChips({
     { id: "turn left", label: "Turn left", emoji: "↺" },
     { id: "turn right", label: "Turn right", emoji: "↻" },
   ];
+  if (showRepeatToggle) {
+    actions.push({ id: "repeat", label: "Repeat", emoji: "⟳" });
+  }
 
   return (
     <div className="space-y-3">
       <div>
         <p className="text-sm font-semibold text-slate-800">Available action buttons</p>
         <p className="mt-0.5 text-xs text-slate-500">
-          Hidden buttons won&apos;t appear in the game or in route analysis.
+          Hidden buttons won&apos;t appear in the game. Turn <strong>Repeat</strong> off to hide
+          the Repeat block in the palette.
         </p>
       </div>
       <div className="flex flex-wrap gap-2">
@@ -245,7 +252,9 @@ export function ActionButtonChips({
               className={cn(
                 "inline-flex items-center gap-2 rounded-xl border-2 px-4 py-2.5 text-sm font-semibold transition-all",
                 on
-                  ? "border-[#4F46E5] bg-indigo-50 text-[#4F46E5]"
+                  ? action.id === "repeat"
+                    ? "border-violet-500 bg-violet-50 text-violet-800"
+                    : "border-[#4F46E5] bg-indigo-50 text-[#4F46E5]"
                   : "border-slate-200 bg-slate-50 text-slate-400 line-through decoration-slate-300"
               )}
             >

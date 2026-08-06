@@ -283,6 +283,7 @@ public class ActionQueueDropZone : MonoBehaviour, IDropHandler, IPointerEnterHan
 
     /// <summary>
     /// Insert index from pointer position: gaps between blocks, left/right of strip, matches Scratch-style queues.
+    /// Drops over the Repeat green sleeve snap inside Start…End.
     /// </summary>
     private int ComputeInsertionIndex(PointerEventData eventData)
     {
@@ -314,26 +315,26 @@ public class ActionQueueDropZone : MonoBehaviour, IDropHandler, IPointerEnterHan
 
             // Append/prepend as soon as the cursor passes the last/first block — not halfway across empty yellow.
             if (pointer > lastMax + Mathf.Max(4f, appendGraceAfterLastBlockPixels))
-                return n;
+                return SnapIntoRepeatBodyIfNeeded(MapBlockSlotToSiblingIndex(queueTransform, n), eventData, cam, horizontal);
             if (pointer > stripMax && pointer <= stripMax + padH)
-                return n;
+                return SnapIntoRepeatBodyIfNeeded(MapBlockSlotToSiblingIndex(queueTransform, n), eventData, cam, horizontal);
             if (pointer <= firstMin - prependGraceBeforeFirstBlockPixels)
-                return 0;
+                return SnapIntoRepeatBodyIfNeeded(0, eventData, cam, horizontal);
             if (pointer < stripMin && pointer >= stripMin - padH)
-                return 0;
+                return SnapIntoRepeatBodyIfNeeded(0, eventData, cam, horizontal);
         }
         else
         {
             float lastMax = GetRectScreenMax(blocks[n - 1], cam, false);
             float firstMin = GetRectScreenMin(blocks[0], cam, false);
             if (pointer > lastMax + Mathf.Max(4f, appendGraceAfterLastBlockPixels))
-                return n;
+                return SnapIntoRepeatBodyIfNeeded(MapBlockSlotToSiblingIndex(queueTransform, n), eventData, cam, horizontal);
             if (pointer > stripMax && pointer <= stripMax + padV)
-                return n;
+                return SnapIntoRepeatBodyIfNeeded(MapBlockSlotToSiblingIndex(queueTransform, n), eventData, cam, horizontal);
             if (pointer <= firstMin - prependGraceBeforeFirstBlockPixels)
-                return 0;
+                return SnapIntoRepeatBodyIfNeeded(0, eventData, cam, horizontal);
             if (pointer < stripMin && pointer >= stripMin - padV)
-                return 0;
+                return SnapIntoRepeatBodyIfNeeded(0, eventData, cam, horizontal);
         }
 
         var boundaries = new float[n + 1];
@@ -362,12 +363,100 @@ public class ActionQueueDropZone : MonoBehaviour, IDropHandler, IPointerEnterHan
             boundaries[n] = lastEdge + appendGraceAfterLastBlockPixels;
         }
 
-        for (int slot = 0; slot < n; slot++)
+        int slot = n;
+        for (int s = 0; s < n; s++)
         {
-            if (pointer < boundaries[slot + 1])
-                return slot;
+            if (pointer < boundaries[s + 1])
+            {
+                slot = s;
+                break;
+            }
         }
-        return n;
+
+        int siblingIndex = MapBlockSlotToSiblingIndex(queueTransform, slot);
+        return SnapIntoRepeatBodyIfNeeded(siblingIndex, eventData, cam, horizontal);
+    }
+
+    /// <summary>
+    /// Maps an index among real action blocks (excluding sleeve/placeholder) to a queue sibling index.
+    /// </summary>
+    private int MapBlockSlotToSiblingIndex(Transform queueTransform, int blockSlot)
+    {
+        if (queueTransform == null) return 0;
+        int seen = 0;
+        for (int i = 0; i < queueTransform.childCount; i++)
+        {
+            var child = queueTransform.GetChild(i);
+            if (child.name != null && child.name.StartsWith("_RepeatBodyBg")) continue;
+            if (child.GetComponent<QueueInsertionPlaceholder>() != null) continue;
+            if (placeholderInstance != null && child.gameObject == placeholderInstance) continue;
+            if (seen == blockSlot) return i;
+            seen++;
+        }
+        // Append after last real block (still before trailing ignored nodes if any).
+        for (int i = queueTransform.childCount - 1; i >= 0; i--)
+        {
+            var child = queueTransform.GetChild(i);
+            if (child.name != null && child.name.StartsWith("_RepeatBodyBg")) continue;
+            if (child.GetComponent<QueueInsertionPlaceholder>() != null) continue;
+            if (placeholderInstance != null && child.gameObject == placeholderInstance) continue;
+            return i + 1;
+        }
+        return queueTransform.childCount;
+    }
+
+    /// <summary>
+    /// If the pointer is over a Repeat green sleeve / between that Start and End,
+    /// force the insert index inside that loop body (after Start, at/before End).
+    /// Supports multiple sequential Repeats on the strip.
+    /// </summary>
+    private int SnapIntoRepeatBodyIfNeeded(int siblingIndex, PointerEventData eventData, Camera cam, bool horizontal)
+    {
+        var queue = characterMove != null ? characterMove.actionQueueTransform : null;
+        if (queue == null || eventData == null) return siblingIndex;
+
+        float pointer = horizontal ? eventData.position.x : eventData.position.y;
+
+        RectTransform openStart = null;
+        int openStartSibling = -1;
+
+        for (int i = 0; i < queue.childCount; i++)
+        {
+            var child = queue.GetChild(i) as RectTransform;
+            if (child == null) continue;
+            var r = child.GetComponent<QueuedActionRef>();
+            if (r == null) continue;
+
+            if (r.isRepeatStart)
+            {
+                openStart = child;
+                openStartSibling = i;
+            }
+            else if (r.isRepeatEnd && openStart != null)
+            {
+                float startMax = GetRectScreenMax(openStart, cam, horizontal);
+                float endMin = GetRectScreenMin(child, cam, horizontal);
+                float bodyMin = GetRectScreenMin(openStart, cam, horizontal);
+                float bodyMax = GetRectScreenMax(child, cam, horizontal);
+                float sleeveMin = Mathf.Min(startMax, endMin) - 8f;
+                float sleeveMax = Mathf.Max(startMax, endMin) + 8f;
+                bool overSleeve = pointer >= sleeveMin && pointer <= sleeveMax;
+                bool betweenCaps = pointer > bodyMin && pointer < bodyMax
+                                   && pointer >= startMax - 4f && pointer <= endMin + 4f;
+
+                if (overSleeve || betweenCaps)
+                {
+                    int minInside = openStartSibling + 1;
+                    int maxInside = i; // before this End
+                    return Mathf.Clamp(siblingIndex, minInside, maxInside);
+                }
+
+                openStart = null;
+                openStartSibling = -1;
+            }
+        }
+
+        return siblingIndex;
     }
 
     private List<RectTransform> CollectQueueBlockRects(Transform queueTransform)
@@ -377,6 +466,7 @@ public class ActionQueueDropZone : MonoBehaviour, IDropHandler, IPointerEnterHan
         {
             var child = queueTransform.GetChild(i) as RectTransform;
             if (child == null) continue;
+            if (child.name != null && child.name.StartsWith("_RepeatBodyBg")) continue; // green sleeve(s)
             if (child.GetComponent<QueueInsertionPlaceholder>() != null) continue;
             if (placeholderInstance != null && child.gameObject == placeholderInstance) continue;
             list.Add(child);

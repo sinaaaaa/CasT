@@ -96,6 +96,9 @@ export const GUIDED_ACTIONS = [
   { value: "backward", label: "Backward" },
   { value: "turn left", label: "Turn left" },
   { value: "turn right", label: "Turn right" },
+  { value: "repeat:1", label: "Repeat start (×1)" },
+  { value: "repeat:2", label: "Repeat start (×2)" },
+  { value: "repeat-end", label: "Repeat end" },
   { value: "blank", label: "Blank (student chooses)" },
 ] as const;
 

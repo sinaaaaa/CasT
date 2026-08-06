@@ -14,11 +14,12 @@ import {
   resolveRouteMapAnchors,
 } from "@/lib/assessment/assessmentConfig";
 import type { AttemptEvidenceInput } from "@/lib/assessment/assessmentTypes";
-import { levelGameplayConfigSchema } from "@/lib/level-config";
+import { levelGameplayConfigSchema, isCanvasLayout } from "@/lib/level-config";
 import {
   resolveAttemptProgram,
   resolveStarterProgram,
 } from "@/lib/assessment/resolve-program";
+import { buildCanvasPatternMatch } from "@/lib/assessment/canvas-pattern-match";
 import { formatAttemptRunLabel, parseAttemptRunMeta } from "@/lib/attempt-mistakes";
 import { resolveAttemptDurationSeconds } from "@/lib/game/resolve-attempt-duration";
 import { LevelType } from "@prisma/client";
@@ -26,6 +27,14 @@ import type { CommandToken } from "@/lib/command-icons";
 function parseStringArray(val: unknown): string[] {
   if (Array.isArray(val)) return val.filter((x): x is string => typeof x === "string");
   return [];
+}
+
+function parseRawProgramTokens(raw: string | null | undefined): string[] {
+  if (!raw?.trim()) return [];
+  return raw
+    .split(/[;,]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 
 function parseObjectVisit(val: unknown): AttemptDetailPayload["objectVisit"] {
@@ -128,6 +137,21 @@ export default async function AttemptDetailPage({
   const isDebuggingLevelFlag =
     parsedLevelConfig.success &&
     isDebuggingLevel(parsedLevelConfig.data, attempt.level.levelType);
+  const isCanvasLevelFlag =
+    parsedLevelConfig.success && isCanvasLayout(parsedLevelConfig.data);
+
+  let canvasPatternMatch: AttemptDetailPayload["canvasPatternMatch"] = null;
+  if (isCanvasLevelFlag && parsedLevelConfig.success) {
+    const accepted = parsedLevelConfig.data.assessment?.correctPrograms ?? [];
+    const studentTokens = parseRawProgramTokens(
+      attempt.finalCommand ?? attempt.initialCommand
+    );
+    canvasPatternMatch = buildCanvasPatternMatch({
+      studentTokens,
+      acceptedPrograms: accepted,
+    });
+  }
+
   let starterProgram: CommandToken[] = [];
   let studentProgram: CommandToken[] = [];
   if (parsedLevelConfig.success && isEditStarterLevelFlag) {
@@ -209,6 +233,8 @@ export default async function AttemptDetailPage({
     isEditStarterLevel: isEditStarterLevelFlag,
     isPathBuildingLevel: isPathBuildingLevelFlag,
     isDebuggingLevel: isDebuggingLevelFlag,
+    isCanvasLevel: isCanvasLevelFlag,
+    canvasPatternMatch,
     starterProgram,
     studentProgram,
     commandEvents: attempt.commandEvents.map((e) => ({

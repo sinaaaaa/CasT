@@ -6,33 +6,44 @@ import type { LevelGameplayConfig } from "@/lib/level-config";
 import { LevelType } from "@prisma/client";
 import { CommandAction } from "@prisma/client";
 import { normalizeCommandToken, type CommandToken } from "@/lib/command-icons";
+import { expandRepeatTokens } from "@/lib/assessment/expand-repeats";
+
+function parseCommandStringKeepingRepeats(raw: string): string[] {
+  return raw
+    .split(/[;,]/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
+function toCommandTokens(expanded: string[]): CommandToken[] {
+  return expanded
+    .map((s) => normalizeCommandToken(s))
+    .filter((c): c is CommandToken => c != null);
+}
+
+function parseCommandString(raw: string): CommandToken[] {
+  const rawTokens = parseCommandStringKeepingRepeats(raw);
+  const expanded = expandRepeatTokens(rawTokens);
+  return toCommandTokens(expanded);
+}
 
 export function expandGuidedActions(
   guided: string[],
   blanks?: LevelGameplayConfig["blanks"],
   resolvedBlanks?: string[]
 ): CommandToken[] {
-  const out: CommandToken[] = [];
+  const raw: string[] = [];
   let blankIdx = 0;
   for (const step of guided) {
     if (step === "blank") {
       const answer = resolvedBlanks?.[blankIdx] ?? blanks?.[blankIdx]?.correctAnswer;
       blankIdx++;
-      const tok = answer ? normalizeCommandToken(answer) : null;
-      if (tok) out.push(tok);
+      if (answer) raw.push(answer);
     } else {
-      const tok = normalizeCommandToken(step);
-      if (tok) out.push(tok);
+      raw.push(step);
     }
   }
-  return out;
-}
-
-function parseCommandString(raw: string): CommandToken[] {
-  return raw
-    .split(/[;,]/)
-    .map((s) => normalizeCommandToken(s.trim()))
-    .filter((c): c is CommandToken => c != null);
+  return toCommandTokens(expandRepeatTokens(raw));
 }
 
 /** Unity may send placeholder text when no RUN was captured. */
@@ -162,6 +173,7 @@ export function programSupportsRouteAnalysis(
   levelType?: LevelType
 ): boolean {
   if (levelType === LevelType.INTRO) return false;
+  if (levelConfig.layoutMode === "CANVAS") return false;
   if (levelType === LevelType.DRAG_EDIT_PROGRAM || levelType === LevelType.DRAG_ACTIONS) {
     return levelConfig.layoutMode !== "NUMBER_LINE";
   }

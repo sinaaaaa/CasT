@@ -99,7 +99,8 @@ export async function setStudentLevelAssignments(
       data: { isActive: false, deactivatedAt: now },
     });
 
-    for (const levelId of uniqueIds) {
+    for (let i = 0; i < uniqueIds.length; i++) {
+      const levelId = uniqueIds[i]!;
       await tx.levelStudentAssignment.upsert({
         where: { levelId_studentId: { levelId, studentId } },
         create: {
@@ -108,12 +109,14 @@ export async function setStudentLevelAssignments(
           isActive: true,
           assignedByTeacherId,
           assignedAt: now,
+          assignmentOrder: i,
         },
         update: {
           isActive: true,
           deactivatedAt: null,
           assignedByTeacherId,
           assignedAt: now,
+          assignmentOrder: i,
         },
       });
     }

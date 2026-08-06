@@ -1081,6 +1081,7 @@ public class ActionBlockIntroManager : MonoBehaviour
             case DraggableActionBlock.ActionKind.Backward: return characterMove.moveDownButton;
             case DraggableActionBlock.ActionKind.TurnLeft: return characterMove.rotateLeftButton;
             case DraggableActionBlock.ActionKind.TurnRight: return characterMove.rotateRightButton;
+            case DraggableActionBlock.ActionKind.Repeat: return characterMove.repeatButton;
         }
         return null;
     }
@@ -1092,6 +1093,8 @@ public class ActionBlockIntroManager : MonoBehaviour
         yield return characterMove.moveDownButton;
         yield return characterMove.rotateLeftButton;
         yield return characterMove.rotateRightButton;
+        if (characterMove.repeatButton != null)
+            yield return characterMove.repeatButton;
     }
 
     private void SetBottomInstruction(string msg)

@@ -40,6 +40,9 @@ import { DebuggingAnalysisPanel } from "@/components/assessment/debugging-analys
 import { PathBuildingAnalysisPanel } from "@/components/assessment/path-building-analysis-panel";
 import { AttemptVerdictBanner } from "@/components/assessment/attempt-verdict-banner";
 import { buildAttemptVerdict } from "@/lib/assessment/attempt-verdict";
+import {
+  CanvasPatternMatchPanel,
+} from "@/components/assessment/canvas-pattern-match-panel";
 import type { LiveRouteAnalysis } from "@/lib/assessment/compute-attempt-route";
 import type { CommandToken } from "@/lib/command-icons";
 import type { GridObjectMarker } from "@/lib/assessment/assessmentConfig";
@@ -97,6 +100,14 @@ export type AttemptDetailPayload = {
   liveRoute: LiveRouteAnalysis;
   commandProgram: string | null;
   visitLabels?: string[];
+  /** Canvas layout pattern assessment. */
+  isCanvasLevel?: boolean;
+  canvasPatternMatch?: {
+    studentTokens: string[];
+    acceptedPrograms: string[][];
+    matched: boolean;
+    matchedProgramIndex: number | null;
+  } | null;
   mapAnchors?: {
     routeStartPosition: { x: number; y: number };
     routeGoalPosition: { x: number; y: number };
@@ -148,6 +159,7 @@ export function AttemptAssessmentView({ attempt }: { attempt: AttemptDetailPaylo
     Boolean(attempt.isDebuggingLevel) && Boolean(debugResult?.available);
   const isChoiceAssessment = Boolean(attempt.liveRoute.choiceActionResult?.available);
   const choiceResult = attempt.liveRoute.choiceActionResult;
+  const isCanvasAssessment = Boolean(attempt.isCanvasLevel && attempt.canvasPatternMatch);
 
   const scoringVariant: DiagnosticScoreVariant = isFlagAssessment
     ? "flag"
@@ -183,6 +195,13 @@ export function AttemptAssessmentView({ attempt }: { attempt: AttemptDetailPaylo
     debugging: isDebuggingAssessment ? debugResult : null,
     pathBuilding: isPathBuildingAssessment ? pathResult : null,
     numberLine: isNumberLineAssessment ? numberLineResult : null,
+    canvasPattern: isCanvasAssessment && attempt.canvasPatternMatch
+      ? {
+          matched: attempt.canvasPatternMatch.matched,
+          acceptedCount: attempt.canvasPatternMatch.acceptedPrograms.length,
+          matchedProgramIndex: attempt.canvasPatternMatch.matchedProgramIndex,
+        }
+      : null,
     fallback: {
       passed: attempt.passed,
       status: attempt.status,
@@ -266,6 +285,8 @@ export function AttemptAssessmentView({ attempt }: { attempt: AttemptDetailPaylo
         />
       ) : attempt.liveRoute.choiceActionResult?.available ? (
         <ChoiceActionAnalysisPanel result={attempt.liveRoute.choiceActionResult} />
+      ) : isCanvasAssessment && attempt.canvasPatternMatch ? (
+        <CanvasPatternMatchPanel result={attempt.canvasPatternMatch} />
       ) : isNumberLineAssessment ? (
         <NumberLineAssessmentPanel
           attemptId={attempt.id}
@@ -304,6 +325,7 @@ export function AttemptAssessmentView({ attempt }: { attempt: AttemptDetailPaylo
 
       {attempt.stealthAssessment &&
         !isNumberLineAssessment &&
+        !isCanvasAssessment &&
         !attempt.liveRoute.predictionResult?.available &&
         !attempt.liveRoute.choiceActionResult?.available &&
         !attempt.liveRoute.pathBuildingResult?.available &&

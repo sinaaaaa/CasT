@@ -73,14 +73,32 @@ export async function POST(request: NextRequest) {
     session!.user.teacherProfileId
   );
 
-  for (const studentId of studentIds) {
-    if (body.mode === "add") {
-      await addStudentLevelAssignments(studentId, levelIds, teacherId);
-    } else if (body.mode === "clear") {
-      await setStudentLevelAssignments(studentId, [], teacherId);
-    } else {
-      await setStudentLevelAssignments(studentId, levelIds, teacherId);
+  try {
+    for (const studentId of studentIds) {
+      if (body.mode === "add") {
+        await addStudentLevelAssignments(studentId, levelIds, teacherId);
+      } else if (body.mode === "clear") {
+        await setStudentLevelAssignments(studentId, [], teacherId);
+      } else {
+        await setStudentLevelAssignments(studentId, levelIds, teacherId);
+      }
     }
+  } catch (e) {
+    console.error("[level-assignments bulk]", e);
+    const message = e instanceof Error ? e.message : String(e);
+    const missingColumn =
+      /assignmentOrder/i.test(message) ||
+      /column .* does not exist/i.test(message) ||
+      /P2022/i.test(message);
+    return Response.json(
+      {
+        error: missingColumn
+          ? "Database is missing assignment columns. Run prisma/migrations/add_assignment_order.sql on production (Neon), then retry."
+          : "Failed to save assignments",
+        details: message.slice(0, 500),
+      },
+      { status: 500 }
+    );
   }
 
   return Response.json({

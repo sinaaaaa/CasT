@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using UnityEngine.Serialization;
 using UnityEngine.UI;
 using System.Collections.Generic;
@@ -178,9 +178,14 @@ public class LevelData
     /// <summary>INTRO | DRAG_ACTIONS | FLAG_PLACEMENT | CHOOSE_BUTTONS | DRAG_EDIT_PROGRAM â€” from teacher dashboard.</summary>
     public string levelType;
     public string levelName;
-    /// <summary>GRID (default) or NUMBER_LINE â€” horizontal tick axis instead of full 6Ã—6 board.</summary>
+    /// <summary>GRID (default), NUMBER_LINE, or CANVAS (no playfield — pattern / strip only).</summary>
     public string layoutMode = "GRID";
     public NumberLineConfig numberLine;
+    /// <summary>
+    /// Accepted programs for pattern / canvas assessment. Each entry is semicolon-joined tokens
+    /// (e.g. "repeat:2;forward;right;repeat-end" or "forward;right;forward;right").
+    /// </summary>
+    public List<string> correctPrograms = null;
     public List<ObstacleData> obstacles = new List<ObstacleData>(); // NEW
     public List<GridObjectData> gridObjects = new List<GridObjectData>(); // NEW: Grid objects for start/end
     public int maxAttempts = 3; // NEW: Maximum attempts for this level
@@ -261,9 +266,29 @@ public class LevelData
     [Tooltip("Shown during normal play (hidden while action-block intro runs â€” intro steps use their own hints).")]
     public LevelCornerHint cornerHint = new LevelCornerHint();
 
+    [Header("Canvas lesson (layoutMode = CANVAS)")]
+    [Tooltip("White-board prompt/media/pattern + yellow-strip seeding mode.")]
+    public CanvasLessonData canvasLesson;
+
     [Header("Action block introduction (optional)")]
     [Tooltip("Teach palette blocks one at a time before regular level play. Configure steps like level data.")]
     public ActionBlockIntroConfig actionBlockIntro;
+}
+
+/// <summary>Canvas strip-only lesson content (white board + strip mode).</summary>
+[System.Serializable]
+public class CanvasLessonData
+{
+    /// <summary>EMPTY | BLANKS | SEED_PROGRAM</summary>
+    public string stripMode = "EMPTY";
+    [TextArea(2, 5)]
+    public string prompt;
+    public string imageUrl;
+    public string audioUrl;
+    public bool playAudioAutomatically = true;
+    public List<string> patternPreview = new List<string>();
+    public List<string> exampleChunk = new List<string>();
+    public int blankSlotCount;
 }
 
 /// <summary>Top-right text/image hint â€” used for levels and intro steps.</summary>
@@ -344,6 +369,68 @@ public class CharacterMove : MonoBehaviour
     public Button moveForwardButton;
     public Button moveDownButton;
     public Button runButton;
+    [Tooltip("Optional palette button for Repeat (auto-wired when present).")]
+    public Button repeatButton;
+
+    [Header("Repeat block art (assign your icons here)")]
+    [Tooltip("Blue-strip Repeat palette icon (full tile art). Falls back to procedural purple tile if empty.")]
+    public Sprite repeatSprite;
+    [Tooltip("Yellow-strip REPEAT START block background (puzzle shape preferred).")]
+    public Sprite repeatStartSprite;
+    [Tooltip("Yellow-strip REPEAT END block background (puzzle shape preferred).")]
+    public Sprite repeatEndSprite;
+    [Tooltip("Small loop / circular-arrow icon drawn on Start (and palette if needed).")]
+    public Sprite repeatLoopIconSprite;
+    [Tooltip("Optional green body / sleeve art between Start and End. Empty = soft green rounded fill.")]
+    public Sprite repeatBodySprite;
+    [Tooltip("Minus (−) button icon on REPEAT END. Empty = white circle with text.")]
+    public Sprite repeatMinusSprite;
+    [Tooltip("Plus (+) button icon on REPEAT END. Empty = white circle with text.")]
+    public Sprite repeatPlusSprite;
+    [Tooltip("Optional background behind the repeat count number. Empty = white rounded box.")]
+    public Sprite repeatCountBoxSprite;
+    [Tooltip("When true, show the red X on Start/End so students can delete the repeat pair.")]
+    public bool showCloseButtonOnRepeatBlocks = true;
+
+    [Header("Repeat block scales (tweak live in Play Mode)")]
+    [Tooltip("1 = same size as forward/turn blocks in the yellow strip. Drag lower to shrink, higher to grow past the dashed lane.")]
+    [Range(0.15f, 2.5f)] public float repeatStartScale = 1f;
+    [Tooltip("1 = same size as forward/turn blocks in the yellow strip.")]
+    [Range(0.15f, 2.5f)] public float repeatEndScale = 1f;
+    [Tooltip("Scale of the − button only (does not change End block size).")]
+    [Range(0.15f, 6f)] public float repeatMinusScale = 1.25f;
+    [Tooltip("Scale of the + button only (does not change End block size).")]
+    [Range(0.15f, 6f)] public float repeatPlusScale = 1.25f;
+    [Tooltip("Scale of the count number box only.")]
+    [Range(0.15f, 6f)] public float repeatCountScale = 1.15f;
+    [Tooltip("Vertical offset (pixels) for REPEAT START inside the yellow strip. Positive moves up.")]
+    [Range(-120f, 120f)] public float repeatStartYOffset = 0f;
+    [Tooltip("Vertical offset (pixels) for REPEAT END inside the yellow strip. Positive moves up.")]
+    [Range(-120f, 120f)] public float repeatEndYOffset = 0f;
+    [Tooltip("X offset (px) for the − button. Positive = right.")]
+    [Range(-200f, 200f)] public float repeatMinusXOffset = 0f;
+    [Tooltip("Y offset (px) for the − button. Positive = up.")]
+    [Range(-200f, 200f)] public float repeatMinusYOffset = 0f;
+    [Tooltip("X offset (px) for the + button. Positive = right.")]
+    [Range(-200f, 200f)] public float repeatPlusXOffset = 0f;
+    [Tooltip("Y offset (px) for the + button. Positive = up.")]
+    [Range(-200f, 200f)] public float repeatPlusYOffset = 0f;
+    [Tooltip("X offset (px) for the counter box. Positive = right.")]
+    [Range(-200f, 200f)] public float repeatCountXOffset = 0f;
+    [Tooltip("Y offset (px) for the counter box. Positive = up.")]
+    [Range(-200f, 200f)] public float repeatCountYOffset = 0f;
+
+    [Header("Repeat green sleeve (tweak live in Play Mode)")]
+    [Tooltip("How far (px) green tucks UNDER the Start tab (left side).")]
+    [Range(0f, 120f)] public float repeatBodyUnderlapLeft = 22f;
+    [Tooltip("How far (px) green tucks UNDER the End tab (right side). Raise this to close the yellow gap before End.")]
+    [Range(0f, 120f)] public float repeatBodyUnderlapRight = 40f;
+    [Tooltip("Shift the whole green sleeve on X (px). Positive = move right toward End.")]
+    [Range(-200f, 200f)] public float repeatBodyXOffset = 0f;
+    [Tooltip("1 = same height as Start/End. Lower = thinner green strip.")]
+    [Range(0.3f, 1.2f)] public float repeatBodyHeightScale = 1f;
+    [Tooltip("Extra shrink from top/bottom (px). 0 = full Start/End height.")]
+    [Range(0f, 30f)] public float repeatBodyYInset = 0f;
 
     [Header("Student UI")]
     [Tooltip("Optional. Clears the yellow-strip program and returns the robot to the level start (does not count as a failed attempt).")]
@@ -360,6 +447,8 @@ public class CharacterMove : MonoBehaviour
     [Header("UI â€” top-right hints")]
     [Tooltip("Optional. Auto-created if empty. Default panel style (background, listen button, sizes) is edited here. Per-level overrides: Level Data â†’ Corner Hint â†’ Use Custom Layout.")]
     public LevelCornerHintPanel cornerHintPanel;
+    [Tooltip("White-board prompt/image/audio/pattern for Canvas layout levels.")]
+    public CanvasLessonPanel canvasLessonPanel;
 
     [Header("Action block intro (runtime)")]
     [Tooltip("Optional. Auto-created on this GameObject if empty. Driven by LevelData.actionBlockIntro.")]
@@ -387,6 +476,22 @@ public class CharacterMove : MonoBehaviour
     public Vector2 closeButtonOffset = new Vector2(6f, 6f);
     [Tooltip("If true, the close button overhangs the block's top-right corner using closeButtonOffset. Disable to fully tuck the button inside the block.")]
     public bool closeButtonOverhang = true;
+
+    [Header("Repeat close button (Start/End only)")]
+    [Tooltip("Size of the Repeat End close X. Drag live in Play Mode.")]
+    [Range(16f, 80f)] public float repeatCloseButtonSize = 30f;
+    [Tooltip("Offset from End top-right corner. Positive X/Y = outside to the right/up.")]
+    public Vector2 repeatCloseButtonOffset = new Vector2(8f, 6f);
+    [Tooltip("If true, the X sits outside the End corner (recommended).")]
+    public bool repeatCloseButtonOverhang = true;
+    [Tooltip("Extra shift right (px) past the End corner.")]
+    [Range(0f, 80f)] public float repeatCloseButtonPushOutX = 10f;
+
+    [Header("Repeat queue spacing (tweak live in Play Mode)")]
+    [Tooltip("How many pixels Start/End overlap into neighboring arrow blocks. Raise to close gaps after Start / before End.")]
+    [Range(0f, 80f)] public float repeatStartEndArrowOverlap = 36f;
+    [Tooltip("Gap between blocks inside the Repeat (arrow-to-arrow). Use a small positive value.")]
+    [Range(-10f, 40f)] public float repeatQueueSpacing = 8f;
 
     [Header("Touch & Scratch-style UX")]
     [Tooltip("EventSystem.pixelDragThreshold is raised to at least this value on Start so a finger tap doesn't accidentally start a reorder drag. Default is touch-friendly. Set to 0 to leave the project default untouched.")]
@@ -999,6 +1104,7 @@ public class CharacterMove : MonoBehaviour
     public static bool UsesNumberLine(LevelData ld)
     {
         if (ld == null) return false;
+        if (UsesCanvas(ld)) return false;
         if (!string.IsNullOrEmpty(ld.layoutMode) &&
             ld.layoutMode.Equals("GRID", StringComparison.OrdinalIgnoreCase))
             return false;
@@ -1007,6 +1113,16 @@ public class CharacterMove : MonoBehaviour
             return true;
         return ld.numberLine != null && ld.numberLine.tickCount >= 3;
     }
+
+    /// <summary>Canvas levels: yellow strip + palette only (no grid / number line / robot play).</summary>
+    public static bool UsesCanvas(LevelData ld)
+    {
+        if (ld == null) return false;
+        return !string.IsNullOrEmpty(ld.layoutMode) &&
+               ld.layoutMode.Equals("CANVAS", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public bool IsPlayfieldCanvas() => UsesCanvas(PlayfieldLevelData());
 
     public static int GetNumberLineRow(LevelData ld)
     {
@@ -1365,9 +1481,35 @@ public class CharacterMove : MonoBehaviour
 
     private string[] SnapshotQueueCommandLabels()
     {
+        var fromUi = CollectProgramTokensFromUI();
+        if (fromUi.Count > 0) return fromUi.ToArray();
         if (actionQueue == null || actionQueue.Count == 0)
             return System.Array.Empty<string>();
         return actionQueue.Select(a => a == null ? "blank" : GetActionLogString(a)).ToArray();
+    }
+
+    /// <summary>Nested program tokens from the yellow strip (includes repeat:N / repeat-end).</summary>
+    public List<string> CollectProgramTokensFromUI()
+    {
+        var tokens = new List<string>();
+        if (actionQueueTransform == null) return tokens;
+        for (int i = 0; i < actionQueueTransform.childCount; i++)
+        {
+            var child = actionQueueTransform.GetChild(i);
+            if (child.GetComponent<QueueInsertionPlaceholder>() != null) continue;
+            if (child.name != null && child.name.StartsWith("_RepeatBodyBg")) continue;
+            var r = child.GetComponent<QueuedActionRef>();
+            if (r == null) continue;
+            if (r.isRepeatStart)
+                tokens.Add(ProgramSequenceUtil.FormatRepeatStart(r.repeatCount));
+            else if (r.isRepeatEnd)
+                tokens.Add("repeat-end");
+            else if (!string.IsNullOrEmpty(r.actionLabel))
+                tokens.Add(r.actionLabel);
+            else if (r.action != null)
+                tokens.Add(GetActionLogString(r.action));
+        }
+        return tokens;
     }
 
     private void RecordTelemetryBeforeRun()
@@ -1442,6 +1584,7 @@ public class CharacterMove : MonoBehaviour
         SetButton(moveDownButton, "backward");
         SetButton(rotateLeftButton, "turn left");
         SetButton(rotateRightButton, "turn right");
+        SetButton(repeatButton, "repeat");
     }
 
     /// <summary>Number-line robots only face left or right along the axis.</summary>
@@ -1476,6 +1619,9 @@ public class CharacterMove : MonoBehaviour
     {
         if (levelData != null && levelData.enabledActionButtons != null && levelData.enabledActionButtons.Count > 0)
             return levelData.enabledActionButtons;
+
+        if (UsesCanvas(levelData))
+            return new List<string> { "forward", "backward", "turn left", "turn right", "repeat" };
 
         if (UsesNumberLine(levelData) && (levelData.numberLine == null || levelData.numberLine.forwardBackwardOnly))
             return new List<string> { "forward", "backward" };
@@ -1580,6 +1726,69 @@ public class CharacterMove : MonoBehaviour
         _commandHistoryActiveRow = rowGo.transform;
         _commandHistoryActiveAttempt = attemptNumber;
         return _commandHistoryActiveRow;
+    }
+
+    private void ApplyCanvasPlayfieldMode(LevelData levelData)
+    {
+        bool canvas = UsesCanvas(levelData);
+        SetRobotVisualsVisible(!canvas);
+        if (canvas)
+        {
+            HideNumberLineVisual();
+            // Canvas items: no 6×6 grid under the lesson board.
+            SetGridPlayfieldVisible(false);
+            DestroyGridImage(forceIncludeManual: true);
+        }
+        if (canvas && levelData != null)
+        {
+            levelData.runRobotOnSubmit = false;
+            // Default palette when unset — do NOT force Repeat on; teachers control visibility
+            // via enabledActionButtons (dashboard Rules / Canvas lesson toggle).
+            if (levelData.enabledActionButtons == null || levelData.enabledActionButtons.Count == 0)
+            {
+                levelData.enabledActionButtons = new List<string>
+                {
+                    "forward", "backward", "turn left", "turn right", "repeat"
+                };
+            }
+        }
+
+        // Canvas must never deactivate the robot host — CharacterMove + Repeat live on pico_labo.
+        EnsureRobotHostActive();
+    }
+
+    /// <summary>
+    /// Clears number-line art without SetActive(false) on the robot host.
+    /// NumberLineVisual is often AddComponent'd on pico_labo; deactivating that GO kills CharacterMove/Repeat.
+    /// </summary>
+    private void HideNumberLineVisual()
+    {
+        if (numberLineVisual == null) return;
+        numberLineVisual.Clear();
+        numberLineVisual.enabled = false;
+        // Only deactivate a dedicated child object — never the CharacterMove GameObject.
+        if (numberLineVisual.gameObject != gameObject)
+            numberLineVisual.gameObject.SetActive(false);
+    }
+
+    private void EnsureRobotHostActive()
+    {
+        if (!gameObject.activeSelf)
+            gameObject.SetActive(true);
+        if (!enabled)
+            enabled = true;
+    }
+
+    private void SetRobotVisualsVisible(bool visible)
+    {
+        // Mesh only — never SetActive, never disable Canvases / CharacterMove / RepeatQueueVisualizer.
+        foreach (var r in GetComponentsInChildren<Renderer>(true))
+        {
+            if (r == null) continue;
+            if (r is MeshRenderer || r is SkinnedMeshRenderer || r is SpriteRenderer)
+                r.enabled = visible;
+        }
+        EnsureRobotHostActive();
     }
 
     private void ApplyCommandHistoryPanel(LevelData levelData)
@@ -2914,6 +3123,12 @@ public class CharacterMove : MonoBehaviour
     // Helper method to get the desired string for actionLog
     private string GetActionLogString(CharacterAction action)
     {
+        if (action is RepeatBoundaryAction rba)
+        {
+            return rba.isStart
+                ? ProgramSequenceUtil.FormatRepeatStart(rba.repeatCount)
+                : "repeat-end";
+        }
         if (action is MoveAction ma)
         {
             if (ma.Direction == Vector3.forward)
@@ -3059,6 +3274,7 @@ public class CharacterMove : MonoBehaviour
                   $"(maxAttempts={levelData.maxAttempts}, commandHistory={levelData.showCommandHistory}, animateRobot={levelData.runRobotOnSubmit})");
 
         ApplyLevelGridDimensions(levelData);
+        ApplyCanvasPlayfieldMode(levelData);
         ApplyCommandHistoryPanel(levelData);
         ApplyStudentResetButton(levelData);
         ValidateLevelCellInBounds(levelData, levelData.robotStartPosition, "robotStartPosition");
@@ -3489,10 +3705,23 @@ public class CharacterMove : MonoBehaviour
         }
 
         RefreshStudentResetButtonState();
-        if (levelData.guidedActions != null && levelData.guidedActions.Count > 0)
-            SeedGuidedProgramQueue(levelData);
+        if (UsesCanvas(levelData))
+        {
+            ApplyCanvasLessonContent(levelData);
+            ApplyCanvasStripSeeding(levelData);
+            EnsureRobotHostActive();
+            EnsureRepeatVisualizer();
+            EnsureRepeatPaletteButton();
+            ApplyActionButtonVisibility(levelData);
+        }
         else
-            ClearActionQueueVisual();
+        {
+            HideCanvasLessonPanel();
+            if (levelData.guidedActions != null && levelData.guidedActions.Count > 0)
+                SeedGuidedProgramQueue(levelData);
+            else
+                ClearActionQueueVisual();
+        }
         // Update camera targets to include character and grid objects
         if (multiTargetCamera != null)
         {
@@ -3756,12 +3985,24 @@ public class CharacterMove : MonoBehaviour
         // Edit-starter / debugging levels seed the buggy program but the student must be
         // able to remove blocks to fix it — so those seeded blocks are deletable (they get
         // a close button + drag-out-to-delete). Flag-placement and blank-fill flows stay
-        // read-only.
-        bool editableSeed = !UsesGuidedBlankFlow(levelData) && !ShouldLockProgramQueue(levelData);
+        // read-only. Canvas SEED_PROGRAM is always editable.
+        bool canvasSeed = UsesCanvas(levelData);
+        bool editableSeed = canvasSeed || (!UsesGuidedBlankFlow(levelData) && !ShouldLockProgramQueue(levelData));
 
         for (int i = 0; i < levelData.guidedActions.Count; i++)
         {
-            string action = NormalizeActionLabel(levelData.guidedActions[i]);
+            string raw = levelData.guidedActions[i];
+            string action = NormalizeActionLabel(raw);
+            if (ProgramSequenceUtil.IsRepeatStartToken(raw, out int repeatCount))
+            {
+                SpawnRepeatBoundaryBlock(isStart: true, count: repeatCount);
+                continue;
+            }
+            if (ProgramSequenceUtil.IsRepeatEndToken(raw))
+            {
+                SpawnRepeatBoundaryBlock(isStart: false, count: repeatCount);
+                continue;
+            }
             if (action == "forward")
                 EnqueueAction(new MoveAction(Vector3.forward), forwardSprite, editableSeed);
             else if (action == "backward")
@@ -3788,6 +4029,14 @@ public class CharacterMove : MonoBehaviour
         }
 
         Debug.Log($"[CharacterMove] Seeded program ({actionQueue.Count} steps): {string.Join(", ", levelData.guidedActions)}");
+        EnsureRepeatVisualizer();
+
+        // Canvas blanks are filled by drag — keep palette enabled (do not ActivateBlank).
+        if (canvasSeed && blankSlotInstances.Count > 0)
+        {
+            if (runButton != null) runButton.interactable = true;
+            return;
+        }
 
         if (blankSlotInstances.Count > 0)
         {
@@ -3806,6 +4055,228 @@ public class CharacterMove : MonoBehaviour
             if (rotateLeftButton != null) rotateLeftButton.interactable = false;
             if (rotateRightButton != null) rotateRightButton.interactable = false;
         }
+    }
+
+    private void ApplyCanvasLessonContent(LevelData levelData)
+    {
+        if (canvasLessonPanel == null)
+            canvasLessonPanel = GetComponent<CanvasLessonPanel>() ?? gameObject.AddComponent<CanvasLessonPanel>();
+
+        canvasLessonPanel.BindActionSprites(
+            forwardSprite, backwardSprite, rotateLeftSprite, rotateRightSprite, repeatSprite, blankSlotSprite);
+
+        if (levelData?.canvasLesson == null)
+        {
+            canvasLessonPanel.Hide();
+            return;
+        }
+        canvasLessonPanel.Show(levelData.canvasLesson);
+    }
+
+    private void HideCanvasLessonPanel()
+    {
+        if (canvasLessonPanel != null)
+            canvasLessonPanel.Hide();
+    }
+
+    private static string ResolveCanvasStripMode(LevelData levelData)
+    {
+        string mode = levelData?.canvasLesson?.stripMode;
+        if (string.IsNullOrWhiteSpace(mode)) return "EMPTY";
+        return mode.Trim().ToUpperInvariant();
+    }
+
+    private void ApplyCanvasStripSeeding(LevelData levelData)
+    {
+        string mode = ResolveCanvasStripMode(levelData);
+        blankSlotInstances.Clear();
+        blankSlotQueueIndices.Clear();
+        waitingForGuidedInput = false;
+        userBlankChoices.Clear();
+        currentBlankIndexInSequence = 0;
+
+        if (mode == "BLANKS")
+        {
+            int n = levelData.canvasLesson != null ? levelData.canvasLesson.blankSlotCount : 0;
+            if (n <= 0 && levelData.guidedActions != null)
+            {
+                foreach (var a in levelData.guidedActions)
+                {
+                    if (NormalizeActionLabel(a) == "blank") n++;
+                }
+            }
+            if (n <= 0) n = 4;
+            SeedCanvasBlankSlots(n);
+            return;
+        }
+
+        if (mode == "SEED_PROGRAM")
+        {
+            if (levelData.guidedActions != null && levelData.guidedActions.Count > 0)
+                SeedGuidedProgramQueue(levelData);
+            else
+                ClearActionQueueVisual();
+            return;
+        }
+
+        // EMPTY
+        ClearActionQueueVisual();
+    }
+
+    private void SeedCanvasBlankSlots(int count)
+    {
+        ClearActionQueueVisual();
+        blankSlotInstances.Clear();
+        blankSlotQueueIndices.Clear();
+        if (actionQueueTransform == null || count <= 0) return;
+
+        for (int i = 0; i < count; i++)
+        {
+            var blankSlotInstance = CreateCanvasBlankSlotVisual();
+            if (blankSlotInstance == null) continue;
+            blankSlotInstances.Add(blankSlotInstance);
+            blankSlotQueueIndices.Add(actionQueue.Count);
+            actionQueue.Enqueue(null);
+        }
+
+        actionQueueTransform.gameObject.SetActive(true);
+        if (runButton != null) runButton.interactable = true;
+        Debug.Log($"[CharacterMove] Canvas BLANKS seeded ({count} slots, lineStyle={canvasBlankUseLineStyle}).");
+    }
+
+    /// <summary>Empty canvas slot — uses custom sprite, or a thin gray dash (not a yellow square).</summary>
+    private GameObject CreateCanvasBlankSlotVisual()
+    {
+        if (actionQueueTransform == null) return null;
+
+        Sprite sprite = canvasBlankSlotSprite != null ? canvasBlankSlotSprite : blankSlotSprite;
+        bool useLine = canvasBlankUseLineStyle && canvasBlankSlotSprite == null;
+
+        GameObject blankSlotInstance;
+        if (useLine || actionImagePrefab == null)
+        {
+            blankSlotInstance = new GameObject("CanvasBlankSlot", typeof(RectTransform), typeof(Image), typeof(LayoutElement), typeof(CanvasRenderer));
+            blankSlotInstance.transform.SetParent(actionQueueTransform, false);
+            var img = blankSlotInstance.GetComponent<Image>();
+            img.raycastTarget = true;
+            if (sprite != null)
+            {
+                img.sprite = sprite;
+                img.preserveAspect = true;
+                img.color = Color.white;
+                var le = blankSlotInstance.GetComponent<LayoutElement>();
+                le.preferredWidth = canvasBlankLineWidth;
+                le.preferredHeight = Mathf.Max(canvasBlankLineHeight * 4f, 28f);
+                le.minWidth = le.preferredWidth;
+                le.minHeight = le.preferredHeight;
+            }
+            else
+            {
+                img.sprite = null;
+                img.color = canvasBlankLineColor;
+                var le = blankSlotInstance.GetComponent<LayoutElement>();
+                le.preferredWidth = canvasBlankLineWidth;
+                le.preferredHeight = canvasBlankLineHeight;
+                le.minWidth = canvasBlankLineWidth;
+                le.minHeight = canvasBlankLineHeight;
+                le.flexibleWidth = 0f;
+                le.flexibleHeight = 0f;
+            }
+        }
+        else
+        {
+            blankSlotInstance = Instantiate(actionImagePrefab, actionQueueTransform);
+            blankSlotInstance.name = "CanvasBlankSlot";
+            var img = blankSlotInstance.GetComponent<Image>();
+            if (img != null)
+            {
+                if (sprite != null)
+                {
+                    img.sprite = sprite;
+                    img.color = Color.white;
+                    img.preserveAspect = true;
+                }
+                else
+                {
+                    img.color = new Color(1f, 1f, 0.55f, 1f);
+                }
+            }
+        }
+
+        return blankSlotInstance;
+    }
+
+    private bool UsesCanvasBlankFill(LevelData levelData)
+    {
+        return UsesCanvas(levelData) && ResolveCanvasStripMode(levelData) == "BLANKS";
+    }
+
+    private bool HasUnfilledCanvasBlankSlot()
+    {
+        if (blankSlotInstances == null) return false;
+        for (int i = 0; i < blankSlotInstances.Count; i++)
+        {
+            var go = blankSlotInstances[i];
+            if (go == null) continue;
+            if (go.GetComponent<QueuedActionRef>() != null) continue;
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>Replace the first unfilled canvas blank slot with a dragged action. Returns true if filled.</summary>
+    private bool TryFillNextCanvasBlankSlot(CharacterAction action, Sprite sprite, string label)
+    {
+        if (blankSlotInstances == null || blankSlotInstances.Count == 0) return false;
+
+        int blankUiIndex = -1;
+        GameObject slotGo = null;
+        for (int i = 0; i < blankSlotInstances.Count; i++)
+        {
+            var go = blankSlotInstances[i];
+            if (go == null) continue;
+            if (go.GetComponent<QueuedActionRef>() != null) continue;
+            blankUiIndex = go.transform.GetSiblingIndex();
+            slotGo = go;
+            break;
+        }
+        if (slotGo == null || blankUiIndex < 0) return false;
+
+        Destroy(slotGo);
+        blankSlotInstances.Remove(slotGo);
+
+        GameObject blockGo = Instantiate(actionImagePrefab, actionQueueTransform);
+        var img = blockGo.GetComponent<Image>();
+        if (img != null) img.sprite = sprite;
+        blockGo.transform.SetSiblingIndex(blankUiIndex);
+
+        var refComp = blockGo.AddComponent<QueuedActionRef>();
+        refComp.action = action;
+        refComp.deletable = true;
+        refComp.actionLabel = label;
+        refComp.fillsCanvasBlankSlot = true;
+
+        if (addCloseButtonsToQueuedBlocks)
+            AttachCloseButton(blockGo);
+        AttachQueuedBlockDragBehaviour(blockGo);
+        PlayBlockDropBounce(blockGo.transform);
+        RebuildActionQueueFromUI();
+
+        blankSlotInstances.RemoveAll(g => g == null);
+        return true;
+    }
+
+    /// <summary>After closing a filled canvas blank, put the dash/line slot back in place.</summary>
+    private void RestoreCanvasBlankSlotAt(int siblingIndex)
+    {
+        if (actionQueueTransform == null) return;
+        var blank = CreateCanvasBlankSlotVisual();
+        if (blank == null) return;
+        int idx = Mathf.Clamp(siblingIndex, 0, actionQueueTransform.childCount);
+        blank.transform.SetSiblingIndex(idx);
+        blankSlotInstances.Add(blank);
+        blankSlotInstances.RemoveAll(g => g == null);
+        RebuildActionQueueFromUI();
     }
 
     private float CalculateDifficultyMultiplier()
@@ -4798,6 +5269,10 @@ public class CharacterMove : MonoBehaviour
         AttachDraggable(moveDownButton,    DraggableActionBlock.ActionKind.Backward);
         AttachDraggable(rotateLeftButton,  DraggableActionBlock.ActionKind.TurnLeft);
         AttachDraggable(rotateRightButton, DraggableActionBlock.ActionKind.TurnRight);
+        AttachDraggable(repeatButton,      DraggableActionBlock.ActionKind.Repeat);
+        EnsureRepeatPaletteButton();
+        EnsureRepeatVisualizer();
+        EnsureActionQueueLeftAligned();
 
         // Decide which panel becomes the drop zone:
         //   1. If the inspector field dropZonePanel is set, use it (e.g. the yellow strip).
@@ -4832,6 +5307,61 @@ public class CharacterMove : MonoBehaviour
         {
             Debug.LogWarning("[CharacterMove] No drop-zone target available (both dropZonePanel and actionQueueTransform are null).");
         }
+    }
+
+    /// <summary>
+    /// Keeps program blocks middle-centered (horizontally + vertically) inside the yellow strip.
+    /// </summary>
+    public void EnsureActionQueueLeftAligned()
+    {
+        if (actionQueueTransform == null) return;
+
+        var hlg = actionQueueTransform.GetComponent<HorizontalLayoutGroup>();
+        if (hlg != null)
+        {
+            hlg.childAlignment = TextAnchor.MiddleCenter;
+            hlg.childForceExpandWidth = false;
+            hlg.childForceExpandHeight = false;
+            hlg.reverseArrangement = false;
+            // Keep a little inset so blocks sit inside the strip edges.
+            hlg.padding = new RectOffset(
+                Mathf.Max(hlg.padding.left, 16),
+                Mathf.Max(hlg.padding.right, 16),
+                Mathf.Max(hlg.padding.top, 6),
+                Mathf.Max(hlg.padding.bottom, 6));
+        }
+
+        var rt = actionQueueTransform as RectTransform;
+        if (rt == null) return;
+
+        // Bind the queue to the yellow strip so centered blocks stay on it.
+        RectTransform strip = dropZonePanel;
+        if (strip != null)
+        {
+            if (rt.parent != strip)
+                rt.SetParent(strip, worldPositionStays: false);
+
+            rt.localScale = Vector3.one;
+            rt.localRotation = Quaternion.identity;
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.offsetMin = new Vector2(20f, 10f);
+            rt.offsetMax = new Vector2(-20f, -10f);
+            rt.anchoredPosition = Vector2.zero;
+            return;
+        }
+
+        // Fallback when no strip is assigned: middle-center in current parent.
+        float y = rt.anchoredPosition.y;
+        float height = rt.sizeDelta.y > 1f ? rt.sizeDelta.y : 100f;
+        rt.anchorMin = new Vector2(0f, rt.anchorMin.y);
+        rt.anchorMax = new Vector2(1f, rt.anchorMax.y);
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.offsetMin = new Vector2(16f, rt.offsetMin.y);
+        rt.offsetMax = new Vector2(-16f, rt.offsetMax.y);
+        rt.sizeDelta = new Vector2(rt.sizeDelta.x, height);
+        rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, y);
     }
 
     private void AttachDraggable(Button button, DraggableActionBlock.ActionKind kind)
@@ -4908,10 +5438,41 @@ public class CharacterMove : MonoBehaviour
     {
         if (!CanDragPaletteBlockToQueue(kind)) return;
 
+        if (kind == DraggableActionBlock.ActionKind.Repeat)
+        {
+            InsertRepeatPairAt(uiIndex);
+            return;
+        }
+
+        // No nested repeats: reject drops inside an existing repeat body.
+        if (IsInsertIndexInsideRepeatBody(uiIndex))
+        {
+            // Arrows ARE allowed inside the body — only Repeat is blocked (handled above).
+        }
+
         CharacterAction action;
         Sprite sprite;
         string label;
         BuildActionForKind(kind, out action, out sprite, out label);
+
+        // Canvas BLANKS: fill the next underscore/dash slot instead of appending.
+        if (UsesCanvasBlankFill(GetCurrentLevelData()) &&
+            HasUnfilledCanvasBlankSlot() &&
+            TryFillNextCanvasBlankSlot(action, sprite, label))
+        {
+            playerActions.Add(label);
+            currentAttemptActionLog.Add(new PlayerActionLogEntry { action = label, timestamp = Time.time });
+            if (actionBlockIntro != null && actionBlockIntro.IsActive)
+                actionBlockIntro.OnBlockInserted(kind);
+            return;
+        }
+
+        // BLANKS mode with all slots filled: don't append extra blocks past the pattern length.
+        if (UsesCanvasBlankFill(GetCurrentLevelData()) && !HasUnfilledCanvasBlankSlot())
+        {
+            Debug.Log("[CharacterMove] All canvas blank slots are filled.");
+            return;
+        }
 
         // Spawn the UI block at the requested sibling index.
         GameObject blockGo = Instantiate(actionImagePrefab, actionQueueTransform);
@@ -4950,6 +5511,250 @@ public class CharacterMove : MonoBehaviour
             actionBlockIntro.OnBlockInserted(kind);
     }
 
+    private void InsertRepeatPairAt(int uiIndex)
+    {
+        if (actionQueueTransform == null || actionImagePrefab == null) return;
+        // Multiple sequential Repeats are allowed; nesting inside another Repeat is not.
+        if (IsInsertIndexInsideRepeatBody(uiIndex))
+        {
+            Debug.Log("[CharacterMove] Cannot nest Repeat inside another Repeat.");
+            return;
+        }
+
+        int insertAt = Mathf.Clamp(uiIndex, 0, actionQueueTransform.childCount);
+
+        GameObject startGo = SpawnRepeatBoundaryBlock(isStart: true, count: 1);
+        startGo.transform.SetSiblingIndex(insertAt);
+
+        GameObject endGo = SpawnRepeatBoundaryBlock(isStart: false, count: 1);
+        endGo.transform.SetSiblingIndex(insertAt + 1);
+
+        PlayBlockDropBounce(startGo.transform);
+        PlayBlockDropBounce(endGo.transform);
+        RebuildActionQueueFromUI();
+        playerActions.Add("repeat:1");
+        currentAttemptActionLog.Add(new PlayerActionLogEntry { action = "repeat:1", timestamp = Time.time });
+        actionQueueTransform.gameObject.SetActive(true);
+        EnsureRepeatVisualizer();
+    }
+
+    private GameObject SpawnRepeatBoundaryBlock(bool isStart, int count)
+    {
+        GameObject blockGo = Instantiate(actionImagePrefab, actionQueueTransform);
+        blockGo.name = isStart ? "RepeatStartBlock" : "RepeatEndBlock";
+
+        // Clear child icons from the action prefab so mockup chrome can draw cleanly.
+        for (int i = blockGo.transform.childCount - 1; i >= 0; i--)
+        {
+            var child = blockGo.transform.GetChild(i);
+            if (child.name == "CloseButton") continue;
+            Destroy(child.gameObject);
+        }
+
+        var img = blockGo.GetComponent<Image>();
+        if (img != null)
+        {
+            Sprite custom = isStart ? repeatStartSprite : repeatEndSprite;
+            if (custom != null)
+            {
+                img.sprite = custom;
+                img.type = Image.Type.Simple;
+                img.preserveAspect = true;
+                img.color = Color.white;
+            }
+            else
+            {
+                img.sprite = isStart
+                    ? RepeatQueueVisualizer.GetStartPuzzleSprite()
+                    : RepeatQueueVisualizer.GetEndPuzzleSprite();
+                img.type = Image.Type.Simple;
+                img.preserveAspect = false;
+                img.color = isStart
+                    ? new Color(0.55f, 0.35f, 0.88f, 1f)
+                    : new Color(1f, 0.55f, 0.18f, 1f);
+            }
+        }
+
+        var le = blockGo.GetComponent<LayoutElement>();
+        if (le == null) le = blockGo.AddComponent<LayoutElement>();
+        // Match normal action blocks in the yellow strip (not oversized).
+        float baseH = 64f;
+        float baseW = isStart ? 64f : 96f;
+        var prefabRt = actionImagePrefab != null ? actionImagePrefab.GetComponent<RectTransform>() : null;
+        var prefabLe = actionImagePrefab != null ? actionImagePrefab.GetComponent<LayoutElement>() : null;
+        if (prefabLe != null && prefabLe.preferredHeight > 1f) baseH = prefabLe.preferredHeight;
+        else if (prefabRt != null && prefabRt.sizeDelta.y > 1f) baseH = prefabRt.sizeDelta.y;
+        if (prefabLe != null && prefabLe.preferredWidth > 1f)
+            baseW = isStart ? prefabLe.preferredWidth : prefabLe.preferredWidth * 1.1f;
+        else if (prefabRt != null && prefabRt.sizeDelta.x > 1f)
+            baseW = isStart ? prefabRt.sizeDelta.x : prefabRt.sizeDelta.x * 1.1f;
+
+        float squeeze = Mathf.Max(0f, repeatStartEndArrowOverlap);
+        baseW = Mathf.Max(24f, baseW - squeeze);
+
+        le.preferredWidth = baseW;
+        le.minWidth = baseW;
+        le.preferredHeight = baseH;
+        le.minHeight = baseH;
+        le.flexibleWidth = 0f;
+        le.flexibleHeight = 0f;
+        var blockRt = blockGo.GetComponent<RectTransform>();
+        if (blockRt != null) blockRt.sizeDelta = new Vector2(baseW, baseH);
+
+        var action = new RepeatBoundaryAction(isStart, count);
+        var refComp = blockGo.AddComponent<QueuedActionRef>();
+        refComp.action = action;
+        refComp.deletable = true;
+        refComp.isRepeatStart = isStart;
+        refComp.isRepeatEnd = !isStart;
+        refComp.repeatCount = ProgramSequenceUtil.ClampRepeatCount(count);
+        refComp.actionLabel = isStart
+            ? ProgramSequenceUtil.FormatRepeatStart(refComp.repeatCount)
+            : "repeat-end";
+
+        if (addCloseButtonsToQueuedBlocks && showCloseButtonOnRepeatBlocks)
+            AttachCloseButton(blockGo);
+        AttachQueuedBlockDragBehaviour(blockGo);
+        return blockGo;
+    }
+
+    private bool QueueAlreadyHasRepeat()
+    {
+        if (actionQueueTransform == null) return false;
+        for (int i = 0; i < actionQueueTransform.childCount; i++)
+        {
+            var r = actionQueueTransform.GetChild(i).GetComponent<QueuedActionRef>();
+            if (r != null && (r.isRepeatStart || r.isRepeatEnd)) return true;
+        }
+        return false;
+    }
+
+    /// <summary>True if uiIndex would land strictly between any existing Start and End pair.</summary>
+    private bool IsInsertIndexInsideRepeatBody(int uiIndex)
+    {
+        if (actionQueueTransform == null) return false;
+        int startIdx = -1;
+        int logical = 0;
+        for (int i = 0; i < actionQueueTransform.childCount; i++)
+        {
+            var child = actionQueueTransform.GetChild(i);
+            if (child.GetComponent<QueueInsertionPlaceholder>() != null) continue;
+            if (child.name != null && child.name.StartsWith("_RepeatBodyBg")) continue;
+            var r = child.GetComponent<QueuedActionRef>();
+            if (r == null) { logical++; continue; }
+            if (r.isRepeatStart) startIdx = logical;
+            if (r.isRepeatEnd && startIdx >= 0)
+            {
+                if (uiIndex > startIdx && uiIndex <= logical) return true;
+                startIdx = -1;
+            }
+            logical++;
+        }
+        return false;
+    }
+
+    private void EnsureRepeatVisualizer()
+    {
+        var viz = GetComponent<RepeatQueueVisualizer>();
+        if (viz == null) viz = gameObject.AddComponent<RepeatQueueVisualizer>();
+        viz.characterMove = this;
+    }
+
+    /// <summary>Creates a mockup-style Repeat palette button (purple + loop icon + label).</summary>
+    private void EnsureRepeatPaletteButton()
+    {
+        LevelData ld = GetCurrentLevelData();
+        bool wantRepeat = ld != null && ResolveEnabledActionButtons(ld)
+            .Any(s => s != null && s.Trim().Equals("repeat", StringComparison.OrdinalIgnoreCase));
+        if (!wantRepeat) return;
+        if (repeatButton != null)
+        {
+            AttachDraggable(repeatButton, DraggableActionBlock.ActionKind.Repeat);
+            StyleRepeatPaletteButton(repeatButton.gameObject);
+            return;
+        }
+        if (moveForwardButton == null) return;
+
+        var src = moveForwardButton.gameObject;
+        var go = Instantiate(src, src.transform.parent);
+        go.name = "RepeatActionButton";
+        repeatButton = go.GetComponent<Button>();
+        StyleRepeatPaletteButton(go);
+        AttachDraggable(repeatButton, DraggableActionBlock.ActionKind.Repeat);
+        go.SetActive(true);
+    }
+
+    private void StyleRepeatPaletteButton(GameObject go)
+    {
+        if (go == null) return;
+        var img = go.GetComponent<Image>();
+        bool fullCustomTile = repeatSprite != null;
+        if (img != null)
+        {
+            img.sprite = fullCustomTile ? repeatSprite : RepeatQueueVisualizer.GetRoundedSprite();
+            if (!fullCustomTile) img.type = Image.Type.Sliced;
+            else img.type = Image.Type.Simple;
+            img.color = fullCustomTile ? Color.white : new Color(0.52f, 0.38f, 0.88f, 1f);
+            img.preserveAspect = fullCustomTile;
+        }
+
+        // Clear inherited arrow glyphs from cloned Forward button.
+        for (int i = go.transform.childCount - 1; i >= 0; i--)
+        {
+            var child = go.transform.GetChild(i);
+            if (child.name == "RepeatPaletteContent") continue;
+            Destroy(child.gameObject);
+        }
+
+        // If your palette sprite already includes the loop icon + "REPEAT" text, skip overlays.
+        if (fullCustomTile)
+        {
+            var old = go.transform.Find("RepeatPaletteContent");
+            if (old != null) Destroy(old.gameObject);
+            return;
+        }
+
+        if (go.transform.Find("RepeatPaletteContent") != null) return;
+
+        var root = new GameObject("RepeatPaletteContent", typeof(RectTransform));
+        root.transform.SetParent(go.transform, false);
+        var rt = root.GetComponent<RectTransform>();
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = new Vector2(4f, 4f);
+        rt.offsetMax = new Vector2(-4f, -4f);
+
+        var iconGo = new GameObject("LoopIcon", typeof(RectTransform), typeof(Image));
+        iconGo.transform.SetParent(root.transform, false);
+        var iconRt = iconGo.GetComponent<RectTransform>();
+        iconRt.anchorMin = new Vector2(0.5f, 0.48f);
+        iconRt.anchorMax = new Vector2(0.5f, 0.48f);
+        iconRt.pivot = new Vector2(0.5f, 0.5f);
+        iconRt.sizeDelta = new Vector2(40f, 40f);
+        var iconImg = iconGo.GetComponent<Image>();
+        iconImg.sprite = repeatLoopIconSprite != null
+            ? repeatLoopIconSprite
+            : RepeatQueueVisualizer.GetLoopSprite();
+        iconImg.color = Color.white;
+        iconImg.raycastTarget = false;
+        iconImg.preserveAspect = true;
+
+        var labelGo = new GameObject("Label", typeof(RectTransform), typeof(TextMeshProUGUI));
+        labelGo.transform.SetParent(root.transform, false);
+        var lrt = labelGo.GetComponent<RectTransform>();
+        lrt.anchorMin = new Vector2(0f, 0f);
+        lrt.anchorMax = new Vector2(1f, 0.36f);
+        lrt.offsetMin = Vector2.zero;
+        lrt.offsetMax = Vector2.zero;
+        var tmp = labelGo.GetComponent<TextMeshProUGUI>();
+        tmp.text = "REPEAT";
+        tmp.fontSize = 12f;
+        tmp.fontStyle = FontStyles.Bold;
+        tmp.alignment = TextAlignmentOptions.Center;
+        tmp.color = Color.white;
+        tmp.raycastTarget = false;
+    }
+
     /// <summary>
     /// Called by the close button on a queued block. Removes the block from the
     /// execution queue immediately (so a Run pressed during the animation runs the
@@ -4967,6 +5772,17 @@ public class CharacterMove : MonoBehaviour
 
         // Defensive: never remove a non-deletable block (guided pre-loaded actions).
         if (refComp != null && !refComp.deletable) return;
+
+        bool restoreCanvasBlank = refComp != null && refComp.fillsCanvasBlankSlot;
+        int restoreSiblingIndex = blockGo.transform.GetSiblingIndex();
+
+        // Removing Start or End removes the paired boundary as well (no orphan repeats).
+        if (refComp != null && (refComp.isRepeatStart || refComp.isRepeatEnd))
+        {
+            RemoveRepeatPair(refComp.isRepeatStart ? blockGo : FindPairedRepeatBlock(blockGo, wantStart: true),
+                             refComp.isRepeatEnd ? blockGo : FindPairedRepeatBlock(blockGo, wantStart: false));
+            return;
+        }
 
         // Prevent double-click on the close button while the animation plays.
         var closeBtnTf = blockGo.transform.Find("CloseButton");
@@ -4992,6 +5808,154 @@ public class CharacterMove : MonoBehaviour
         currentAttemptActionLog.Add(new PlayerActionLogEntry { action = evt, timestamp = Time.time });
 
         StartCoroutine(ShrinkAndDestroyBlock(blockGo, 0.15f));
+
+        // Keep the dash/line slot after closing a filled canvas blank.
+        if (restoreCanvasBlank)
+            RestoreCanvasBlankSlotAt(restoreSiblingIndex);
+    }
+
+    private GameObject FindPairedRepeatBlock(GameObject from, bool wantStart)
+    {
+        if (actionQueueTransform == null || from == null) return null;
+        int fromIdx = from.transform.GetSiblingIndex();
+        if (wantStart)
+        {
+            // Nearest Start to the left of this End.
+            for (int i = fromIdx - 1; i >= 0; i--)
+            {
+                var child = actionQueueTransform.GetChild(i).gameObject;
+                var r = child.GetComponent<QueuedActionRef>();
+                if (r != null && r.isRepeatStart) return child;
+                if (r != null && r.isRepeatEnd) break; // crossed another end
+            }
+        }
+        else
+        {
+            // Nearest End to the right of this Start.
+            for (int i = fromIdx + 1; i < actionQueueTransform.childCount; i++)
+            {
+                var child = actionQueueTransform.GetChild(i).gameObject;
+                var r = child.GetComponent<QueuedActionRef>();
+                if (r != null && r.isRepeatEnd) return child;
+                if (r != null && r.isRepeatStart) break; // crossed another start
+            }
+        }
+        return null;
+    }
+
+    private void RemoveRepeatPair(GameObject startGo, GameObject endGo)
+    {
+        playerActions.Add("remove:repeat");
+        currentAttemptActionLog.Add(new PlayerActionLogEntry { action = "remove:repeat", timestamp = Time.time });
+
+        void Mark(GameObject go)
+        {
+            if (go == null) return;
+            if (go.GetComponent<QueueInsertionPlaceholder>() == null)
+                go.AddComponent<QueueInsertionPlaceholder>();
+        }
+        Mark(startGo);
+        Mark(endGo);
+        RebuildActionQueueFromUI();
+        if (startGo != null) StartCoroutine(ShrinkAndDestroyBlock(startGo, 0.15f));
+        if (endGo != null) StartCoroutine(ShrinkAndDestroyBlock(endGo, 0.15f));
+    }
+
+    /// <summary>Build executable Move/Rotate actions by expanding repeats from the strip.</summary>
+    public Queue<CharacterAction> BuildExpandedActionQueueFromUI()
+    {
+        var q = new Queue<CharacterAction>();
+        var tokens = CollectProgramTokensFromUI();
+        var expanded = ProgramSequenceUtil.Expand(tokens);
+        foreach (var tok in expanded)
+        {
+            switch (ProgramSequenceUtil.NormalizeMotion(tok))
+            {
+                case "forward":
+                    q.Enqueue(new MoveAction(Vector3.forward));
+                    break;
+                case "backward":
+                    q.Enqueue(new MoveAction(-Vector3.forward));
+                    break;
+                case "left":
+                    q.Enqueue(new RotateAction(-rotationAngle));
+                    break;
+                case "right":
+                    q.Enqueue(new RotateAction(rotationAngle));
+                    break;
+            }
+        }
+        return q;
+    }
+
+    private bool StudentProgramMatchesCorrectPatterns(LevelData levelData)
+    {
+        var student = CollectProgramTokensFromUI();
+        if (levelData?.correctPrograms != null && levelData.correctPrograms.Count > 0)
+        {
+            if (ProgramSequenceUtil.MatchesAnyProgram(student, levelData.correctPrograms))
+                return true;
+        }
+
+        // Fallback: match the authored pattern preview (expanded-equivalent / Repeat forms).
+        if (levelData?.canvasLesson?.patternPreview != null && levelData.canvasLesson.patternPreview.Count > 0)
+        {
+            string joined = string.Join(";", levelData.canvasLesson.patternPreview);
+            var accepted = new List<string> { joined };
+            // Also accept a single-chunk Repeat if the pattern tiles.
+            var expanded = ProgramSequenceUtil.Expand(levelData.canvasLesson.patternPreview);
+            if (expanded.Count >= 2)
+            {
+                for (int k = 1; k <= expanded.Count / 2; k++)
+                {
+                    if (expanded.Count % k != 0) continue;
+                    int times = expanded.Count / k;
+                    if (times < 2) continue;
+                    bool tiles = true;
+                    for (int t = 1; t < times && tiles; t++)
+                    {
+                        for (int i = 0; i < k; i++)
+                        {
+                            if (expanded[t * k + i] != expanded[i]) { tiles = false; break; }
+                        }
+                    }
+                    if (!tiles) continue;
+                    var body = expanded.GetRange(0, k);
+                    var nested = new List<string> { ProgramSequenceUtil.FormatRepeatStart(times) };
+                    nested.AddRange(body);
+                    nested.Add("repeat-end");
+                    accepted.Add(string.Join(";", nested));
+                }
+            }
+            return ProgramSequenceUtil.MatchesAnyProgram(student, accepted);
+        }
+
+        return false;
+    }
+
+    private IEnumerator ProcessCanvasPatternCheck(LevelData levelData)
+    {
+        bool match = StudentProgramMatchesCorrectPatterns(levelData);
+        // Keep strip visible for canvas (students may edit and retry).
+        isProcessing = false;
+
+        int acceptedCount = levelData?.correctPrograms?.Count ?? 0;
+        if (match)
+        {
+            pendingLevelPassed = true;
+            if (chatGPTResponseText != null)
+                chatGPTResponseText.text = "Correct!";
+            StartCoroutine(CompleteLevelSuccessfully());
+            yield break;
+        }
+
+        if (chatGPTResponseText != null)
+        {
+            chatGPTResponseText.text = acceptedCount > 1
+                ? "Not yet — try another way"
+                : "Not quite — check your arrows and repeat.";
+        }
+        HandleRunFailure(levelData, "pattern");
     }
 
     private IEnumerator ShrinkAndDestroyBlock(GameObject blockGo, float duration)
@@ -5194,8 +6158,18 @@ public class CharacterMove : MonoBehaviour
         {
             var child = actionQueueTransform.GetChild(i);
             if (child.GetComponent<QueueInsertionPlaceholder>() != null) continue;
+            if (child.name != null && child.name.StartsWith("_RepeatBodyBg")) continue;
             var refComp = child.GetComponent<QueuedActionRef>();
-            actionQueue.Enqueue(refComp != null ? refComp.action : null);
+            if (refComp == null) continue;
+            // Keep RepeatBoundaryAction count in sync with UI +/- control.
+            if (refComp.isRepeatStart && refComp.action is RepeatBoundaryAction startBa)
+            {
+                startBa.repeatCount = refComp.repeatCount;
+                refComp.actionLabel = ProgramSequenceUtil.FormatRepeatStart(refComp.repeatCount);
+            }
+            if (refComp.isRepeatEnd && refComp.action is RepeatBoundaryAction endBa)
+                endBa.repeatCount = refComp.repeatCount;
+            actionQueue.Enqueue(refComp.action);
         }
     }
 
@@ -5267,6 +6241,7 @@ public class CharacterMove : MonoBehaviour
             case DraggableActionBlock.ActionKind.Backward:  return moveDownButton    == null || moveDownButton.interactable;
             case DraggableActionBlock.ActionKind.TurnLeft:  return rotateLeftButton  == null || rotateLeftButton.interactable;
             case DraggableActionBlock.ActionKind.TurnRight: return rotateRightButton == null || rotateRightButton.interactable;
+            case DraggableActionBlock.ActionKind.Repeat:    return repeatButton == null || repeatButton.interactable;
         }
         return true;
     }
@@ -5289,6 +6264,11 @@ public class CharacterMove : MonoBehaviour
                 action = new RotateAction(-rotationAngle);
                 sprite = rotateLeftSprite;
                 label = "left";
+                return;
+            case DraggableActionBlock.ActionKind.Repeat:
+                action = new RepeatBoundaryAction(true, 1);
+                sprite = repeatSprite != null ? repeatSprite : forwardSprite;
+                label = "repeat:1";
                 return;
             case DraggableActionBlock.ActionKind.TurnRight:
             default:
@@ -5321,15 +6301,37 @@ public class CharacterMove : MonoBehaviour
         rt.anchorMin = new Vector2(1f, 1f);
         rt.anchorMax = new Vector2(1f, 1f);
         rt.pivot     = new Vector2(1f, 1f);
-        rt.sizeDelta = new Vector2(closeButtonSize, closeButtonSize);
-        // anchoredPosition with pivot (1,1) at anchor (1,1):
-        //   (0,0)            => button top-right corner sits exactly on block top-right corner (fully inside).
-        //   (+x,+y) with overhang=true => button sticks OUT past block by (x,y).
-        //   (-x,-y) with overhang=false => button is inset (x,y) px inside the block.
-        Vector2 anchored = closeButtonOverhang
-            ? new Vector2(Mathf.Abs(closeButtonOffset.x), Mathf.Abs(closeButtonOffset.y))
-            : new Vector2(-Mathf.Abs(closeButtonOffset.x), -Mathf.Abs(closeButtonOffset.y));
-        rt.anchoredPosition = anchored;
+
+        // Repeat blocks: use signed offset so we can pull the X left toward the art.
+        var queued = blockGo.GetComponent<QueuedActionRef>();
+        bool isRepeat = queued != null && (queued.isRepeatStart || queued.isRepeatEnd);
+
+        float btnSize = isRepeat ? repeatCloseButtonSize : closeButtonSize;
+        rt.sizeDelta = new Vector2(btnSize, btnSize);
+
+        if (isRepeat)
+        {
+            Vector2 offset = repeatCloseButtonOffset;
+            if (repeatCloseButtonOverhang)
+            {
+                // Outside the top-right corner (positive = out), plus optional extra push right.
+                offset = new Vector2(
+                    Mathf.Abs(offset.x) + Mathf.Max(0f, repeatCloseButtonPushOutX),
+                    Mathf.Abs(offset.y));
+            }
+            else
+            {
+                offset = new Vector2(-Mathf.Abs(offset.x), -Mathf.Abs(offset.y));
+            }
+            rt.anchoredPosition = offset;
+        }
+        else
+        {
+            Vector2 anchored = closeButtonOverhang
+                ? new Vector2(Mathf.Abs(closeButtonOffset.x), Mathf.Abs(closeButtonOffset.y))
+                : new Vector2(-Mathf.Abs(closeButtonOffset.x), -Mathf.Abs(closeButtonOffset.y));
+            rt.anchoredPosition = anchored;
+        }
 
         // Force the button's size regardless of any LayoutGroup the prefab might add.
         var le = btnGo.GetComponent<LayoutElement>();
@@ -5351,8 +6353,8 @@ public class CharacterMove : MonoBehaviour
             bgImg.sprite = null;
             bgImg.color = closeButtonColor;
             // Two diagonal lines forming an X glyph (no font dependency).
-            AddCloseGlyphLine(btnGo.transform,  45f);
-            AddCloseGlyphLine(btnGo.transform, -45f);
+            AddCloseGlyphLine(btnGo.transform,  45f, btnSize);
+            AddCloseGlyphLine(btnGo.transform, -45f, btnSize);
         }
 
         var button = btnGo.GetComponent<Button>();
@@ -5360,14 +6362,14 @@ public class CharacterMove : MonoBehaviour
         button.onClick.AddListener(() => RemoveQueuedBlock(capturedBlock));
     }
 
-    private void AddCloseGlyphLine(Transform parent, float zRotationDegrees)
+    private void AddCloseGlyphLine(Transform parent, float zRotationDegrees, float buttonSize)
     {
         var line = new GameObject("XLine", typeof(RectTransform), typeof(Image));
         line.transform.SetParent(parent, false);
         var rt = (RectTransform)line.transform;
         rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
         rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.sizeDelta = new Vector2(closeButtonSize * 0.65f, Mathf.Max(2f, closeButtonSize * 0.12f));
+        rt.sizeDelta = new Vector2(buttonSize * 0.65f, Mathf.Max(2f, buttonSize * 0.12f));
         rt.localRotation = Quaternion.Euler(0f, 0f, zRotationDegrees);
         var img = line.GetComponent<Image>();
         img.color = closeButtonGlyphColor;
@@ -5464,18 +6466,34 @@ public class CharacterMove : MonoBehaviour
 
         RecordTelemetryBeforeRun();
 
+        LevelData canvasCheckLevel = GetCurrentLevelData();
+        if (UsesCanvas(canvasCheckLevel))
+        {
+            isProcessing = true;
+            currentMoveCoroutine = StartCoroutine(ProcessCanvasPatternCheck(canvasCheckLevel));
+            yield break;
+        }
+
         ResetRobotToLevelStart();
 
         attemptStartGridPos = robotGridPosition;
         attemptStartFacing = facingDirection;
         movesUsedInCurrentAttempt = 0;
         Debug.Log($"[StartActionProcessing] Recording attempt start: pos={attemptStartGridPos}, facing={attemptStartFacing}, movesUsed=0, currentAttempt={currentAttempt}");
+
+        // Expand repeats into a flat executable queue for grid / number-line runs.
+        bool hasRepeat = QueueAlreadyHasRepeat();
+        Queue<CharacterAction> expanded = BuildExpandedActionQueueFromUI();
+        if (expanded.Count > 0)
+            actionQueue = expanded;
+
         if (!isProcessing && actionQueue.Count > 0)
         {
             isProcessing = true;
-            if (runLevel != null && !runLevel.runRobotOnSubmit)
+            // Repeat expands to more actions than UI blocks — don't destroy strip 1:1.
+            if ((runLevel != null && !runLevel.runRobotOnSubmit) || hasRepeat)
             {
-                if (chatGPTResponseText != null)
+                if (chatGPTResponseText != null && runLevel != null && !runLevel.runRobotOnSubmit)
                     chatGPTResponseText.text = "Checking your answer…";
                 currentMoveCoroutine = StartCoroutine(ProcessActionsWithoutRobotAnimation());
             }
@@ -5843,7 +6861,9 @@ public class CharacterMove : MonoBehaviour
     private void FinishInstantRunQueueUI(Queue<CharacterAction> executedActions)
     {
         AddToActionHistoryUI(executedActions);
+        // Keep yellow-strip blocks for drag-drop / repeat editing; only clear the runtime queue.
         actionQueue.Clear();
+        RebuildActionQueueFromUI();
         if (!useDragAndDropForActions && actionQueueTransform != null)
             actionQueueTransform.gameObject.SetActive(false);
     }
@@ -7089,7 +8109,16 @@ public class CharacterMove : MonoBehaviour
         if (rotateLeftButton != null) rotateLeftButton.interactable = true;
         if (rotateRightButton != null) rotateRightButton.interactable = true;
 
-        if (levelData.guidedActions != null && levelData.guidedActions.Count > 0)
+        if (UsesCanvas(levelData))
+        {
+            ApplyCanvasLessonContent(levelData);
+            ApplyCanvasStripSeeding(levelData);
+            EnsureRobotHostActive();
+            EnsureRepeatVisualizer();
+            EnsureRepeatPaletteButton();
+            ApplyActionButtonVisibility(levelData);
+        }
+        else if (levelData.guidedActions != null && levelData.guidedActions.Count > 0)
             SeedGuidedProgramQueue(levelData);
         else
             ClearActionQueueVisual();
@@ -7622,6 +8651,18 @@ public class CharacterMove : MonoBehaviour
 
 
     public Sprite blankSlotSprite; // Assign a question mark or blank icon in inspector
+
+    [Header("Canvas blank slots (BLANKS strip mode)")]
+    [Tooltip("Optional dash/line art for empty canvas slots. Overrides the square action prefab look.")]
+    public Sprite canvasBlankSlotSprite;
+    [Tooltip("When on (and no canvasBlankSlotSprite), draw a thin gray line instead of a yellow square.")]
+    public bool canvasBlankUseLineStyle = true;
+    [Tooltip("Width of the procedural dash line (Unity UI units).")]
+    [Range(24f, 96f)] public float canvasBlankLineWidth = 48f;
+    [Tooltip("Height/thickness of the procedural dash line.")]
+    [Range(3f, 20f)] public float canvasBlankLineHeight = 6f;
+    public Color canvasBlankLineColor = new Color(0.42f, 0.42f, 0.48f, 0.9f);
+
     public Button blankLeftButton; // Assign in inspector, for 'turn left' choice
     public Button blankRightButton; // Assign in inspector, for 'turn right' choice
 
@@ -7721,7 +8762,7 @@ public class CharacterMove : MonoBehaviour
         LevelData ld = GetCurrentLevelData();
         if (UsesNumberLine(ld))
             EnsureNumberLineVisual(ld);
-        else
+        else if (!UsesCanvas(ld))
             CreateOrRefreshGridImage();
         foreach (var go in activeGridObjects)
             Apply3DPresentationToSpawnedObject(go, angled);
@@ -7790,7 +8831,10 @@ public class CharacterMove : MonoBehaviour
         if (numberLineVisual == null)
             numberLineVisual = gameObject.AddComponent<NumberLineVisual>();
         numberLineVisual.characterMove = this;
-        numberLineVisual.gameObject.SetActive(true);
+        numberLineVisual.enabled = true;
+        if (numberLineVisual.gameObject != gameObject)
+            numberLineVisual.gameObject.SetActive(true);
+        EnsureRobotHostActive();
         numberLineVisual.BuildForLevel(levelData);
     }
 
@@ -7798,6 +8842,16 @@ public class CharacterMove : MonoBehaviour
     private void ApplyPlayfieldVisualLayout(LevelData levelData)
     {
         if (levelData == null) return;
+
+        if (UsesCanvas(levelData))
+        {
+            SetGridPlayfieldVisible(false);
+            DestroyGridImage(forceIncludeManual: true);
+            HideNumberLineVisual();
+            EnsureRobotHostActive();
+            Debug.Log($"[CharacterMove] Playfield: CANVAS ({levelData.levelKey}) — grid hidden");
+            return;
+        }
 
         if (UsesNumberLine(levelData))
         {
@@ -7810,11 +8864,7 @@ public class CharacterMove : MonoBehaviour
         }
         else
         {
-            if (numberLineVisual != null)
-            {
-                numberLineVisual.Clear();
-                numberLineVisual.gameObject.SetActive(false);
-            }
+            HideNumberLineVisual();
             SetGridPlayfieldVisible(true);
             if (!_presentation3DAngled)
                 CreateOrRefreshGridImage();

@@ -11,7 +11,8 @@ import {
   programStopsOnGoalStrict,
   simulateProgram,
 } from "@/lib/assessment/routeAnalysis";
-import { levelGameplayConfigSchema, type LevelGameplayConfig } from "@/lib/level-config";
+import { matchesAnyCorrectProgram, suggestProgramVariants } from "@/lib/assessment/expand-repeats";
+import { levelGameplayConfigSchema, type LevelGameplayConfig, isCanvasLayout } from "@/lib/level-config";
 
 /** Unity JsonUtility may send 0/1 or string booleans — normalize for scoring. */
 export function parseUnityBoolean(value: unknown): boolean | null {
@@ -181,6 +182,40 @@ export function resolveAttemptEndScore(params: {
   let resolvedScore = params.score ?? null;
 
   const config = parseLevelConfigForScoring(params.levelConfig);
+
+  // Canvas / pattern levels: accept exact nested OR expanded-equivalent programs.
+  // If teacher only authored a pattern preview, treat its smart variants as accepted.
+  if (config && isCanvasLayout(config)) {
+    const studentRaw = (params.finalCommand ?? "")
+      .split(/[;,]/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    let accepted = config.assessment?.correctPrograms ?? [];
+    if (!accepted.length && config.canvasLesson?.patternPreview?.length) {
+      accepted = suggestProgramVariants(config.canvasLesson.patternPreview);
+    }
+    if (accepted.length) {
+      const matched = matchesAnyCorrectProgram(studentRaw, accepted);
+      return { score: matched ? 100 : 0, passed: matched };
+    }
+  }
+
+  if (config?.assessment?.correctPrograms?.length && params.levelType === LevelType.DRAG_ACTIONS) {
+    const studentRaw = (params.finalCommand ?? "")
+      .split(/[;,]/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (studentRaw.length > 0) {
+      const matched = matchesAnyCorrectProgram(studentRaw, config.assessment.correctPrograms);
+      if (matched) {
+        resolvedPassed = true;
+        resolvedScore = 100;
+      } else if (isCanvasLayout(config)) {
+        resolvedPassed = false;
+        resolvedScore = resolvedScore ?? 0;
+      }
+    }
+  }
 
   if (params.levelType === LevelType.CHOOSE_BUTTONS && config) {
     const choice = buildChoiceActionFromAttempt({

@@ -14,6 +14,7 @@ const LABELS: Record<RobotActionButton, string> = {
   backward: "Backward",
   "turn left": "Turn left",
   "turn right": "Turn right",
+  repeat: "Repeat",
 };
 
 type Props = {
@@ -27,8 +28,12 @@ export function ActionButtonsEditor({ config, onChange }: Props) {
   const nlForwardBackOnly = config.numberLine?.forwardBackwardOnly !== false;
 
   function setEnabled(next: Set<RobotActionButton>) {
-    const list = ALL_ROBOT_ACTION_BUTTONS.filter((a) => next.has(a));
-    if (list.length === 0) return;
+    const motions = ALL_ROBOT_ACTION_BUTTONS.filter((a) => next.has(a));
+    if (motions.length === 0) return;
+    const list: RobotActionButton[] = [
+      ...motions,
+      ...(next.has("repeat") ? (["repeat"] as RobotActionButton[]) : []),
+    ];
     onChange({
       ...config,
       enabledActionButtons: list,
@@ -39,14 +44,16 @@ export function ActionButtonsEditor({ config, onChange }: Props) {
     const next = new Set(enabled);
     if (checked) next.add(action);
     else next.delete(action);
-    if (next.size === 0) return;
     setEnabled(next);
   }
 
   function enableAll() {
     onChange({
       ...config,
-      enabledActionButtons: [...DEFAULT_ENABLED_ACTION_BUTTONS],
+      enabledActionButtons: [
+        ...DEFAULT_ENABLED_ACTION_BUTTONS,
+        ...(enabled.has("repeat") ? (["repeat"] as const) : []),
+      ],
       ...(onNumberLine && config.numberLine
         ? { numberLine: { ...config.numberLine, forwardBackwardOnly: false } }
         : {}),
@@ -57,11 +64,11 @@ export function ActionButtonsEditor({ config, onChange }: Props) {
     <fieldset className="space-y-3 rounded-lg border border-dashed p-4 sm:col-span-2">
       <legend className="px-1 text-sm font-medium">Student action buttons</legend>
       <p className="text-xs text-muted-foreground">
-        Unchecked buttons are hidden in the game. Best-route analysis and assessment only use
-        enabled commands (e.g. if Backward is off, shortest paths never include backward).
+        Unchecked buttons are hidden in the game. Turn off <strong>Repeat</strong> to hide the
+        Repeat block in the palette.
       </p>
       <div className="grid gap-2 sm:grid-cols-2">
-        {ALL_ROBOT_ACTION_BUTTONS.map((action) => (
+        {([...ALL_ROBOT_ACTION_BUTTONS, "repeat"] as RobotActionButton[]).map((action) => (
           <label key={action} className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"

@@ -14,6 +14,8 @@
     "db:analytics-fields": "prisma db execute --schema prisma/schema.prisma --file prisma/migrations/add_attempt_analytics_fields.sql",
     "db:level-owner": "prisma db execute --schema prisma/schema.prisma --file prisma/migrations/add_level_owner_teacher.sql",
     "db:level-customized-from": "prisma db execute --schema prisma/schema.prisma --file prisma/migrations/add_level_customized_from.sql",
+    "db:assignment-order": "prisma db execute --schema prisma/schema.prisma --file prisma/migrations/add_assignment_order.sql",
+    "db:assignment-soft": "prisma db execute --schema prisma/schema.prisma --file prisma/migrations/add_level_student_assignment_soft.sql",
     "db:seed": "tsx prisma/seed.ts",
     "db:backup-items": "tsx scripts/backup-items-dataset.ts",
     "db:restore-items": "tsx scripts/restore-items-dataset.ts",

@@ -20,7 +20,34 @@ export const blankDataSchema = z.object({
   enabledArrows: z.array(z.string()).default([]),
 });
 
-export const layoutModeSchema = z.enum(["GRID", "NUMBER_LINE"]).default("GRID");
+/** Canvas (strip-only) lesson content shown on the white board + yellow-strip seeding. */
+export const canvasStripModeSchema = z.enum(["EMPTY", "BLANKS", "SEED_PROGRAM"]);
+
+export const canvasLessonSchema = z.object({
+  stripMode: canvasStripModeSchema.default("EMPTY"),
+  /** Primary instruction shown on the Unity white canvas. */
+  prompt: z.string().optional(),
+  imageUrl: z.string().optional(),
+  audioUrl: z.string().optional(),
+  playAudioAutomatically: z.boolean().optional(),
+  /** Visual pattern row on canvas (not scored by itself). */
+  patternPreview: z.array(z.string()).optional(),
+  /** Optional fixed chunk chip (e.g. Item 3 style). */
+  exampleChunk: z.array(z.string()).optional(),
+  /** For BLANKS: number of underscore slots students fill by drag. */
+  blankSlotCount: z.number().int().min(1).max(20).optional(),
+});
+
+export type CanvasLessonConfig = z.infer<typeof canvasLessonSchema>;
+
+export const DEFAULT_CANVAS_LESSON: CanvasLessonConfig = {
+  stripMode: "EMPTY",
+  prompt: "Build a program that matches the pattern.",
+  playAudioAutomatically: true,
+  blankSlotCount: 4,
+};
+
+export const layoutModeSchema = z.enum(["GRID", "NUMBER_LINE", "CANVAS"]).default("GRID");
 
 /** Palette buttons students can use (also limits BFS best-route commands). */
 export const robotActionButtonSchema = z.enum([
@@ -28,6 +55,7 @@ export const robotActionButtonSchema = z.enum([
   "backward",
   "turn left",
   "turn right",
+  "repeat",
 ]);
 
 export type RobotActionButton = z.infer<typeof robotActionButtonSchema>;
@@ -163,6 +191,8 @@ export const levelGameplayConfigSchema = z.object({
   allowRobotDrag: z.boolean().default(true),
   allowGridObjectDrag: z.boolean().default(false),
   cornerHint: levelCornerHintSchema.optional(),
+  /** Canvas layout: prompt / media / pattern on white board + strip seeding mode. */
+  canvasLesson: canvasLessonSchema.optional(),
   actionBlockIntro: actionBlockIntroSchema.optional(),
   guidedActions: z.array(z.string()).optional(),
   blanks: z.array(blankDataSchema).optional(),
@@ -226,7 +256,7 @@ export const levelGameplayConfigSchema = z.object({
       workingFixes: z.array(z.array(z.string())).optional(),
       solutionPrograms: z.array(z.array(z.string())).optional(),
       /** Override playfield for assessment (defaults from layoutMode). */
-      taskEnvironmentType: z.enum(["grid", "number-line"]).optional(),
+      taskEnvironmentType: z.enum(["grid", "number-line", "canvas"]).optional(),
     })
     .optional(),
 });
@@ -240,9 +270,12 @@ export function resolveEnabledActionButtons(
   const custom = config.enabledActionButtons;
   if (custom && custom.length > 0) {
     const valid = custom.filter((a) =>
-      ALL_ROBOT_ACTION_BUTTONS.includes(a as RobotActionButton)
+      (ALL_ROBOT_ACTION_BUTTONS as string[]).includes(a) || a === "repeat"
     ) as RobotActionButton[];
     if (valid.length > 0) return valid;
+  }
+  if (isCanvasLayout(config)) {
+    return ["forward", "backward", "turn left", "turn right", "repeat"];
   }
   if (isNumberLineLayout(config) && config.numberLine?.forwardBackwardOnly !== false) {
     return ["forward", "backward"];
@@ -558,6 +591,10 @@ export function visitSequenceReady(config: LevelGameplayConfig): boolean {
 
 export function isNumberLineLayout(config: LevelGameplayConfig): boolean {
   return config.layoutMode === "NUMBER_LINE";
+}
+
+export function isCanvasLayout(config: LevelGameplayConfig): boolean {
+  return config.layoutMode === "CANVAS";
 }
 
 /** Row index for a prop relative to the line row. */

@@ -39,6 +39,12 @@ export type AttemptVerdictInput = {
   debugging: DebuggingAnalysisResult | null | undefined;
   pathBuilding: PathBuildingAnalysisResult | null | undefined;
   numberLine: NumberLineEvidence | null | undefined;
+  /** Canvas / pattern items with correctPrograms. */
+  canvasPattern?: {
+    matched: boolean;
+    acceptedCount: number;
+    matchedProgramIndex: number | null;
+  } | null;
   /** Fallback when no rich analysis is available. */
   fallback: { passed: boolean; status: string; score: number | null };
 };
@@ -424,6 +430,35 @@ function fallbackVerdict(
   };
 }
 
+function canvasPatternVerdict(r: NonNullable<AttemptVerdictInput["canvasPattern"]>): AttemptVerdict {
+  if (r.matched) {
+    return {
+      headline: "Correct — the program matches an accepted answer.",
+      detail:
+        r.matchedProgramIndex != null
+          ? `Matched accepted program ${r.matchedProgramIndex + 1} of ${r.acceptedCount} (exact Repeat form or same expanded motions).`
+          : "The student’s strip matches a teacher-accepted program.",
+      fix: null,
+      tone: "success",
+      confidence: null,
+    };
+  }
+
+  return {
+    headline: "Not yet — the program doesn’t match an accepted answer.",
+    detail:
+      r.acceptedCount > 1
+        ? `Compared against ${r.acceptedCount} accepted programs (including Repeat vs expanded equivalents).`
+        : "The student’s commands don’t match the accepted pattern.",
+    fix:
+      r.acceptedCount > 1
+        ? "Try another valid approach — more than one program can be correct."
+        : "Check the order of arrows and any Repeat blocks.",
+    tone: "danger",
+    confidence: null,
+  };
+}
+
 export function buildAttemptVerdict(input: AttemptVerdictInput): AttemptVerdict {
   const goalLabel = input.goalLabel || "goal";
 
@@ -434,6 +469,7 @@ export function buildAttemptVerdict(input: AttemptVerdictInput): AttemptVerdict 
   if (input.pathBuilding?.available) return pathVerdict(input.pathBuilding, goalLabel);
   if (input.debugging?.available) return debuggingVerdict(input.debugging, goalLabel);
   if (input.numberLine) return numberLineVerdict(input.numberLine, input.fallback.passed);
+  if (input.canvasPattern) return canvasPatternVerdict(input.canvasPattern);
 
   return fallbackVerdict(input.fallback);
 }
