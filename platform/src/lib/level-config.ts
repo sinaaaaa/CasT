@@ -469,7 +469,9 @@ export function applyLevelTypeDefaults(
         useFlagPlacement: false,
         playerPicksEndCellWithFlag: false,
         requireFlagBeforeRun: false,
-        guidedActions: undefined,
+        // Grid drag-actions: students build from scratch (no seeded strip).
+        // Canvas SEED_PROGRAM / BLANKS: keep the teacher-authored starter sequence.
+        guidedActions: isCanvasLayout(base) ? base.guidedActions : undefined,
         blanks: undefined,
         visitObjectSequence: base.visitObjectSequence ?? false,
       };

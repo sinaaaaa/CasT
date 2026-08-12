@@ -4161,15 +4161,54 @@ public class CharacterMove : MonoBehaviour
 
         if (mode == "SEED_PROGRAM")
         {
+            EnsureSeedProgramGuidedActions(levelData);
             if (levelData.guidedActions != null && levelData.guidedActions.Count > 0)
                 SeedGuidedProgramQueue(levelData);
             else
+            {
                 ClearActionQueueVisual();
+                Debug.LogWarning("[CharacterMove] SEED_PROGRAM has no guidedActions (and no correctPrograms/pattern fallback). Yellow strip stays empty.");
+            }
             return;
         }
 
         // EMPTY
         ClearActionQueueVisual();
+    }
+
+    /// <summary>
+    /// If the teacher authored accepted programs / pattern but guidedActions were wiped
+    /// (older platform bug), recover a seed sequence for Canvas SEED_PROGRAM.
+    /// </summary>
+    private static void EnsureSeedProgramGuidedActions(LevelData levelData)
+    {
+        if (levelData == null) return;
+        if (levelData.guidedActions != null && levelData.guidedActions.Count > 0) return;
+
+        if (levelData.correctPrograms != null && levelData.correctPrograms.Count > 0)
+        {
+            string first = levelData.correctPrograms[0];
+            if (!string.IsNullOrWhiteSpace(first))
+            {
+                levelData.guidedActions = new List<string>();
+                foreach (var part in first.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    string t = part.Trim();
+                    if (t.Length > 0) levelData.guidedActions.Add(t);
+                }
+                if (levelData.guidedActions.Count > 0)
+                {
+                    Debug.Log("[CharacterMove] SEED_PROGRAM: recovered strip from first accepted program.");
+                    return;
+                }
+            }
+        }
+
+        if (levelData.canvasLesson?.patternPreview != null && levelData.canvasLesson.patternPreview.Count > 0)
+        {
+            levelData.guidedActions = new List<string>(levelData.canvasLesson.patternPreview);
+            Debug.Log("[CharacterMove] SEED_PROGRAM: recovered strip from patternPreview.");
+        }
     }
 
     private void SeedCanvasBlankSlots(int count)
