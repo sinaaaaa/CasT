@@ -82,6 +82,7 @@ const TOKEN_PALETTE = [
   "backward",
   "turn left",
   "turn right",
+  "blank",
   "repeat:1",
   "repeat-end",
 ] as const;
@@ -114,6 +115,19 @@ const TOKEN_STYLE: Record<
     text: "text-orange-900",
     icon: <CornerDownRight className="h-3.5 w-3.5 text-orange-600" />,
   },
+  blank: {
+    bg: "bg-slate-50",
+    border: "border-dashed border-slate-400",
+    text: "text-slate-700",
+    icon: (
+      <span className="inline-flex items-center gap-0.5" aria-hidden>
+        <span className="h-0.5 w-2 rounded-full bg-slate-700" />
+        <span className="h-0.5 w-2 rounded-full bg-slate-700" />
+        <span className="h-0.5 w-2 rounded-full bg-slate-700" />
+        <span className="h-0.5 w-2 rounded-full bg-slate-700" />
+      </span>
+    ),
+  },
   "repeat:1": {
     bg: "bg-violet-50",
     border: "border-violet-300",
@@ -135,11 +149,30 @@ const TOKEN_STYLE: Record<
 };
 
 function tokenLabel(value: string) {
+  if (value === "blank") return "Blank";
   if (value.startsWith("repeat:") || value === "repeat" || value === "repeat-start") {
     const n = value.includes(":") ? value.split(":")[1] ?? "1" : "1";
     return `Repeat ×${n}`;
   }
   return GUIDED_ACTIONS.find((g) => g.value === value)?.label ?? value;
+}
+
+function isBlankToken(action: string) {
+  return action.trim().toLowerCase() === "blank";
+}
+
+function BlankDashMark({ className }: { className?: string }) {
+  return (
+    <span
+      className={cn("inline-flex items-center justify-center gap-1", className)}
+      aria-hidden
+    >
+      <span className="h-1 w-2.5 rounded-full bg-slate-800" />
+      <span className="h-1 w-2.5 rounded-full bg-slate-800" />
+      <span className="h-1 w-2.5 rounded-full bg-slate-800" />
+      <span className="h-1 w-2.5 rounded-full bg-slate-800" />
+    </span>
+  );
 }
 
 function styleFor(action: string) {
@@ -170,6 +203,7 @@ function TokenChip({
   const cmd = normalizeCommandToken(action);
   const iconPath = cmd ? COMMAND_ICON_PATHS[cmd] : null;
   const dim = size === "sm" ? 28 : 36;
+  const blank = isBlankToken(action);
 
   return (
     <span
@@ -182,7 +216,9 @@ function TokenChip({
       )}
     >
       {showGrip && <GripVertical className="h-3.5 w-3.5 shrink-0 text-slate-400" />}
-      {iconPath ? (
+      {blank ? (
+        <BlankDashMark />
+      ) : iconPath ? (
         <Image src={iconPath} alt="" width={dim - 10} height={dim - 10} className="object-contain" />
       ) : (
         style.icon
@@ -337,6 +373,21 @@ function PatternTokenIcon({
   px: number;
   dimmed?: boolean;
 }) {
+  if (isBlankToken(action)) {
+    return (
+      <span
+        className={cn(
+          "inline-flex items-center justify-center",
+          dimmed && "opacity-70"
+        )}
+        style={{ width: Math.max(px * 1.15, 56), height: px }}
+        title="Blank — student fills this"
+      >
+        <BlankDashMark />
+      </span>
+    );
+  }
+
   const cmd = normalizeCommandToken(action);
   const iconPath = cmd ? COMMAND_ICON_PATHS[cmd] : null;
   return (
@@ -1019,7 +1070,7 @@ export function CanvasLessonEditor({ config, onChange }: Props) {
 
           <DragTokenRowEditor
             title="Pattern preview"
-            description="Drag blocks from the palette, or tap to add. Reorder by dragging chips."
+            description="Drag blocks from the palette. Add Blank for a dashed “what comes next?” gap in the pattern."
             tokens={lesson.patternPreview ?? []}
             onChange={(patternPreview) => patch({ patternPreview })}
             accent="violet"
@@ -1044,7 +1095,10 @@ export function CanvasLessonEditor({ config, onChange }: Props) {
               variant="outline"
               className="w-full gap-2 border-emerald-300 bg-emerald-50 text-emerald-900 hover:bg-emerald-100"
               onClick={() => {
-                const variants = suggestProgramVariants(lesson.patternPreview ?? []);
+                const patternOnly = (lesson.patternPreview ?? []).filter(
+                  (t) => t.trim().toLowerCase() !== "blank"
+                );
+                const variants = suggestProgramVariants(patternOnly);
                 if (!variants.length) return;
                 onChange({
                   ...config,

@@ -613,6 +613,13 @@ public class CanvasLessonPanel : MonoBehaviour
 
     private void CreatePatternToken(Transform parent, string raw, float px, float alpha)
     {
+        string normalized = NormalizePatternToken(raw);
+        if (normalized == "blank")
+        {
+            CreatePatternBlankDash(parent, px, alpha);
+            return;
+        }
+
         var go = new GameObject("Token", typeof(RectTransform), typeof(Image), typeof(LayoutElement), typeof(CanvasGroup));
         go.transform.SetParent(parent, false);
         var img = go.GetComponent<Image>();
@@ -634,6 +641,42 @@ public class CanvasLessonPanel : MonoBehaviour
             label.text = ShortLabel(raw);
             label.alignment = TextAlignmentOptions.Center;
             img.color = new Color(0.93f, 0.95f, 1f, 1f);
+        }
+    }
+
+    /// <summary>Four short dashes — “what comes next?” blank inside the pattern row.</summary>
+    private static void CreatePatternBlankDash(Transform parent, float px, float alpha)
+    {
+        float w = Mathf.Max(px * 1.2f, 56f);
+        var go = new GameObject("BlankDash", typeof(RectTransform), typeof(HorizontalLayoutGroup), typeof(LayoutElement), typeof(CanvasGroup));
+        go.transform.SetParent(parent, false);
+        go.GetComponent<CanvasGroup>().alpha = alpha;
+
+        var hlg = go.GetComponent<HorizontalLayoutGroup>();
+        hlg.spacing = 5f;
+        hlg.childAlignment = TextAnchor.MiddleCenter;
+        hlg.childForceExpandWidth = false;
+        hlg.childForceExpandHeight = false;
+        hlg.padding = new RectOffset(4, 4, 0, 0);
+
+        var le = go.GetComponent<LayoutElement>();
+        le.preferredWidth = w;
+        le.preferredHeight = px;
+        le.minWidth = w;
+        le.minHeight = px;
+
+        for (int d = 0; d < 4; d++)
+        {
+            var dash = new GameObject("Dash", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
+            dash.transform.SetParent(go.transform, false);
+            var dimg = dash.GetComponent<Image>();
+            dimg.color = new Color(0.12f, 0.14f, 0.2f, 0.92f);
+            dimg.raycastTarget = false;
+            var dle = dash.GetComponent<LayoutElement>();
+            dle.preferredWidth = Mathf.Max(10f, px * 0.18f);
+            dle.preferredHeight = Mathf.Max(5f, px * 0.08f);
+            dle.minWidth = dle.preferredWidth;
+            dle.minHeight = dle.preferredHeight;
         }
     }
 
