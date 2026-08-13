@@ -38,6 +38,7 @@ public class CanvasLessonPanel : MonoBehaviour
     private string _loadingAudioUrl;
     private CanvasLessonData _current;
     private RectTransform _chunkCardRoot;
+    private RectTransform _patternShelf;
     private TextMeshProUGUI _patternLabel;
     private Coroutine _blinkRoutine;
     private readonly List<CanvasGroup> _blinkTargets = new List<CanvasGroup>();
@@ -104,6 +105,9 @@ public class CanvasLessonPanel : MonoBehaviour
         PopulateTokenRow(exampleChunkRow, lesson.exampleChunk, 56f, null, null);
 
         bool hasPattern = lesson.patternPreview != null && lesson.patternPreview.Count > 0;
+        EnsurePatternShelf();
+        if (_patternShelf != null)
+            _patternShelf.gameObject.SetActive(hasPattern);
         if (_patternLabel != null)
         {
             // Default: hide "PATTERN" — only show when teacher sets a non-empty label.
@@ -130,9 +134,20 @@ public class CanvasLessonPanel : MonoBehaviour
             var hlg = patternRow.GetComponent<HorizontalLayoutGroup>();
             if (hlg != null)
             {
-                hlg.spacing = 16f;
+                hlg.spacing = 10f;
                 hlg.childAlignment = TextAnchor.MiddleCenter;
-                hlg.padding = new RectOffset(8, 8, 4, 4);
+                hlg.padding = new RectOffset(4, 4, 2, 2);
+            }
+        }
+
+        if (_patternShelf != null)
+        {
+            var shelfLe = _patternShelf.GetComponent<LayoutElement>();
+            if (shelfLe != null)
+            {
+                float h = Mathf.Max(96f, patternPx + 44f);
+                shelfLe.minHeight = h;
+                shelfLe.preferredHeight = h;
             }
         }
 
@@ -339,7 +354,7 @@ public class CanvasLessonPanel : MonoBehaviour
         patternLabel.gameObject.SetActive(false);
         _patternLabel = patternLabel;
 
-        patternRow = CreateTokenRow("PatternPreviewRow", panelRoot);
+        EnsurePatternShelf();
 
         lessonAudioSource = gameObject.GetComponent<AudioSource>();
         if (lessonAudioSource == null)
@@ -364,6 +379,75 @@ public class CanvasLessonPanel : MonoBehaviour
         le.minHeight = 48f;
         go.SetActive(false);
         return go.GetComponent<RectTransform>();
+    }
+
+    /// <summary>
+    /// Rounded plate behind the pattern icons so they don't float over the prompt.
+    /// </summary>
+    private void EnsurePatternShelf()
+    {
+        if (panelRoot == null) return;
+
+        if (_patternShelf != null)
+        {
+            if (patternRow != null && patternRow.parent != _patternShelf)
+                patternRow.SetParent(_patternShelf, false);
+            return;
+        }
+
+        var shelfGo = new GameObject(
+            "PatternShelf",
+            typeof(RectTransform),
+            typeof(Image),
+            typeof(VerticalLayoutGroup),
+            typeof(LayoutElement));
+        shelfGo.transform.SetParent(panelRoot, false);
+        if (_patternLabel != null)
+            shelfGo.transform.SetSiblingIndex(_patternLabel.transform.GetSiblingIndex() + 1);
+
+        var border = shelfGo.GetComponent<Image>();
+        border.sprite = GetRoundedSprite();
+        border.type = Image.Type.Sliced;
+        border.color = new Color(0.55f, 0.62f, 0.82f, 1f);
+        border.raycastTarget = false;
+
+        var fill = new GameObject("ShelfFill", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
+        fill.transform.SetParent(shelfGo.transform, false);
+        var fillLe = fill.GetComponent<LayoutElement>();
+        fillLe.ignoreLayout = true;
+        var fillRt = fill.GetComponent<RectTransform>();
+        fillRt.anchorMin = Vector2.zero;
+        fillRt.anchorMax = Vector2.one;
+        fillRt.offsetMin = new Vector2(3f, 3f);
+        fillRt.offsetMax = new Vector2(-3f, -3f);
+        var fillImg = fill.GetComponent<Image>();
+        fillImg.sprite = GetRoundedSprite();
+        fillImg.type = Image.Type.Sliced;
+        fillImg.color = new Color(0.965f, 0.972f, 1f, 1f);
+        fillImg.raycastTarget = false;
+        fill.transform.SetAsFirstSibling();
+
+        var vlg = shelfGo.GetComponent<VerticalLayoutGroup>();
+        vlg.padding = new RectOffset(22, 22, 16, 16);
+        vlg.spacing = 0f;
+        vlg.childAlignment = TextAnchor.MiddleCenter;
+        vlg.childControlWidth = true;
+        vlg.childControlHeight = true;
+        vlg.childForceExpandWidth = true;
+        vlg.childForceExpandHeight = false;
+
+        var le = shelfGo.GetComponent<LayoutElement>();
+        le.minWidth = 520f;
+        le.preferredWidth = 680f;
+        le.minHeight = 96f;
+        le.preferredHeight = 96f;
+
+        _patternShelf = shelfGo.GetComponent<RectTransform>();
+
+        if (patternRow == null)
+            patternRow = CreateTokenRow("PatternPreviewRow", _patternShelf);
+        else
+            patternRow.SetParent(_patternShelf, false);
     }
 
     private static TextMeshProUGUI CreateTmp(string name, Transform parent, float size, FontStyles style, Color color)

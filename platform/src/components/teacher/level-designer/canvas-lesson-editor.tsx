@@ -382,7 +382,11 @@ function PatternPreviewRow({ lesson }: { lesson: CanvasLessonConfig }) {
     <div className="relative flex flex-col items-center gap-2">
       <motion.div
         layout
-        className="relative flex flex-wrap items-end justify-center gap-3 px-1 py-2"
+        className="relative flex flex-wrap items-end justify-center gap-3 rounded-[1.6rem] px-4 py-3"
+        style={{
+          background: "#F6F7FF",
+          boxShadow: "inset 0 0 0 3px #8D9AD1, 0 8px 20px -12px rgba(55,65,110,0.35)",
+        }}
       >
         {runs.map((run) => {
           const slice = tokens.slice(run.start, run.end);
