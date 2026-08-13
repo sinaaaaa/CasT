@@ -22,6 +22,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { EduSidebarNav, type ClassContextCard } from "@/components/edu/edu-sidebar-nav";
+import { SiteFooter } from "@/components/site-footer";
 import type { EduNavGroup } from "@/lib/edu-ui";
 
 const teacherNav: EduNavGroup[] = [
@@ -206,6 +207,7 @@ export function TeacherShell({
         >
           {children}
         </main>
+        {!immersive && <SiteFooter />}
       </div>
     </div>
   );

@@ -10,6 +10,7 @@ import { SparcButton } from "./sparc/sparc-button";
 import { SparcRobot } from "./sparc/sparc-robot";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SiteFooter } from "@/components/site-footer";
 
 export function StudentLoginForm() {
   const router = useRouter();
@@ -140,6 +141,7 @@ export function StudentLoginForm() {
           </div>
         </motion.div>
       </div>
+      <SiteFooter className="relative z-10" />
     </div>
   );
 }

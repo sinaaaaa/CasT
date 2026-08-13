@@ -19,6 +19,7 @@ import { SparcButton } from "./sparc/sparc-button";
 import { SparcLevelCard } from "./sparc/sparc-level-card";
 import { SparcProgressRing, SparcStatCard } from "./sparc/sparc-stat-card";
 import { SparcRobot } from "./sparc/sparc-robot";
+import { SiteFooter } from "@/components/site-footer";
 
 type HomeData = {
   student: { displayName: string; studentCode: string };
@@ -226,6 +227,7 @@ export function StudentDashboardHome() {
           <SparcActivityTimeline items={data.activity} />
         </section>
       </main>
+      <SiteFooter className="relative z-10" />
     </div>
   );
 }

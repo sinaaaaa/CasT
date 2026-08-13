@@ -16,6 +16,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { EduSidebarNav } from "@/components/edu/edu-sidebar-nav";
+import { SiteFooter } from "@/components/site-footer";
 import type { EduNavGroup } from "@/lib/edu-ui";
 
 const adminNav: EduNavGroup[] = [
@@ -116,6 +117,7 @@ export function AdminShell({
           </div>
         </header>
         <main className="mx-auto max-w-6xl p-4 sm:p-6 lg:p-8">{children}</main>
+        <SiteFooter />
       </div>
     </div>
   );

@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Play, Sparkles, X } from "lucide-react";
 import { FEATURE_CARDS, HOW_IT_WORKS_STEPS } from "@/lib/student-ui";
+import { SiteFooter } from "@/components/site-footer";
 import { SparcBackground } from "./sparc/sparc-background";
 import { SparcButton } from "./sparc/sparc-button";
 import { SparcFeatureCard } from "./sparc/sparc-feature-card";
@@ -209,21 +210,7 @@ export function StudentLandingPage() {
         )}
       </AnimatePresence>
 
-      <footer className="relative z-10 border-t border-indigo-100/60 px-4 py-5 text-center sm:px-6">
-        <p className="mx-auto max-w-3xl text-xs leading-relaxed text-slate-500 sm:text-sm">
-          Made with ❤️ by{" "}
-          <a
-            href="https://www.linkedin.com/in/sina-zandi"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-semibold text-indigo-700 underline-offset-2 transition-colors hover:text-indigo-500 hover:underline"
-          >
-            Sina Zandi
-          </a>
-          {" · "}
-          © {new Date().getFullYear()} Sina Zandi. All rights reserved.
-        </p>
-      </footer>
+      <SiteFooter className="relative z-10" />
     </div>
   );
 }

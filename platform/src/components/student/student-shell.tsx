@@ -7,6 +7,7 @@ import { History, Home, Layers, LogOut, Menu, Play, TrendingUp, X } from "lucide
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { SiteFooter } from "@/components/site-footer";
 
 const nav = [
   { href: "/play", label: "Play", icon: Play },
@@ -82,6 +83,7 @@ export function StudentShell({
           </div>
         </header>
         <main className="p-4 sm:p-6">{children}</main>
+        <SiteFooter />
       </div>
     </div>
   );
