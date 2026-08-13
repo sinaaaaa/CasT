@@ -236,7 +236,8 @@ public static class WebGLBuildScript
     }
 
     /// <summary>
-    /// Lets the parent /play page trigger Unity's canvas fullscreen via postMessage.
+    /// Parent /play page may post fullscreen messages. Never call Unity SetFullscreen
+    /// (denied inside iframes → fatal "Fullscreen request denied"). Just re-fit the 16:9 stage.
     /// </summary>
     private static void InjectFullscreenBridge(string outputDir)
     {
@@ -244,26 +245,47 @@ public static class WebGLBuildScript
         if (!File.Exists(indexPath))
             return;
 
-        const string marker = "sparc-fullscreen-bridge";
         var html = File.ReadAllText(indexPath);
-        if (html.Contains(marker))
-            return;
+
+        // Remove any prior bridge that called SetFullscreen (crashes in iframe embeds).
+        html = System.Text.RegularExpressions.Regex.Replace(
+            html,
+            @"<script>/\* sparc-fullscreen-bridge \*/[\s\S]*?</script>",
+            "");
 
         const string snippet =
             "<script>/* sparc-fullscreen-bridge */" +
             "window.addEventListener('message',function(e){" +
-            "var u=window.unityInstance;if(!u)return;" +
-            "if(e.data==='sparc-enter-fullscreen')u.SetFullscreen(1);" +
-            "if(e.data==='sparc-exit-fullscreen')u.SetFullscreen(0);});</script>";
+            "if(e.data!=='sparc-enter-fullscreen'&&e.data!=='sparc-exit-fullscreen')return;" +
+            "try{if(typeof fitUnityStage==='function')fitUnityStage();" +
+            "else{var a=document.querySelector('#unity-canvas');if(a){a.style.width='100%';a.style.height='100%';}}" +
+            "}catch(err){}});</script>";
 
         if (html.Contains("</body>"))
             html = html.Replace("</body>", snippet + "</body>");
         else
             html = html + snippet;
 
-        html = html.Replace(
-            "}).then((unityInstance) => {",
-            "}).then((unityInstance) => {window.unityInstance=unityInstance;");
+        if (!html.Contains("window.unityInstance=unityInstance"))
+        {
+            html = html.Replace(
+                "}).then((unityInstance) => {",
+                "}).then((unityInstance) => {window.unityInstance=unityInstance;");
+        }
+
+        // Soft-ignore fullscreen denial banners if Unity ever requests it itself.
+        if (!html.Contains("sparc-fullscreen-error-guard"))
+        {
+            const string guard =
+                "<script>/* sparc-fullscreen-error-guard */" +
+                "(function(){var orig=window.alert;window.alert=function(m){" +
+                "if(typeof m==='string'&&/Fullscreen request denied/i.test(m))return;" +
+                "return orig.apply(this,arguments);};})();</script>";
+            if (html.Contains("</head>"))
+                html = html.Replace("</head>", guard + "</head>");
+            else
+                html = guard + html;
+        }
 
         File.WriteAllText(indexPath, html);
     }

@@ -159,13 +159,11 @@ function isBlankToken(action: string) {
   return action.trim().toLowerCase() === "blank";
 }
 
-function BlankLineMark({ className }: { className?: string }) {
+function BlankLineMark({ className, height }: { className?: string; height?: number }) {
   return (
     <span
-      className={cn(
-        "inline-block h-1.5 w-10 shrink-0 rounded-full bg-slate-500/85",
-        className
-      )}
+      className={cn("inline-block shrink-0 rounded-full bg-slate-700/90", className)}
+      style={{ height: height ?? 6 }}
       aria-hidden
     />
   );
@@ -213,7 +211,7 @@ function TokenChip({
     >
       {showGrip && <GripVertical className="h-3.5 w-3.5 shrink-0 text-slate-400" />}
       {blank ? (
-        <BlankLineMark />
+        <BlankLineMark className="w-10" height={size === "sm" ? 5 : 6} />
       ) : iconPath ? (
         <Image src={iconPath} alt="" width={dim - 10} height={dim - 10} className="object-contain" />
       ) : (
@@ -370,16 +368,17 @@ function PatternTokenIcon({
   dimmed?: boolean;
 }) {
   if (isBlankToken(action)) {
+    const lineH = Math.max(7, Math.round(px * 0.12));
     return (
       <span
         className={cn(
-          "inline-flex items-center justify-center",
+          "relative inline-flex items-end justify-center",
           dimmed && "opacity-70"
         )}
-        style={{ width: Math.max(px * 0.9, 48), height: px }}
+        style={{ width: px, height: px, paddingBottom: px * 0.08 }}
         title="Blank — student fills this"
       >
-        <BlankLineMark className="w-[92%]" />
+        <BlankLineMark className="w-[84%]" height={lineH} />
       </span>
     );
   }
@@ -467,7 +466,7 @@ function PatternPreviewRow({ lesson }: { lesson: CanvasLessonConfig }) {
                   ? { duration: 1.8, repeat: Infinity, ease: [0.45, 0.05, 0.55, 0.95] }
                   : { type: "spring", stiffness: 380, damping: 24 }
               }
-              className="relative flex items-center gap-1.5 rounded-[1.4rem] px-3 py-2"
+              className="relative flex items-end gap-1.5 rounded-[1.4rem] px-3 py-2"
               style={{
                 background: emphasis.redBorder ? "#FFF7F0" : "#FFF9ED",
                 boxShadow: emphasis.redBorder

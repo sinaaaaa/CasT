@@ -152,6 +152,9 @@ public class CanvasLessonPanel : MonoBehaviour
                 hlg.childAlignment = TextAnchor.MiddleCenter;
                 hlg.padding = new RectOffset(2, 2, 2, 2);
                 hlg.childForceExpandWidth = false;
+                hlg.childForceExpandHeight = false;
+                hlg.childControlWidth = true;
+                hlg.childControlHeight = true;
             }
             var rowFitter = patternRow.GetComponent<ContentSizeFitter>();
             if (rowFitter != null)
@@ -350,11 +353,8 @@ public class CanvasLessonPanel : MonoBehaviour
 
     private float BlankSlotWidth(float tokenPx)
     {
-        if (blankLineSprite != null)
-            return Mathf.Max(blankLineWidth, tokenPx * 0.9f);
-        if (useBlankLineStyle)
-            return Mathf.Clamp(blankLineWidth, 36f, Mathf.Max(48f, tokenPx * 1.05f));
-        return Mathf.Max(tokenPx * 1.05f, 48f);
+        // Same footprint as arrow tokens so blanks scale and sit in the row evenly.
+        return tokenPx;
     }
 
     /// <summary>
@@ -821,29 +821,34 @@ public class CanvasLessonPanel : MonoBehaviour
     }
 
     /// <summary>
-    /// Pattern blank — same thin gray line (or custom line sprite) as yellow-strip blank slots.
+    /// Pattern blank — same cell size as an arrow, with a base line aligned to the arrow underline.
     /// </summary>
     private void CreatePatternBlankDash(Transform parent, float px, float alpha)
     {
-        float w = BlankSlotWidth(px);
+        float slot = Mathf.Max(36f, px);
         var go = new GameObject("BlankLine", typeof(RectTransform), typeof(LayoutElement), typeof(CanvasGroup));
         go.transform.SetParent(parent, false);
         go.GetComponent<CanvasGroup>().alpha = alpha;
 
         var le = go.GetComponent<LayoutElement>();
-        le.preferredWidth = w;
-        le.preferredHeight = px;
-        le.minWidth = w;
-        le.minHeight = px;
+        le.preferredWidth = slot;
+        le.preferredHeight = slot;
+        le.minWidth = slot;
+        le.minHeight = slot;
         le.flexibleWidth = 0f;
         le.flexibleHeight = 0f;
 
         var lineGo = new GameObject("Line", typeof(RectTransform), typeof(Image));
         lineGo.transform.SetParent(go.transform, false);
         var lineRt = lineGo.GetComponent<RectTransform>();
-        lineRt.anchorMin = new Vector2(0.5f, 0.5f);
-        lineRt.anchorMax = new Vector2(0.5f, 0.5f);
+        // Sit on the same baseline as the dark underline under action arrows.
+        lineRt.anchorMin = new Vector2(0.5f, 0f);
+        lineRt.anchorMax = new Vector2(0.5f, 0f);
         lineRt.pivot = new Vector2(0.5f, 0.5f);
+        lineRt.anchoredPosition = new Vector2(0f, slot * 0.14f);
+
+        float lineW = slot * 0.84f;
+        float lineH = Mathf.Clamp(slot * 0.12f, 7f, 16f);
 
         var img = lineGo.GetComponent<Image>();
         img.raycastTarget = false;
@@ -852,23 +857,27 @@ public class CanvasLessonPanel : MonoBehaviour
             img.sprite = blankLineSprite;
             img.preserveAspect = true;
             img.color = Color.white;
-            float h = Mathf.Max(blankLineHeight * 4f, px * 0.42f);
-            lineRt.sizeDelta = new Vector2(w, h);
+            lineH = Mathf.Max(lineH, slot * 0.2f);
         }
-        else if (useBlankLineStyle || blankSprite == null)
-        {
-            img.sprite = null;
-            img.color = blankLineColor;
-            float h = Mathf.Clamp(blankLineHeight, 4f, 12f);
-            lineRt.sizeDelta = new Vector2(Mathf.Max(28f, w * 0.92f), h);
-        }
-        else
+        else if (!useBlankLineStyle && blankSprite != null)
         {
             img.sprite = blankSprite;
             img.preserveAspect = true;
             img.color = Color.white;
-            lineRt.sizeDelta = new Vector2(w * 0.9f, px * 0.5f);
+            lineH = slot * 0.22f;
         }
+        else
+        {
+            img.sprite = null;
+            // Match the dark underline under arrow icons (slightly stronger than strip blanks).
+            img.color = new Color(
+                Mathf.Min(blankLineColor.r, 0.28f),
+                Mathf.Min(blankLineColor.g, 0.3f),
+                Mathf.Min(blankLineColor.b, 0.34f),
+                0.95f);
+        }
+
+        lineRt.sizeDelta = new Vector2(lineW, lineH);
     }
 
     private static Sprite GetRoundedSprite()

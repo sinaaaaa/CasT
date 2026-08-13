@@ -36,7 +36,7 @@ function buildUnityUrl(baseUrl: string, config: StudentGameConfig): string {
   url.searchParams.set("token", config.sessionToken);
   url.searchParams.set("apiBaseUrl", config.apiBaseUrl);
   // Bust stale WebGL index/CSS caches when the embed layout changes.
-  url.searchParams.set("v", "aspectfit-16x9");
+  url.searchParams.set("v", "aspectfit-nofullscreen-1");
   if (config.gameApiKey) {
     url.searchParams.set("gameApiKey", config.gameApiKey);
   }
@@ -56,10 +56,6 @@ function isDocumentFullscreen(): boolean {
 function isDesktopPointer(): boolean {
   if (typeof window === "undefined") return true;
   return window.matchMedia("(pointer: fine)").matches;
-}
-
-function postUnityFullscreen(iframe: HTMLIFrameElement | null, enter: boolean) {
-  iframe?.contentWindow?.postMessage(enter ? "sparc-enter-fullscreen" : "sparc-exit-fullscreen", "*");
 }
 
 export function StudentPlayClient({
@@ -95,11 +91,7 @@ export function StudentPlayClient({
   }, []);
 
   useEffect(() => {
-    const syncFullscreen = () => {
-      const active = isDocumentFullscreen();
-      setIsFullscreen(active);
-      if (!active) postUnityFullscreen(iframeRef.current, false);
-    };
+    const syncFullscreen = () => setIsFullscreen(isDocumentFullscreen());
     document.addEventListener("fullscreenchange", syncFullscreen);
     document.addEventListener("webkitfullscreenchange", syncFullscreen);
     return () => {
@@ -113,21 +105,20 @@ export function StudentPlayClient({
     if (!iframe) return;
 
     try {
+      // Browser fullscreen on the iframe only — never call Unity SetFullscreen
+      // (that throws "Fullscreen request denied" inside an iframe and crashes the player).
       if (isDocumentFullscreen()) {
-        postUnityFullscreen(iframe, false);
         if (document.exitFullscreen) await document.exitFullscreen();
         else if (document.webkitExitFullscreen) await document.webkitExitFullscreen();
         return;
       }
-
-      postUnityFullscreen(iframe, true);
 
       const target = iframe as HTMLElement & { webkitRequestFullscreen?: () => Promise<void> };
       if (target.requestFullscreen) await target.requestFullscreen();
       else if (target.webkitRequestFullscreen) await target.webkitRequestFullscreen();
       else if (gameShellRef.current?.requestFullscreen) await gameShellRef.current.requestFullscreen();
     } catch {
-      // Fullscreen API is limited on some browsers — Unity may still expand via postMessage.
+      // Fullscreen API is limited on some browsers; aspect-fit still keeps layout correct.
     }
   }, []);
 

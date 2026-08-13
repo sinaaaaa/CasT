@@ -10,6 +10,7 @@
     <style>/* sparc-aspect-fit */html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#000;display:flex;align-items:center;justify-content:center;}#unity-container{position:relative!important;left:auto!important;top:auto!important;transform:none!important;margin:0;line-height:0;}#unity-canvas{display:block;}#unity-footer{display:none!important;}canvas,#unity-container,#unity-canvas{touch-action:none;-ms-touch-action:none;}</style>
     <script>/* StudentGameConfig bridge */try{if(window.parent&&window.parent.StudentGameConfig&&!window.StudentGameConfig)window.StudentGameConfig=window.parent.StudentGameConfig;}catch(e){}</script>
     <script>/* sparc-webgl-guards */(function(){try{var o=screen.orientation;if(!o)screen.orientation=o={};if(typeof o.lock!=='function')o.lock=function(){return Promise.resolve();};}catch(e){}})();</script>
+    <script>/* sparc-fullscreen-error-guard */(function(){var orig=window.alert;window.alert=function(m){if(typeof m==='string'&&/Fullscreen request denied/i.test(m))return;return orig.apply(this,arguments);};})();</script>
   </head>
   <body>
     <div id="unity-container" class="unity-desktop">
@@ -36,8 +37,6 @@
       var fullscreenButton = document.querySelector("#unity-fullscreen-button");
       var warningBanner = document.querySelector("#unity-warning");
 
-      // Design resolution — keep this aspect in the small iframe AND in browser fullscreen
-      // so UI / board / strip stay in the same relative positions (uniform scale only).
       var DESIGN_W = 1920;
       var DESIGN_H = 1080;
       var DESIGN_ASPECT = DESIGN_W / DESIGN_H;
@@ -62,6 +61,8 @@
       }
 
       function unityShowBanner(msg, type) {
+        if (type === 'error' && typeof msg === 'string' && /Fullscreen request denied/i.test(msg))
+          return;
         function updateBannerVisibility() {
           warningBanner.style.display = warningBanner.children.length ? 'block' : 'none';
         }
@@ -82,9 +83,9 @@
       var buildUrl = "Build";
       var loaderUrl = buildUrl + "/unity.loader.js";
       var config = {
-        dataUrl: buildUrl + "/78aa2ea54fddd640ac7930bb33311817.data",
+        dataUrl: buildUrl + "/e2fb3ba529b7720db770a3f0196dca38.data",
         frameworkUrl: buildUrl + "/1312a2f7b6c68cbc00bf8ce4e28ab199.js",
-        codeUrl: buildUrl + "/1430edfa703c1ac7a475cda64a62d101.wasm",
+        codeUrl: buildUrl + "/32a25834978de4d6e9d83a29b5a3c595.wasm",
         streamingAssetsUrl: "StreamingAssets",
         companyName: "DefaultCompany",
         productName: "coding-block",
@@ -114,12 +115,12 @@
                 window.unityInstance = unityInstance;
                 loadingBar.style.display = "none";
                 fitUnityStage();
+                // Never call Unity SetFullscreen inside an iframe — browsers deny it and Unity crashes.
                 if (fullscreenButton) {
-                  fullscreenButton.onclick = () => {
-                    unityInstance.SetFullscreen(1);
-                  };
+                  fullscreenButton.onclick = function () { fitUnityStage(); };
                 }
               }).catch((message) => {
+                if (typeof message === 'string' && /Fullscreen request denied/i.test(message)) return;
                 alert(message);
               });
             };
@@ -131,6 +132,6 @@
       }, { passive: false });
 
     </script>
-    <script>/* sparc-fullscreen-bridge */window.addEventListener('message',function(e){var u=window.unityInstance;if(!u)return;if(e.data==='sparc-enter-fullscreen')u.SetFullscreen(1);if(e.data==='sparc-exit-fullscreen')u.SetFullscreen(0);});</script>
+    <script>/* sparc-fullscreen-bridge */window.addEventListener('message',function(e){if(e.data!=='sparc-enter-fullscreen'&&e.data!=='sparc-exit-fullscreen')return;try{if(typeof fitUnityStage==='function')fitUnityStage();}catch(err){}});</script>
   </body>
 </html>
