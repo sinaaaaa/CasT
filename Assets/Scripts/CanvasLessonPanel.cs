@@ -792,7 +792,8 @@ public class CanvasLessonPanel : MonoBehaviour
         string normalized = NormalizePatternToken(raw);
         if (normalized == "blank")
         {
-            CreatePatternBlankDash(parent, px, alpha);
+            // Keep blanks fully opaque so they read as strong as arrow underlines.
+            CreatePatternBlankDash(parent, px, 1f);
             return;
         }
 
@@ -821,11 +822,11 @@ public class CanvasLessonPanel : MonoBehaviour
     }
 
     /// <summary>
-    /// Pattern blank — same cell size as an arrow, with a base line aligned to the arrow underline.
+    /// Pattern blank — same cell as an arrow; thick base bar matching the arrow underline.
     /// </summary>
     private void CreatePatternBlankDash(Transform parent, float px, float alpha)
     {
-        float slot = Mathf.Max(36f, px);
+        float slot = Mathf.Max(40f, px);
         var go = new GameObject("BlankLine", typeof(RectTransform), typeof(LayoutElement), typeof(CanvasGroup));
         go.transform.SetParent(parent, false);
         go.GetComponent<CanvasGroup>().alpha = alpha;
@@ -841,14 +842,15 @@ public class CanvasLessonPanel : MonoBehaviour
         var lineGo = new GameObject("Line", typeof(RectTransform), typeof(Image));
         lineGo.transform.SetParent(go.transform, false);
         var lineRt = lineGo.GetComponent<RectTransform>();
-        // Sit on the same baseline as the dark underline under action arrows.
+        // Same baseline as the dark bar under action-arrow sprites.
         lineRt.anchorMin = new Vector2(0.5f, 0f);
         lineRt.anchorMax = new Vector2(0.5f, 0f);
         lineRt.pivot = new Vector2(0.5f, 0.5f);
-        lineRt.anchoredPosition = new Vector2(0f, slot * 0.14f);
+        lineRt.anchoredPosition = new Vector2(0f, slot * 0.16f);
 
-        float lineW = slot * 0.84f;
-        float lineH = Mathf.Clamp(slot * 0.12f, 7f, 16f);
+        // Match underline weight under the arrow icons (wide + thick).
+        float lineW = slot * 0.92f;
+        float lineH = Mathf.Clamp(slot * 0.2f, 12f, 22f);
 
         var img = lineGo.GetComponent<Image>();
         img.raycastTarget = false;
@@ -857,24 +859,16 @@ public class CanvasLessonPanel : MonoBehaviour
             img.sprite = blankLineSprite;
             img.preserveAspect = true;
             img.color = Color.white;
-            lineH = Mathf.Max(lineH, slot * 0.2f);
-        }
-        else if (!useBlankLineStyle && blankSprite != null)
-        {
-            img.sprite = blankSprite;
-            img.preserveAspect = true;
-            img.color = Color.white;
-            lineH = slot * 0.22f;
+            lineH = Mathf.Max(lineH, slot * 0.22f);
+            lineW = slot * 0.94f;
         }
         else
         {
-            img.sprite = null;
-            // Match the dark underline under arrow icons (slightly stronger than strip blanks).
-            img.color = new Color(
-                Mathf.Min(blankLineColor.r, 0.28f),
-                Mathf.Min(blankLineColor.g, 0.3f),
-                Mathf.Min(blankLineColor.b, 0.34f),
-                0.95f);
+            img.sprite = GetRoundedSprite();
+            img.type = Image.Type.Sliced;
+            img.preserveAspect = false;
+            // Near-black bar like the underlines baked into the arrow art.
+            img.color = new Color(0.18f, 0.2f, 0.24f, 0.98f);
         }
 
         lineRt.sizeDelta = new Vector2(lineW, lineH);

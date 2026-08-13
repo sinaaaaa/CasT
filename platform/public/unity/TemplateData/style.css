@@ -10,7 +10,6 @@ html, body {
   justify-content: center;
 }
 
-/* 16:9 game stage centered in the iframe — same layout as fullscreen, scaled down. */
 #unity-container {
   position: relative !important;
   left: auto !important;
@@ -54,7 +53,6 @@ html, body {
   background: url('progress-bar-full-dark.png') no-repeat center;
 }
 
-/* Parent /play page owns chrome — hide Unity's footer strip. */
 #unity-footer {
   display: none !important;
 }

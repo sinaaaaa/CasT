@@ -83,9 +83,9 @@
       var buildUrl = "Build";
       var loaderUrl = buildUrl + "/unity.loader.js";
       var config = {
-        dataUrl: buildUrl + "/e2fb3ba529b7720db770a3f0196dca38.data",
+        dataUrl: buildUrl + "/dab947c94fc8a920b09445f7dedd8c9d.data",
         frameworkUrl: buildUrl + "/1312a2f7b6c68cbc00bf8ce4e28ab199.js",
-        codeUrl: buildUrl + "/32a25834978de4d6e9d83a29b5a3c595.wasm",
+        codeUrl: buildUrl + "/3de7603a93295b34ec441552ad24ffba.wasm",
         streamingAssetsUrl: "StreamingAssets",
         companyName: "DefaultCompany",
         productName: "coding-block",
@@ -115,7 +115,6 @@
                 window.unityInstance = unityInstance;
                 loadingBar.style.display = "none";
                 fitUnityStage();
-                // Never call Unity SetFullscreen inside an iframe — browsers deny it and Unity crashes.
                 if (fullscreenButton) {
                   fullscreenButton.onclick = function () { fitUnityStage(); };
                 }
