@@ -122,7 +122,7 @@ public class CanvasLessonPanel : MonoBehaviour
         var highlightUnit = ResolveEmphasisHighlightChunk(emphasis, lesson.exampleChunk);
         var highlighted = ResolveHighlightedPatternIndices(lesson.patternPreview, highlightUnit, emphasis);
         int patternCount = lesson.patternPreview != null ? lesson.patternPreview.Count : 0;
-        float patternPx = FitTokenPx(basePx, patternCount, 680f);
+        float patternPx = FitTokenPx(basePx, patternCount, 860f);
         StopBlink();
         PopulateTokenRow(patternRow, lesson.patternPreview, patternPx, highlighted, emphasis);
 
@@ -145,9 +145,27 @@ public class CanvasLessonPanel : MonoBehaviour
             var shelfLe = _patternShelf.GetComponent<LayoutElement>();
             if (shelfLe != null)
             {
-                float h = Mathf.Max(96f, patternPx + 44f);
+                float h = Mathf.Max(120f, patternPx + 56f);
                 shelfLe.minHeight = h;
                 shelfLe.preferredHeight = h;
+                shelfLe.minWidth = 720f;
+                shelfLe.preferredWidth = 900f;
+            }
+        }
+
+        if (panelRoot != null)
+        {
+            var panelLe = panelRoot.GetComponent<LayoutElement>();
+            if (panelLe != null)
+            {
+                panelLe.minWidth = 720f;
+                panelLe.preferredWidth = 920f;
+            }
+            if (promptText != null)
+            {
+                promptText.fontSize = 40f;
+                var promptLe = promptText.GetComponent<LayoutElement>();
+                if (promptLe != null) promptLe.preferredWidth = 860f;
             }
         }
 
@@ -195,9 +213,9 @@ public class CanvasLessonPanel : MonoBehaviour
     private static float FitTokenPx(float desiredPx, int count, float maxRowWidth)
     {
         if (count <= 0) return desiredPx;
-        const float spacing = 10f;
+        const float spacing = 12f;
         float fitted = (maxRowWidth - (count - 1) * spacing) / count;
-        return Mathf.Clamp(fitted, 42f, desiredPx);
+        return Mathf.Clamp(fitted, 52f, desiredPx);
     }
 
     /// <summary>
@@ -267,7 +285,7 @@ public class CanvasLessonPanel : MonoBehaviour
         panelRoot.anchorMin = new Vector2(0.5f, 0.5f);
         panelRoot.anchorMax = new Vector2(0.5f, 0.5f);
         panelRoot.pivot = new Vector2(0.5f, 0.5f);
-        panelRoot.sizeDelta = new Vector2(680f, 280f);
+        panelRoot.sizeDelta = new Vector2(920f, 360f);
         panelRoot.anchoredPosition = new Vector2(0f, 48f);
 
         var bg = rootGo.GetComponent<Image>();
@@ -281,11 +299,11 @@ public class CanvasLessonPanel : MonoBehaviour
         // Soft outline card feel
         var outline = rootGo.AddComponent<Outline>();
         outline.effectColor = new Color(0.78f, 0.82f, 0.92f, 0.9f);
-        outline.effectDistance = new Vector2(2f, -2f);
+        outline.effectDistance = new Vector2(3f, -3f);
 
         var vlg = rootGo.GetComponent<VerticalLayoutGroup>();
-        vlg.padding = new RectOffset(36, 36, 28, 28);
-        vlg.spacing = 18f;
+        vlg.padding = new RectOffset(44, 44, 36, 36);
+        vlg.spacing = 22f;
         vlg.childAlignment = TextAnchor.UpperCenter;
         vlg.childControlHeight = true;
         vlg.childControlWidth = true;
@@ -296,14 +314,14 @@ public class CanvasLessonPanel : MonoBehaviour
         fitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
         fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
         var panelLe = rootGo.AddComponent<LayoutElement>();
-        panelLe.minWidth = 560f;
-        panelLe.preferredWidth = 680f;
+        panelLe.minWidth = 720f;
+        panelLe.preferredWidth = 920f;
 
-        promptText = CreateTmp("Prompt", panelRoot, 32, FontStyles.Bold, new Color(0.12f, 0.14f, 0.22f));
+        promptText = CreateTmp("Prompt", panelRoot, 40, FontStyles.Bold, new Color(0.12f, 0.14f, 0.22f));
         promptText.alignment = TextAlignmentOptions.Center;
-        promptText.lineSpacing = -8f;
+        promptText.lineSpacing = -6f;
         var promptLe = promptText.GetComponent<LayoutElement>();
-        if (promptLe != null) promptLe.preferredWidth = 640f;
+        if (promptLe != null) promptLe.preferredWidth = 860f;
 
         var imgGo = new GameObject("LessonImage", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
         imgGo.transform.SetParent(panelRoot, false);
@@ -428,7 +446,7 @@ public class CanvasLessonPanel : MonoBehaviour
         fill.transform.SetAsFirstSibling();
 
         var vlg = shelfGo.GetComponent<VerticalLayoutGroup>();
-        vlg.padding = new RectOffset(22, 22, 16, 16);
+        vlg.padding = new RectOffset(28, 28, 20, 20);
         vlg.spacing = 0f;
         vlg.childAlignment = TextAnchor.MiddleCenter;
         vlg.childControlWidth = true;
@@ -437,10 +455,10 @@ public class CanvasLessonPanel : MonoBehaviour
         vlg.childForceExpandHeight = false;
 
         var le = shelfGo.GetComponent<LayoutElement>();
-        le.minWidth = 520f;
-        le.preferredWidth = 680f;
-        le.minHeight = 96f;
-        le.preferredHeight = 96f;
+        le.minWidth = 720f;
+        le.preferredWidth = 900f;
+        le.minHeight = 120f;
+        le.preferredHeight = 120f;
 
         _patternShelf = shelfGo.GetComponent<RectTransform>();
 
@@ -740,9 +758,9 @@ public class CanvasLessonPanel : MonoBehaviour
 
     private static float ResolvePatternTokenPx(string scale)
     {
-        if (string.Equals(scale, "xlarge", StringComparison.OrdinalIgnoreCase)) return 96f;
-        if (string.Equals(scale, "large", StringComparison.OrdinalIgnoreCase)) return 80f;
-        return 64f;
+        if (string.Equals(scale, "xlarge", StringComparison.OrdinalIgnoreCase)) return 110f;
+        if (string.Equals(scale, "large", StringComparison.OrdinalIgnoreCase)) return 92f;
+        return 72f;
     }
 
     private static string NormalizePatternToken(string t)

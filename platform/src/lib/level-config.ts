@@ -172,11 +172,11 @@ export function resolveHighlightedPatternIndices(
 export function resolveCanvasPatternTokenPx(scale?: CanvasPatternEmphasis["scale"]): number {
   switch (scale) {
     case "xlarge":
-      return 96;
+      return 110;
     case "large":
-      return 80;
+      return 92;
     default:
-      return 64;
+      return 72;
   }
 }
 
