@@ -23,6 +23,40 @@ export const blankDataSchema = z.object({
 /** Canvas (strip-only) lesson content shown on the white board + yellow-strip seeding. */
 export const canvasStripModeSchema = z.enum(["EMPTY", "BLANKS", "SEED_PROGRAM"]);
 
+/** Overall size of pattern icons on the white board. */
+export const canvasPatternScaleSchema = z.enum(["normal", "large", "xlarge"]);
+
+/**
+ * Which matching chunk occurrence(s) inside the full pattern get emphasis effects.
+ * Example: pattern F·L·F·L with chunk F·L → "first" highlights indices 0–1.
+ */
+export const canvasHighlightScopeSchema = z.enum(["none", "first", "all"]);
+
+export const canvasPatternEmphasisSchema = z.object({
+  scale: canvasPatternScaleSchema.default("large"),
+  highlightScope: canvasHighlightScopeSchema.default("first"),
+  /**
+   * The repeating unit to find inside patternPreview (independent of exampleChunk).
+   * Example: pattern F·L·F·L·F·L → highlightChunk F·L.
+   */
+  highlightChunk: z.array(z.string()).optional(),
+  /** Combinable — teachers can pick one or several. */
+  bigger: z.boolean().default(true),
+  redBorder: z.boolean().default(false),
+  blink: z.boolean().default(false),
+});
+
+export type CanvasPatternEmphasis = z.infer<typeof canvasPatternEmphasisSchema>;
+
+export const DEFAULT_CANVAS_PATTERN_EMPHASIS: CanvasPatternEmphasis = {
+  scale: "large",
+  highlightScope: "first",
+  highlightChunk: [],
+  bigger: true,
+  redBorder: false,
+  blink: false,
+};
+
 export const canvasLessonSchema = z.object({
   stripMode: canvasStripModeSchema.default("EMPTY"),
   /** Primary instruction shown on the Unity white canvas. */
@@ -44,6 +78,8 @@ export const canvasLessonSchema = z.object({
    * (no "PATTERN" word by default). Non-empty → show that text.
    */
   patternLabel: z.string().optional(),
+  /** How the pattern row looks for teaching (size + chunk emphasis). */
+  patternEmphasis: canvasPatternEmphasisSchema.optional(),
   /** For BLANKS: number of underscore slots students fill by drag. */
   blankSlotCount: z.number().int().min(1).max(20).optional(),
 });
@@ -57,6 +93,7 @@ export const DEFAULT_CANVAS_LESSON: CanvasLessonConfig = {
   blankSlotCount: 4,
   chunkLabel: "CHUNK",
   patternLabel: "",
+  patternEmphasis: { ...DEFAULT_CANVAS_PATTERN_EMPHASIS },
 };
 
 /** Assessment items count toward reports; Intro items are practice only. */
@@ -71,6 +108,93 @@ export function resolveCanvasSectionLabel(
   if (configured === undefined) return fallbackWhenOmitted;
   const t = configured.trim();
   return t.length > 0 ? t : null;
+}
+
+function normalizePatternToken(t: string): string {
+  return t.trim().toLowerCase().replace(/_/g, " ");
+}
+
+/** All [start, end) ranges where `chunk` appears contiguously inside `pattern`. */
+export function findChunkMatchRanges(
+  pattern: string[] | undefined,
+  chunk: string[] | undefined
+): { start: number; end: number }[] {
+  const p = (pattern ?? []).map(normalizePatternToken).filter(Boolean);
+  const c = (chunk ?? []).map(normalizePatternToken).filter(Boolean);
+  if (!p.length || !c.length || c.length > p.length) return [];
+  const ranges: { start: number; end: number }[] = [];
+  for (let i = 0; i <= p.length - c.length; i++) {
+    let ok = true;
+    for (let j = 0; j < c.length; j++) {
+      if (p[i + j] !== c[j]) {
+        ok = false;
+        break;
+      }
+    }
+    if (ok) ranges.push({ start: i, end: i + c.length });
+  }
+  return ranges;
+}
+
+/**
+ * Unit to emphasize inside the full pattern.
+ * Prefers patternEmphasis.highlightChunk; falls back to exampleChunk for older levels.
+ */
+export function resolveEmphasisHighlightChunk(
+  emphasis?: CanvasPatternEmphasis | null,
+  fallbackExampleChunk?: string[] | null
+): string[] | undefined {
+  const dedicated = emphasis?.highlightChunk;
+  if (dedicated && dedicated.length > 0) return dedicated;
+  if (fallbackExampleChunk && fallbackExampleChunk.length > 0) return fallbackExampleChunk;
+  return undefined;
+}
+
+/** Pattern token indices that should receive emphasis effects. */
+export function resolveHighlightedPatternIndices(
+  pattern: string[] | undefined,
+  chunk: string[] | undefined,
+  emphasis?: CanvasPatternEmphasis | null
+): Set<number> {
+  const scope = emphasis?.highlightScope ?? "first";
+  const out = new Set<number>();
+  if (scope === "none") return out;
+  const unit = resolveEmphasisHighlightChunk(emphasis, chunk);
+  const ranges = findChunkMatchRanges(pattern, unit);
+  if (!ranges.length) return out;
+  const selected = scope === "all" ? ranges : [ranges[0]!];
+  for (const r of selected) {
+    for (let i = r.start; i < r.end; i++) out.add(i);
+  }
+  return out;
+}
+
+export function resolveCanvasPatternTokenPx(scale?: CanvasPatternEmphasis["scale"]): number {
+  switch (scale) {
+    case "xlarge":
+      return 96;
+    case "large":
+      return 80;
+    default:
+      return 64;
+  }
+}
+
+/** Consecutive highlighted index runs — used to wrap a repeating unit as one visual group. */
+export function contiguousHighlightRuns(
+  tokenCount: number,
+  highlighted: Set<number>
+): { start: number; end: number; hot: boolean }[] {
+  const runs: { start: number; end: number; hot: boolean }[] = [];
+  let i = 0;
+  while (i < tokenCount) {
+    const hot = highlighted.has(i);
+    let j = i + 1;
+    while (j < tokenCount && highlighted.has(j) === hot) j++;
+    runs.push({ start: i, end: j, hot });
+    i = j;
+  }
+  return runs;
 }
 
 export const layoutModeSchema = z.enum(["GRID", "NUMBER_LINE", "CANVAS"]).default("GRID");

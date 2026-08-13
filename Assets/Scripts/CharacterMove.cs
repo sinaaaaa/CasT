@@ -295,6 +295,23 @@ public class CanvasLessonData
     public string chunkLabel;
     /// <summary>Null/omit or empty → hide. Non-empty → show that label (no default "PATTERN").</summary>
     public string patternLabel;
+    /// <summary>Pattern size + chunk highlight (bigger / red border / blink).</summary>
+    public CanvasPatternEmphasisData patternEmphasis = new CanvasPatternEmphasisData();
+}
+
+/// <summary>How pattern tokens are sized and which chunk matches get visual emphasis.</summary>
+[System.Serializable]
+public class CanvasPatternEmphasisData
+{
+    /// <summary>normal | large | xlarge</summary>
+    public string scale = "large";
+    /// <summary>none | first | all</summary>
+    public string highlightScope = "first";
+    /// <summary>Unit to find inside patternPreview (e.g. F,L inside F,L,F,L,F,L).</summary>
+    public List<string> highlightChunk = new List<string>();
+    public bool bigger = true;
+    public bool redBorder = false;
+    public bool blink = false;
 }
 
 /// <summary>Top-right text/image hint â€” used for levels and intro steps.</summary>

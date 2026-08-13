@@ -39,6 +39,11 @@ public class CanvasLessonPanel : MonoBehaviour
     private CanvasLessonData _current;
     private RectTransform _chunkCardRoot;
     private TextMeshProUGUI _patternLabel;
+    private Coroutine _blinkRoutine;
+    private readonly List<CanvasGroup> _blinkTargets = new List<CanvasGroup>();
+    private readonly List<RectTransform> _pulseTargets = new List<RectTransform>();
+    private readonly List<Image> _pulseBorderImages = new List<Image>();
+    private static Sprite _roundedSprite;
     private static readonly Dictionary<string, Sprite> UrlSpriteCache = new Dictionary<string, Sprite>();
     private static readonly Dictionary<string, AudioClip> UrlAudioClipCache = new Dictionary<string, AudioClip>();
 
@@ -92,7 +97,7 @@ public class CanvasLessonPanel : MonoBehaviour
             exampleChunkLabel.gameObject.SetActive(showChunkLabel);
             if (showChunkLabel) exampleChunkLabel.text = chunkText;
         }
-        PopulateTokenRow(exampleChunkRow, lesson.exampleChunk);
+        PopulateTokenRow(exampleChunkRow, lesson.exampleChunk, 56f, null, null);
 
         bool hasPattern = lesson.patternPreview != null && lesson.patternPreview.Count > 0;
         if (_patternLabel != null)
@@ -103,7 +108,26 @@ public class CanvasLessonPanel : MonoBehaviour
             _patternLabel.gameObject.SetActive(showPatternLabel);
             if (showPatternLabel) _patternLabel.text = patternText;
         }
-        PopulateTokenRow(patternRow, lesson.patternPreview);
+
+        var emphasis = lesson.patternEmphasis ?? new CanvasPatternEmphasisData();
+        float basePx = ResolvePatternTokenPx(emphasis.scale);
+        var highlightUnit = ResolveEmphasisHighlightChunk(emphasis, lesson.exampleChunk);
+        var highlighted = ResolveHighlightedPatternIndices(lesson.patternPreview, highlightUnit, emphasis);
+        StopBlink();
+        PopulateTokenRow(patternRow, lesson.patternPreview, basePx, highlighted, emphasis);
+
+        if (patternRow != null)
+        {
+            var rowLe = patternRow.GetComponent<LayoutElement>();
+            if (rowLe != null)
+                rowLe.minHeight = Mathf.Max(56f, basePx * (emphasis.bigger && highlighted.Count > 0 ? 1.45f : 1.15f));
+            var hlg = patternRow.GetComponent<HorizontalLayoutGroup>();
+            if (hlg != null)
+            {
+                hlg.spacing = 14f;
+                hlg.childAlignment = TextAnchor.MiddleCenter;
+            }
+        }
     }
 
     /// <summary>
@@ -120,6 +144,7 @@ public class CanvasLessonPanel : MonoBehaviour
     public void Hide()
     {
         StopAudio();
+        StopBlink();
         if (_imageLoadRoutine != null)
         {
             StopCoroutine(_imageLoadRoutine);
@@ -298,45 +323,344 @@ public class CanvasLessonPanel : MonoBehaviour
         return tmp;
     }
 
-    private void PopulateTokenRow(RectTransform row, List<string> tokens)
+    private static readonly Color EmphasisCoral = new Color(0.886f, 0.294f, 0.227f, 1f);
+    private static readonly Color EmphasisCream = new Color(1f, 0.969f, 0.941f, 1f);
+    private static readonly Color EmphasisAmber = new Color(0.910f, 0.722f, 0.290f, 1f);
+    private static readonly Color EmphasisAmberFill = new Color(1f, 0.976f, 0.929f, 1f);
+
+    private void PopulateTokenRow(
+        RectTransform row,
+        List<string> tokens,
+        float basePx,
+        HashSet<int> highlighted,
+        CanvasPatternEmphasisData emphasis)
     {
         if (row == null) return;
-        for (int i = row.childCount - 1; i >= 0; i--)
-            Destroy(row.GetChild(i).gameObject);
+        for (int c = row.childCount - 1; c >= 0; c--)
+            Destroy(row.GetChild(c).gameObject);
 
         bool has = tokens != null && tokens.Count > 0;
         row.gameObject.SetActive(has);
         if (!has) return;
 
-        foreach (var raw in tokens)
-        {
-            if (string.IsNullOrWhiteSpace(raw)) continue;
-            var go = new GameObject("Token", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
-            go.transform.SetParent(row, false);
-            var img = go.GetComponent<Image>();
-            img.sprite = SpriteForToken(raw);
-            img.preserveAspect = true;
-            img.color = Color.white;
-            var le = go.GetComponent<LayoutElement>();
-            le.preferredWidth = 64f;
-            le.preferredHeight = 64f;
-            le.minWidth = 64f;
-            le.minHeight = 64f;
+        bool applyEmphasis = highlighted != null && emphasis != null && highlighted.Count > 0;
+        float hotPx = applyEmphasis && emphasis.bigger ? basePx * 1.22f : basePx;
 
-            // Soft chip background when using a sprite
-            if (img.sprite != null)
+        int i = 0;
+        while (i < tokens.Count)
+        {
+            if (string.IsNullOrWhiteSpace(tokens[i]))
             {
-                // Keep sprite; add subtle rounded plate behind via color tint
-                img.color = Color.white;
+                i++;
+                continue;
             }
-            else
+
+            bool hot = applyEmphasis && highlighted.Contains(i);
+            if (!hot)
             {
-                var label = CreateTmp("TokLabel", go.transform, 12, FontStyles.Bold, new Color(0.2f, 0.2f, 0.3f));
-                label.text = ShortLabel(raw);
-                label.alignment = TextAlignmentOptions.Center;
-                img.color = new Color(0.93f, 0.95f, 1f, 1f);
+                CreatePatternToken(row, tokens[i], basePx, applyEmphasis ? 0.72f : 1f);
+                i++;
+                continue;
+            }
+
+            int end = i + 1;
+            while (end < tokens.Count && highlighted.Contains(end))
+                end++;
+
+            Transform group = CreateHighlightUnit(row, emphasis);
+            for (int k = i; k < end; k++)
+            {
+                if (string.IsNullOrWhiteSpace(tokens[k])) continue;
+                CreatePatternToken(group, tokens[k], hotPx, 1f);
+            }
+            i = end;
+        }
+
+        if (applyEmphasis && emphasis.blink && _blinkTargets.Count > 0)
+            RestartBlink();
+    }
+
+    private Transform CreateHighlightUnit(Transform parent, CanvasPatternEmphasisData emphasis)
+    {
+        bool red = emphasis.redBorder;
+        var go = new GameObject(
+            "HighlightUnit",
+            typeof(RectTransform),
+            typeof(Image),
+            typeof(HorizontalLayoutGroup),
+            typeof(ContentSizeFitter),
+            typeof(LayoutElement),
+            typeof(CanvasGroup));
+        go.transform.SetParent(parent, false);
+
+        var border = go.GetComponent<Image>();
+        border.sprite = GetRoundedSprite();
+        border.type = Image.Type.Sliced;
+        border.color = red ? EmphasisCoral : EmphasisAmber;
+        border.raycastTarget = false;
+
+        var fill = new GameObject("Fill", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
+        fill.transform.SetParent(go.transform, false);
+        var fillLe = fill.GetComponent<LayoutElement>();
+        fillLe.ignoreLayout = true;
+        var fillRt = fill.GetComponent<RectTransform>();
+        fillRt.anchorMin = Vector2.zero;
+        fillRt.anchorMax = Vector2.one;
+        float inset = red ? 3.5f : 2.5f;
+        fillRt.offsetMin = new Vector2(inset, inset);
+        fillRt.offsetMax = new Vector2(-inset, -inset);
+        var fillImg = fill.GetComponent<Image>();
+        fillImg.sprite = GetRoundedSprite();
+        fillImg.type = Image.Type.Sliced;
+        fillImg.color = red ? EmphasisCream : EmphasisAmberFill;
+        fillImg.raycastTarget = false;
+        fill.transform.SetAsFirstSibling();
+
+        var hlg = go.GetComponent<HorizontalLayoutGroup>();
+        hlg.padding = new RectOffset(14, 14, 10, 10);
+        hlg.spacing = 6f;
+        hlg.childAlignment = TextAnchor.MiddleCenter;
+        hlg.childForceExpandWidth = false;
+        hlg.childForceExpandHeight = false;
+        hlg.childControlWidth = true;
+        hlg.childControlHeight = true;
+
+        var fitter = go.GetComponent<ContentSizeFitter>();
+        fitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+        fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+        if (emphasis.blink)
+        {
+            _blinkTargets.Add(go.GetComponent<CanvasGroup>());
+            _pulseTargets.Add(go.GetComponent<RectTransform>());
+            _pulseBorderImages.Add(border);
+        }
+
+        return go.transform;
+    }
+
+    private void CreatePatternToken(Transform parent, string raw, float px, float alpha)
+    {
+        var go = new GameObject("Token", typeof(RectTransform), typeof(Image), typeof(LayoutElement), typeof(CanvasGroup));
+        go.transform.SetParent(parent, false);
+        var img = go.GetComponent<Image>();
+        img.sprite = SpriteForToken(raw);
+        img.preserveAspect = true;
+        img.color = Color.white;
+        img.raycastTarget = false;
+        go.GetComponent<CanvasGroup>().alpha = alpha;
+
+        var le = go.GetComponent<LayoutElement>();
+        le.preferredWidth = px;
+        le.preferredHeight = px;
+        le.minWidth = px;
+        le.minHeight = px;
+
+        if (img.sprite == null)
+        {
+            var label = CreateTmp("TokLabel", go.transform, Mathf.Max(11f, px * 0.18f), FontStyles.Bold, new Color(0.2f, 0.2f, 0.3f));
+            label.text = ShortLabel(raw);
+            label.alignment = TextAlignmentOptions.Center;
+            img.color = new Color(0.93f, 0.95f, 1f, 1f);
+        }
+    }
+
+    private static Sprite GetRoundedSprite()
+    {
+        if (_roundedSprite != null) return _roundedSprite;
+        const int size = 64;
+        const int radius = 18;
+        var tex = new Texture2D(size, size, TextureFormat.ARGB32, false);
+        tex.wrapMode = TextureWrapMode.Clamp;
+        tex.filterMode = FilterMode.Bilinear;
+        tex.hideFlags = HideFlags.HideAndDontSave;
+        var opaque = new Color32(255, 255, 255, 255);
+        var clear = new Color32(0, 0, 0, 0);
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float dx = 0f, dy = 0f;
+                bool corner = false;
+                if (x < radius && y < radius)
+                {
+                    dx = radius - x - 0.5f;
+                    dy = radius - y - 0.5f;
+                    corner = true;
+                }
+                else if (x >= size - radius && y < radius)
+                {
+                    dx = x - (size - radius - 0.5f);
+                    dy = radius - y - 0.5f;
+                    corner = true;
+                }
+                else if (x < radius && y >= size - radius)
+                {
+                    dx = radius - x - 0.5f;
+                    dy = y - (size - radius - 0.5f);
+                    corner = true;
+                }
+                else if (x >= size - radius && y >= size - radius)
+                {
+                    dx = x - (size - radius - 0.5f);
+                    dy = y - (size - radius - 0.5f);
+                    corner = true;
+                }
+
+                if (!corner)
+                {
+                    tex.SetPixel(x, y, opaque);
+                    continue;
+                }
+                float d = Mathf.Sqrt(dx * dx + dy * dy);
+                tex.SetPixel(x, y, d <= radius ? (Color)opaque : clear);
             }
         }
+        tex.Apply(false, false);
+        _roundedSprite = Sprite.Create(
+            tex,
+            new Rect(0, 0, size, size),
+            new Vector2(0.5f, 0.5f),
+            100f,
+            0,
+            SpriteMeshType.FullRect,
+            new Vector4(radius, radius, radius, radius));
+        _roundedSprite.name = "CanvasRoundedRect";
+        return _roundedSprite;
+    }
+
+    private void StopBlink()
+    {
+        if (_blinkRoutine != null)
+        {
+            StopCoroutine(_blinkRoutine);
+            _blinkRoutine = null;
+        }
+        for (int i = 0; i < _pulseTargets.Count; i++)
+        {
+            if (_pulseTargets[i] != null)
+                _pulseTargets[i].localScale = Vector3.one;
+        }
+        _blinkTargets.Clear();
+        _pulseTargets.Clear();
+        _pulseBorderImages.Clear();
+    }
+
+    private void RestartBlink()
+    {
+        if (_blinkRoutine != null)
+            StopCoroutine(_blinkRoutine);
+        _blinkRoutine = StartCoroutine(BlinkHighlightedTokens());
+    }
+
+    private IEnumerator BlinkHighlightedTokens()
+    {
+        const float period = 1.8f;
+        float elapsed = 0f;
+        while (_pulseTargets.Count > 0)
+        {
+            _pulseTargets.RemoveAll(rt => rt == null);
+            _pulseBorderImages.RemoveAll(img => img == null);
+            if (_pulseTargets.Count == 0) yield break;
+
+            elapsed += Time.unscaledDeltaTime;
+            float wave = 0.5f + 0.5f * Mathf.Sin((elapsed / period) * Mathf.PI * 2f);
+            float scale = Mathf.Lerp(1f, 1.045f, wave);
+
+            for (int i = 0; i < _pulseTargets.Count; i++)
+            {
+                if (_pulseTargets[i] != null)
+                    _pulseTargets[i].localScale = new Vector3(scale, scale, 1f);
+            }
+            for (int i = 0; i < _pulseBorderImages.Count; i++)
+            {
+                if (_pulseBorderImages[i] == null) continue;
+                Color c = _pulseBorderImages[i].color;
+                c.a = Mathf.Lerp(0.82f, 1f, wave);
+                _pulseBorderImages[i].color = c;
+            }
+            yield return null;
+        }
+        _blinkRoutine = null;
+    }
+
+    private static float ResolvePatternTokenPx(string scale)
+    {
+        if (string.Equals(scale, "xlarge", StringComparison.OrdinalIgnoreCase)) return 96f;
+        if (string.Equals(scale, "large", StringComparison.OrdinalIgnoreCase)) return 80f;
+        return 64f;
+    }
+
+    private static string NormalizePatternToken(string t)
+    {
+        if (string.IsNullOrEmpty(t)) return "";
+        return t.Trim().ToLowerInvariant().Replace('_', ' ');
+    }
+
+    /// <summary>
+    /// Prefers patternEmphasis.highlightChunk; falls back to exampleChunk for older levels.
+    /// </summary>
+    private static List<string> ResolveEmphasisHighlightChunk(
+        CanvasPatternEmphasisData emphasis,
+        List<string> fallbackExampleChunk)
+    {
+        if (emphasis != null && emphasis.highlightChunk != null && emphasis.highlightChunk.Count > 0)
+            return emphasis.highlightChunk;
+        if (fallbackExampleChunk != null && fallbackExampleChunk.Count > 0)
+            return fallbackExampleChunk;
+        return null;
+    }
+
+    /// <summary>Indices inside pattern that match the highlight unit (first or all occurrences).</summary>
+    private static HashSet<int> ResolveHighlightedPatternIndices(
+        List<string> pattern,
+        List<string> chunk,
+        CanvasPatternEmphasisData emphasis)
+    {
+        var outSet = new HashSet<int>();
+        if (emphasis == null) return outSet;
+        string scope = string.IsNullOrEmpty(emphasis.highlightScope) ? "first" : emphasis.highlightScope.ToLowerInvariant();
+        if (scope == "none") return outSet;
+        if (pattern == null || chunk == null || chunk.Count == 0 || chunk.Count > pattern.Count)
+            return outSet;
+
+        var p = new List<string>(pattern.Count);
+        for (int i = 0; i < pattern.Count; i++)
+            p.Add(NormalizePatternToken(pattern[i]));
+        var c = new List<string>(chunk.Count);
+        for (int i = 0; i < chunk.Count; i++)
+            c.Add(NormalizePatternToken(chunk[i]));
+
+        var ranges = new List<Vector2Int>();
+        for (int i = 0; i <= p.Count - c.Count; i++)
+        {
+            bool ok = true;
+            for (int j = 0; j < c.Count; j++)
+            {
+                if (p[i + j] != c[j])
+                {
+                    ok = false;
+                    break;
+                }
+            }
+            if (ok) ranges.Add(new Vector2Int(i, i + c.Count));
+        }
+
+        if (ranges.Count == 0) return outSet;
+        if (scope == "all")
+        {
+            for (int r = 0; r < ranges.Count; r++)
+            {
+                for (int i = ranges[r].x; i < ranges[r].y; i++)
+                    outSet.Add(i);
+            }
+        }
+        else
+        {
+            for (int i = ranges[0].x; i < ranges[0].y; i++)
+                outSet.Add(i);
+        }
+        return outSet;
     }
 
     private Sprite SpriteForToken(string raw)

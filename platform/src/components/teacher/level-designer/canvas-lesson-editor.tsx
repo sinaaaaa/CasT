@@ -5,9 +5,15 @@ import Image from "next/image";
 import { motion, Reorder, AnimatePresence } from "framer-motion";
 import {
   DEFAULT_CANVAS_LESSON,
+  DEFAULT_CANVAS_PATTERN_EMPHASIS,
+  contiguousHighlightRuns,
+  resolveCanvasPatternTokenPx,
   resolveCanvasSectionLabel,
+  resolveEmphasisHighlightChunk,
   resolveEnabledActionButtons,
+  resolveHighlightedPatternIndices,
   type CanvasLessonConfig,
+  type CanvasPatternEmphasis,
   type LevelGameplayConfig,
   type RobotActionButton,
 } from "@/lib/level-config";
@@ -25,6 +31,7 @@ import {
   CornerDownRight,
   Eye,
   GripVertical,
+  Highlighter,
   ImageIcon,
   LayoutTemplate,
   Minus,
@@ -33,6 +40,7 @@ import {
   Sparkles,
   Volume2,
   X,
+  Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -320,6 +328,369 @@ function DragTokenRowEditor({
   );
 }
 
+function PatternTokenIcon({
+  action,
+  px,
+  dimmed,
+}: {
+  action: string;
+  px: number;
+  dimmed?: boolean;
+}) {
+  const cmd = normalizeCommandToken(action);
+  const iconPath = cmd ? COMMAND_ICON_PATHS[cmd] : null;
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center justify-center",
+        dimmed && "opacity-70"
+      )}
+      style={{ width: px, height: px }}
+      title={tokenLabel(action)}
+    >
+      {iconPath ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={iconPath} alt="" className="h-[86%] w-[86%] object-contain" />
+      ) : (
+        <span className="text-[10px] font-bold text-slate-600">{tokenLabel(action)}</span>
+      )}
+    </span>
+  );
+}
+
+function PatternPreviewRow({ lesson }: { lesson: CanvasLessonConfig }) {
+  const emphasis = {
+    ...DEFAULT_CANVAS_PATTERN_EMPHASIS,
+    ...lesson.patternEmphasis,
+  };
+  const tokens = lesson.patternPreview ?? [];
+  const highlightUnit = resolveEmphasisHighlightChunk(
+    emphasis,
+    lesson.exampleChunk
+  );
+  const highlighted = resolveHighlightedPatternIndices(
+    tokens,
+    highlightUnit,
+    emphasis
+  );
+  const basePx = resolveCanvasPatternTokenPx(emphasis.scale);
+  const hotPx = emphasis.bigger ? Math.round(basePx * 1.22) : basePx;
+  const runs = contiguousHighlightRuns(tokens.length, highlighted);
+  const hasHot = highlighted.size > 0;
+
+  return (
+    <div className="relative flex flex-col items-center gap-2">
+      <motion.div
+        layout
+        className="relative flex flex-wrap items-end justify-center gap-3 px-1 py-2"
+      >
+        {runs.map((run) => {
+          const slice = tokens.slice(run.start, run.end);
+          if (!run.hot) {
+            return (
+              <div key={`rest-${run.start}`} className="flex items-end gap-2">
+                {slice.map((t, n) => (
+                  <PatternTokenIcon
+                    key={`${t}-${run.start + n}`}
+                    action={t}
+                    px={basePx}
+                    dimmed={hasHot}
+                  />
+                ))}
+              </div>
+            );
+          }
+
+          return (
+            <motion.div
+              key={`unit-${run.start}`}
+              layout
+              initial={{ opacity: 0, y: 8, scale: 0.92 }}
+              animate={
+                emphasis.blink
+                  ? { opacity: 1, y: [0, -5, 0], scale: [1, 1.035, 1] }
+                  : { opacity: 1, y: 0, scale: 1 }
+              }
+              transition={
+                emphasis.blink
+                  ? { duration: 1.8, repeat: Infinity, ease: [0.45, 0.05, 0.55, 0.95] }
+                  : { type: "spring", stiffness: 380, damping: 24 }
+              }
+              className="relative flex items-center gap-1.5 rounded-[1.4rem] px-3 py-2"
+              style={{
+                background: emphasis.redBorder ? "#FFF7F0" : "#FFF9ED",
+                boxShadow: emphasis.redBorder
+                  ? "inset 0 0 0 3px #E24B3A, 0 10px 28px -10px rgba(226,75,58,0.55)"
+                  : "inset 0 0 0 2px #E8B84A, 0 8px 20px -10px rgba(232,184,74,0.45)",
+              }}
+              title="Repeating unit"
+            >
+              {emphasis.blink && (
+                <motion.span
+                  aria-hidden
+                  className="pointer-events-none absolute -inset-1 rounded-[1.55rem]"
+                  style={{
+                    boxShadow: emphasis.redBorder
+                      ? "0 0 0 2px rgba(226,75,58,0.35)"
+                      : "0 0 0 2px rgba(232,184,74,0.4)",
+                  }}
+                  animate={{ opacity: [0.85, 0.15, 0.85], scale: [1, 1.04, 1] }}
+                  transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+                />
+              )}
+              {slice.map((t, n) => (
+                <PatternTokenIcon
+                  key={`${t}-${run.start + n}`}
+                  action={t}
+                  px={hotPx}
+                />
+              ))}
+            </motion.div>
+          );
+        })}
+      </motion.div>
+    </div>
+  );
+}
+
+function PatternEmphasisControls({
+  lesson,
+  onChange,
+}: {
+  lesson: CanvasLessonConfig;
+  onChange: (e: CanvasPatternEmphasis) => void;
+}) {
+  const emphasis: CanvasPatternEmphasis = {
+    ...DEFAULT_CANVAS_PATTERN_EMPHASIS,
+    ...lesson.patternEmphasis,
+    highlightChunk: lesson.patternEmphasis?.highlightChunk ?? [],
+  };
+  const hasPattern = (lesson.patternPreview?.length ?? 0) > 0;
+  const highlightUnit =
+    resolveEmphasisHighlightChunk(emphasis, lesson.exampleChunk) ?? [];
+  const hasHighlightUnit = highlightUnit.length > 0;
+  const usingFallback =
+    !(emphasis.highlightChunk?.length) && (lesson.exampleChunk?.length ?? 0) > 0;
+
+  function patch(partial: Partial<CanvasPatternEmphasis>) {
+    onChange({ ...emphasis, ...partial });
+  }
+
+  if (!hasPattern) return null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ type: "spring", stiffness: 320, damping: 28 }}
+      className="space-y-4 rounded-2xl border border-violet-200/80 bg-gradient-to-br from-violet-50/80 via-white to-rose-50/40 p-4 shadow-sm"
+    >
+      <div className="flex items-start gap-3">
+        <motion.div
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-white shadow-md"
+          animate={{ rotate: [0, -6, 6, 0] }}
+          transition={{ duration: 3.2, repeat: Infinity, ease: "easeInOut" }}
+        >
+          <Highlighter className="h-5 w-5" />
+        </motion.div>
+        <div>
+          <h4 className="text-sm font-bold text-slate-900">Pattern emphasis</h4>
+          <p className="mt-0.5 text-xs leading-relaxed text-slate-600">
+            Help students see the repeating unit as one group — not separate boxes
+            around each icon. Example: pattern{" "}
+            <span className="font-semibold text-slate-800">F·L·F·L·F·L</span>,
+            highlight unit <span className="font-semibold text-rose-700">F·L</span>{" "}
+            sits in one capsule. Then add size, coral border, and/or blink.
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <DragTokenRowEditor
+          title="Unit to highlight"
+          description="Different from the full pattern — e.g. add F then L while the pattern is F·L·F·L·F·L."
+          tokens={emphasis.highlightChunk ?? []}
+          onChange={(highlightChunk) => patch({ highlightChunk })}
+          accent="violet"
+        />
+        {(lesson.exampleChunk?.length ?? 0) > 0 && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs"
+            onClick={() =>
+              patch({ highlightChunk: [...(lesson.exampleChunk ?? [])] })
+            }
+          >
+            Copy from example chunk
+          </Button>
+        )}
+        {usingFallback && (
+          <p className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-900">
+            Using the example chunk as the highlight unit. Add tokens above to set a
+            dedicated unit instead.
+          </p>
+        )}
+        {!hasHighlightUnit && (
+          <p className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-900">
+            Add the repeating unit here (e.g. F·L) so we know which part of the full
+            pattern to emphasize.
+          </p>
+        )}
+      </div>
+
+      <div>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          Pattern size
+        </p>
+        <div className="grid grid-cols-3 gap-2">
+          {(
+            [
+              { value: "normal" as const, label: "Normal" },
+              { value: "large" as const, label: "Large" },
+              { value: "xlarge" as const, label: "Extra large" },
+            ] as const
+          ).map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => patch({ scale: opt.value })}
+              className={cn(
+                "rounded-xl border-2 px-2 py-2.5 text-xs font-semibold transition",
+                emphasis.scale === opt.value
+                  ? "border-violet-500 bg-violet-50 text-violet-900 ring-2 ring-violet-200"
+                  : "border-slate-200 bg-white text-slate-600 hover:border-violet-200"
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          Highlight which match
+        </p>
+        <div className="grid grid-cols-3 gap-2">
+          {(
+            [
+              { value: "none" as const, label: "Off", hint: "No highlight" },
+              { value: "first" as const, label: "First", hint: "First match only" },
+              { value: "all" as const, label: "All", hint: "Every match" },
+            ] as const
+          ).map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              disabled={!hasHighlightUnit && opt.value !== "none"}
+              onClick={() => patch({ highlightScope: opt.value })}
+              className={cn(
+                "rounded-xl border-2 px-2 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-40",
+                emphasis.highlightScope === opt.value
+                  ? "border-rose-500 bg-rose-50 ring-2 ring-rose-200"
+                  : "border-slate-200 bg-white hover:border-rose-200"
+              )}
+            >
+              <span className="block text-xs font-bold text-slate-900">{opt.label}</span>
+              <span className="block text-[10px] text-slate-500">{opt.hint}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          Highlight effects <span className="font-normal normal-case">(combine freely)</span>
+        </p>
+        <div className="grid gap-2 sm:grid-cols-3">
+          {(
+            [
+              {
+                key: "bigger" as const,
+                label: "Bigger",
+                icon: <Zap className="h-3.5 w-3.5" />,
+                hint: "Grow highlighted icons",
+              },
+              {
+                key: "redBorder" as const,
+                label: "Red border",
+                icon: <Highlighter className="h-3.5 w-3.5" />,
+                hint: "Wrap the whole unit",
+              },
+              {
+                key: "blink" as const,
+                label: "Blink",
+                icon: <Eye className="h-3.5 w-3.5" />,
+                hint: "Soft pulse animation",
+              },
+            ] as const
+          ).map((opt) => {
+            const on = emphasis[opt.key];
+            const disabled = emphasis.highlightScope === "none";
+            return (
+              <motion.button
+                key={opt.key}
+                type="button"
+                disabled={disabled}
+                whileHover={disabled ? undefined : { y: -1, scale: 1.01 }}
+                whileTap={disabled ? undefined : { scale: 0.97 }}
+                onClick={() => patch({ [opt.key]: !on })}
+                className={cn(
+                  "flex items-start gap-2 rounded-xl border-2 px-3 py-2.5 text-left transition disabled:cursor-not-allowed disabled:opacity-40",
+                  on && !disabled
+                    ? "border-slate-900 bg-slate-900 text-white"
+                    : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+                )}
+              >
+                <span
+                  className={cn(
+                    "mt-0.5 flex h-6 w-6 items-center justify-center rounded-lg",
+                    on && !disabled ? "bg-white/15" : "bg-slate-100"
+                  )}
+                >
+                  {opt.icon}
+                </span>
+                <span>
+                  <span className="block text-xs font-bold">{opt.label}</span>
+                  <span
+                    className={cn(
+                      "block text-[10px]",
+                      on && !disabled ? "text-white/70" : "text-slate-500"
+                    )}
+                  >
+                    {opt.hint}
+                  </span>
+                </span>
+              </motion.button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-dashed border-violet-200 bg-gradient-to-b from-white via-rose-50/30 to-violet-50/40 px-3 py-4">
+        <div className="mb-3 flex items-center justify-center gap-2">
+          <motion.span
+            className="h-1.5 w-1.5 rounded-full bg-rose-500"
+            animate={{ scale: [1, 1.4, 1], opacity: [0.5, 1, 0.5] }}
+            transition={{ duration: 1.4, repeat: Infinity }}
+          />
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-violet-600">
+            Live preview
+          </p>
+          <motion.span
+            className="h-1.5 w-1.5 rounded-full bg-violet-500"
+            animate={{ scale: [1, 1.4, 1], opacity: [0.5, 1, 0.5] }}
+            transition={{ duration: 1.4, repeat: Infinity, delay: 0.2 }}
+          />
+        </div>
+        <PatternPreviewRow lesson={lesson} />
+      </div>
+    </motion.div>
+  );
+}
+
 function StudentCanvasPreview({
   lesson,
   guidedActions,
@@ -408,17 +779,13 @@ function StudentCanvasPreview({
           )}
 
           {(lesson.patternPreview?.length ?? 0) > 0 && (
-            <div className="w-full max-w-md">
+            <div className="w-full max-w-lg">
               {resolveCanvasSectionLabel(lesson.patternLabel, null) && (
-                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-violet-600">
+                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-violet-600">
                   {resolveCanvasSectionLabel(lesson.patternLabel, null)}
                 </p>
               )}
-              <div className="flex flex-wrap justify-center gap-1.5">
-                {lesson.patternPreview!.map((t, i) => (
-                  <TokenChip key={`${t}-${i}`} action={t} size="sm" />
-                ))}
-              </div>
+              <PatternPreviewRow lesson={lesson} />
             </div>
           )}
         </div>
@@ -710,6 +1077,12 @@ export function CanvasLessonEditor({ config, onChange }: Props) {
               Clear the field to hide the chunk heading. Default is “CHUNK”.
             </p>
           </label>
+
+          <PatternEmphasisControls
+            lesson={lesson}
+            onChange={(patternEmphasis) => patch({ patternEmphasis })}
+          />
+
           {lesson.stripMode === "SEED_PROGRAM" && (
             <p className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2.5 text-xs leading-relaxed text-sky-900">
               Seeded strip uses the <strong>starter program</strong> section below. Accepted

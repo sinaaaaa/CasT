@@ -118,6 +118,18 @@ public class CanvasLessonDto
     public int blankSlotCount;
     public string chunkLabel;
     public string patternLabel;
+    public CanvasPatternEmphasisDto patternEmphasis;
+}
+
+[Serializable]
+public class CanvasPatternEmphasisDto
+{
+    public string scale = "large";
+    public string highlightScope = "first";
+    public string[] highlightChunk;
+    public bool bigger = true;
+    public bool redBorder = false;
+    public bool blink = false;
 }
 
 [Serializable]
@@ -313,6 +325,7 @@ public static class LevelConfigMapper
                 blankSlotCount = dto.canvasLesson.blankSlotCount,
                 chunkLabel = dto.canvasLesson.chunkLabel,
                 patternLabel = dto.canvasLesson.patternLabel,
+                patternEmphasis = MapPatternEmphasis(dto.canvasLesson.patternEmphasis),
             };
             if (dto.canvasLesson.patternPreview != null && dto.canvasLesson.patternPreview.Length > 0)
                 ld.canvasLesson.patternPreview = new List<string>(dto.canvasLesson.patternPreview);
@@ -496,6 +509,20 @@ public static class LevelConfigMapper
             audioUrl = dto.audioUrl,
             playAudioAutomatically = dto.playAudioAutomatically,
         };
+    }
+
+    private static CanvasPatternEmphasisData MapPatternEmphasis(CanvasPatternEmphasisDto dto)
+    {
+        var data = new CanvasPatternEmphasisData();
+        if (dto == null) return data;
+        if (!string.IsNullOrEmpty(dto.scale)) data.scale = dto.scale;
+        if (!string.IsNullOrEmpty(dto.highlightScope)) data.highlightScope = dto.highlightScope;
+        data.bigger = dto.bigger;
+        data.redBorder = dto.redBorder;
+        data.blink = dto.blink;
+        if (dto.highlightChunk != null && dto.highlightChunk.Length > 0)
+            data.highlightChunk = new List<string>(dto.highlightChunk);
+        return data;
     }
 
     private static void ApplyLevelTypeDefaults(LevelData ld, string levelType)
