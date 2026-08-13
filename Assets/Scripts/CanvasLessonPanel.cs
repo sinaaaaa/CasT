@@ -31,6 +31,13 @@ public class CanvasLessonPanel : MonoBehaviour
     public Sprite repeatSprite;
     public Sprite blankSprite;
 
+    [Header("Blank line (same as yellow-strip blank slots)")]
+    public Sprite blankLineSprite;
+    public bool useBlankLineStyle = true;
+    public float blankLineWidth = 52f;
+    public float blankLineHeight = 7f;
+    public Color blankLineColor = new Color(0.42f, 0.42f, 0.48f, 0.9f);
+
     private bool _built;
     private Coroutine _imageLoadRoutine;
     private Coroutine _audioLoadRoutine;
@@ -118,11 +125,14 @@ public class CanvasLessonPanel : MonoBehaviour
         }
 
         var emphasis = lesson.patternEmphasis ?? new CanvasPatternEmphasisData();
+        float cardW = ResolveLessonCardWidth();
+        float shelfW = Mathf.Max(640f, cardW - 96f);
+        float rowAvail = Mathf.Max(520f, shelfW - 72f);
+
         float basePx = ResolvePatternTokenPx(emphasis.scale);
         var highlightUnit = ResolveEmphasisHighlightChunk(emphasis, lesson.exampleChunk);
         var highlighted = ResolveHighlightedPatternIndices(lesson.patternPreview, highlightUnit, emphasis);
-        int patternCount = lesson.patternPreview != null ? lesson.patternPreview.Count : 0;
-        float patternPx = FitTokenPx(basePx, patternCount, 860f);
+        float patternPx = FitPatternTokenPx(lesson.patternPreview, basePx, rowAvail, emphasis, highlighted);
         StopBlink();
         PopulateTokenRow(patternRow, lesson.patternPreview, patternPx, highlighted, emphasis);
 
@@ -130,26 +140,40 @@ public class CanvasLessonPanel : MonoBehaviour
         {
             var rowLe = patternRow.GetComponent<LayoutElement>();
             if (rowLe != null)
+            {
                 rowLe.minHeight = Mathf.Max(56f, patternPx * (emphasis.bigger && highlighted.Count > 0 ? 1.45f : 1.15f));
+                rowLe.preferredWidth = -1f;
+                rowLe.flexibleWidth = 1f;
+            }
             var hlg = patternRow.GetComponent<HorizontalLayoutGroup>();
             if (hlg != null)
             {
-                hlg.spacing = 10f;
+                hlg.spacing = Mathf.Clamp(patternPx * 0.12f, 6f, 10f);
                 hlg.childAlignment = TextAnchor.MiddleCenter;
-                hlg.padding = new RectOffset(4, 4, 2, 2);
+                hlg.padding = new RectOffset(2, 2, 2, 2);
+                hlg.childForceExpandWidth = false;
+            }
+            var rowFitter = patternRow.GetComponent<ContentSizeFitter>();
+            if (rowFitter != null)
+            {
+                // Prefer shrink-to-fit inside the shelf instead of growing the white card.
+                rowFitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+                rowFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             }
         }
 
         if (_patternShelf != null)
         {
+            EnsureShelfClip();
             var shelfLe = _patternShelf.GetComponent<LayoutElement>();
             if (shelfLe != null)
             {
-                float h = Mathf.Max(120f, patternPx + 56f);
+                float h = Mathf.Max(132f, patternPx + 64f);
                 shelfLe.minHeight = h;
                 shelfLe.preferredHeight = h;
-                shelfLe.minWidth = 720f;
-                shelfLe.preferredWidth = 900f;
+                shelfLe.minWidth = shelfW;
+                shelfLe.preferredWidth = shelfW;
+                shelfLe.flexibleWidth = 0f;
             }
         }
 
@@ -158,14 +182,23 @@ public class CanvasLessonPanel : MonoBehaviour
             var panelLe = panelRoot.GetComponent<LayoutElement>();
             if (panelLe != null)
             {
-                panelLe.minWidth = 720f;
-                panelLe.preferredWidth = 920f;
+                panelLe.minWidth = cardW;
+                panelLe.preferredWidth = cardW;
+                panelLe.flexibleWidth = 0f;
             }
+            var fitter = panelRoot.GetComponent<ContentSizeFitter>();
+            if (fitter != null)
+            {
+                fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+                fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            }
+            panelRoot.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, cardW);
+
             if (promptText != null)
             {
-                promptText.fontSize = 40f;
+                promptText.fontSize = 42f;
                 var promptLe = promptText.GetComponent<LayoutElement>();
-                if (promptLe != null) promptLe.preferredWidth = 860f;
+                if (promptLe != null) promptLe.preferredWidth = cardW - 100f;
             }
         }
 
@@ -210,12 +243,118 @@ public class CanvasLessonPanel : MonoBehaviour
         panelRoot.anchoredPosition = pos;
     }
 
-    private static float FitTokenPx(float desiredPx, int count, float maxRowWidth)
+    private float ResolveLessonCardWidth()
     {
-        if (count <= 0) return desiredPx;
-        const float spacing = 12f;
-        float fitted = (maxRowWidth - (count - 1) * spacing) / count;
-        return Mathf.Clamp(fitted, 52f, desiredPx);
+        const float preferred = 1120f;
+        float maxW = preferred;
+        RectTransform parentRt = panelRoot != null ? panelRoot.parent as RectTransform : null;
+        if (parentRt != null && parentRt.rect.width > 80f)
+            maxW = Mathf.Min(maxW, Mathf.Max(760f, parentRt.rect.width * 0.82f));
+        if (_alignWith != null && _alignWith.rect.width > 80f)
+            maxW = Mathf.Min(maxW, Mathf.Max(780f, _alignWith.rect.width * 0.98f));
+        // Hard cap against the real pixel viewport so the board never spills past the screen.
+        float screenCap = Mathf.Max(640f, Screen.width * 0.88f);
+        maxW = Mathf.Min(maxW, screenCap);
+        return Mathf.Clamp(maxW, 720f, 1280f);
+    }
+
+    /// <summary>
+    /// Shrink icon size until the whole pattern (highlight capsules + blank lines) fits the shelf.
+    /// </summary>
+    private float FitPatternTokenPx(
+        List<string> tokens,
+        float desiredPx,
+        float maxRowWidth,
+        CanvasPatternEmphasisData emphasis,
+        HashSet<int> highlighted)
+    {
+        if (tokens == null || tokens.Count == 0) return desiredPx;
+        float lo = 34f;
+        float hi = desiredPx;
+        float best = lo;
+        for (int i = 0; i < 14; i++)
+        {
+            float mid = (lo + hi) * 0.5f;
+            float width = MeasurePatternRowWidth(tokens, mid, emphasis, highlighted);
+            if (width <= maxRowWidth)
+            {
+                best = mid;
+                lo = mid;
+            }
+            else
+            {
+                hi = mid;
+            }
+        }
+        return Mathf.Clamp(best, 34f, desiredPx);
+    }
+
+    private float MeasurePatternRowWidth(
+        List<string> tokens,
+        float tokenPx,
+        CanvasPatternEmphasisData emphasis,
+        HashSet<int> highlighted)
+    {
+        bool applyEmphasis = highlighted != null && emphasis != null && highlighted.Count > 0;
+        float hotPx = applyEmphasis && emphasis.bigger ? tokenPx * 1.22f : tokenPx;
+        float rowSpacing = Mathf.Clamp(tokenPx * 0.12f, 6f, 10f);
+        float total = 4f; // row padding
+        int pieces = 0;
+        int i = 0;
+        while (i < tokens.Count)
+        {
+            if (string.IsNullOrWhiteSpace(tokens[i]))
+            {
+                i++;
+                continue;
+            }
+
+            bool hot = applyEmphasis && highlighted.Contains(i);
+            if (!hot)
+            {
+                total += TokenSlotWidth(tokens[i], tokenPx);
+                pieces++;
+                i++;
+                continue;
+            }
+
+            int end = i + 1;
+            while (end < tokens.Count && highlighted.Contains(end))
+                end++;
+
+            float unit = 28f; // highlight horizontal padding
+            int visible = 0;
+            for (int k = i; k < end; k++)
+            {
+                if (string.IsNullOrWhiteSpace(tokens[k])) continue;
+                if (visible > 0) unit += 6f;
+                unit += TokenSlotWidth(tokens[k], hotPx);
+                visible++;
+            }
+            total += Mathf.Max(unit, hotPx + 28f);
+            pieces++;
+            i = end;
+        }
+
+        if (pieces > 1)
+            total += (pieces - 1) * rowSpacing;
+        return total;
+    }
+
+    private float TokenSlotWidth(string raw, float tokenPx)
+    {
+        if (NormalizePatternToken(raw) == "blank")
+            return BlankSlotWidth(tokenPx);
+        return tokenPx;
+    }
+
+    private float BlankSlotWidth(float tokenPx)
+    {
+        if (blankLineSprite != null)
+            return Mathf.Max(blankLineWidth, tokenPx * 0.9f);
+        if (useBlankLineStyle)
+            return Mathf.Clamp(blankLineWidth, 36f, Mathf.Max(48f, tokenPx * 1.05f));
+        return Mathf.Max(tokenPx * 1.05f, 48f);
     }
 
     /// <summary>
@@ -253,6 +392,15 @@ public class CanvasLessonPanel : MonoBehaviour
         blankSprite = blank;
     }
 
+    public void BindBlankLineStyle(Sprite lineSprite, bool useLine, float width, float height, Color color)
+    {
+        blankLineSprite = lineSprite;
+        useBlankLineStyle = useLine;
+        blankLineWidth = Mathf.Clamp(width, 24f, 120f);
+        blankLineHeight = Mathf.Clamp(height, 3f, 24f);
+        blankLineColor = color;
+    }
+
     /// <summary>
     /// Keep the lesson card under RUN / strip / result popups on the overlay canvas.
     /// </summary>
@@ -285,10 +433,12 @@ public class CanvasLessonPanel : MonoBehaviour
         panelRoot.anchorMin = new Vector2(0.5f, 0.5f);
         panelRoot.anchorMax = new Vector2(0.5f, 0.5f);
         panelRoot.pivot = new Vector2(0.5f, 0.5f);
-        panelRoot.sizeDelta = new Vector2(920f, 360f);
+        panelRoot.sizeDelta = new Vector2(1120f, 420f);
         panelRoot.anchoredPosition = new Vector2(0f, 48f);
 
         var bg = rootGo.GetComponent<Image>();
+        bg.sprite = GetRoundedSprite();
+        bg.type = Image.Type.Sliced;
         bg.color = new Color(1f, 1f, 1f, 0.98f);
         bg.raycastTarget = false;
 
@@ -301,9 +451,12 @@ public class CanvasLessonPanel : MonoBehaviour
         outline.effectColor = new Color(0.78f, 0.82f, 0.92f, 0.9f);
         outline.effectDistance = new Vector2(3f, -3f);
 
+        // Clip children to the rounded white board so icons never spill past the edge.
+        rootGo.AddComponent<RectMask2D>();
+
         var vlg = rootGo.GetComponent<VerticalLayoutGroup>();
-        vlg.padding = new RectOffset(44, 44, 36, 36);
-        vlg.spacing = 22f;
+        vlg.padding = new RectOffset(48, 48, 40, 40);
+        vlg.spacing = 24f;
         vlg.childAlignment = TextAnchor.UpperCenter;
         vlg.childControlHeight = true;
         vlg.childControlWidth = true;
@@ -311,17 +464,17 @@ public class CanvasLessonPanel : MonoBehaviour
         vlg.childForceExpandWidth = true;
 
         var fitter = rootGo.GetComponent<ContentSizeFitter>();
-        fitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+        fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
         fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
         var panelLe = rootGo.AddComponent<LayoutElement>();
-        panelLe.minWidth = 720f;
-        panelLe.preferredWidth = 920f;
+        panelLe.minWidth = 1120f;
+        panelLe.preferredWidth = 1120f;
 
-        promptText = CreateTmp("Prompt", panelRoot, 40, FontStyles.Bold, new Color(0.12f, 0.14f, 0.22f));
+        promptText = CreateTmp("Prompt", panelRoot, 42, FontStyles.Bold, new Color(0.12f, 0.14f, 0.22f));
         promptText.alignment = TextAlignmentOptions.Center;
         promptText.lineSpacing = -6f;
         var promptLe = promptText.GetComponent<LayoutElement>();
-        if (promptLe != null) promptLe.preferredWidth = 860f;
+        if (promptLe != null) promptLe.preferredWidth = 1020f;
 
         var imgGo = new GameObject("LessonImage", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
         imgGo.transform.SetParent(panelRoot, false);
@@ -410,6 +563,7 @@ public class CanvasLessonPanel : MonoBehaviour
         {
             if (patternRow != null && patternRow.parent != _patternShelf)
                 patternRow.SetParent(_patternShelf, false);
+            EnsureShelfClip();
             return;
         }
 
@@ -418,7 +572,8 @@ public class CanvasLessonPanel : MonoBehaviour
             typeof(RectTransform),
             typeof(Image),
             typeof(VerticalLayoutGroup),
-            typeof(LayoutElement));
+            typeof(LayoutElement),
+            typeof(RectMask2D));
         shelfGo.transform.SetParent(panelRoot, false);
         if (_patternLabel != null)
             shelfGo.transform.SetSiblingIndex(_patternLabel.transform.GetSiblingIndex() + 1);
@@ -446,7 +601,7 @@ public class CanvasLessonPanel : MonoBehaviour
         fill.transform.SetAsFirstSibling();
 
         var vlg = shelfGo.GetComponent<VerticalLayoutGroup>();
-        vlg.padding = new RectOffset(28, 28, 20, 20);
+        vlg.padding = new RectOffset(32, 32, 22, 22);
         vlg.spacing = 0f;
         vlg.childAlignment = TextAnchor.MiddleCenter;
         vlg.childControlWidth = true;
@@ -455,10 +610,11 @@ public class CanvasLessonPanel : MonoBehaviour
         vlg.childForceExpandHeight = false;
 
         var le = shelfGo.GetComponent<LayoutElement>();
-        le.minWidth = 720f;
-        le.preferredWidth = 900f;
-        le.minHeight = 120f;
-        le.preferredHeight = 120f;
+        le.minWidth = 1000f;
+        le.preferredWidth = 1024f;
+        le.minHeight = 132f;
+        le.preferredHeight = 132f;
+        le.flexibleWidth = 0f;
 
         _patternShelf = shelfGo.GetComponent<RectTransform>();
 
@@ -466,6 +622,22 @@ public class CanvasLessonPanel : MonoBehaviour
             patternRow = CreateTokenRow("PatternPreviewRow", _patternShelf);
         else
             patternRow.SetParent(_patternShelf, false);
+    }
+
+    private void EnsureShelfClip()
+    {
+        if (_patternShelf == null) return;
+        if (_patternShelf.GetComponent<RectMask2D>() == null)
+            _patternShelf.gameObject.AddComponent<RectMask2D>();
+        if (panelRoot != null && panelRoot.GetComponent<RectMask2D>() == null)
+            panelRoot.gameObject.AddComponent<RectMask2D>();
+
+        var bg = panelRoot != null ? panelRoot.GetComponent<Image>() : null;
+        if (bg != null && bg.sprite == null)
+        {
+            bg.sprite = GetRoundedSprite();
+            bg.type = Image.Type.Sliced;
+        }
     }
 
     private static TextMeshProUGUI CreateTmp(string name, Transform parent, float size, FontStyles style, Color color)
@@ -527,18 +699,16 @@ public class CanvasLessonPanel : MonoBehaviour
             while (end < tokens.Count && highlighted.Contains(end))
                 end++;
 
-            int tokenCount = 0;
-            for (int k = i; k < end; k++)
-            {
-                if (!string.IsNullOrWhiteSpace(tokens[k])) tokenCount++;
-            }
-
-            Transform group = CreateHighlightUnit(row, emphasis, tokenCount, hotPx);
+            var unitTokens = new List<string>();
             for (int k = i; k < end; k++)
             {
                 if (string.IsNullOrWhiteSpace(tokens[k])) continue;
-                CreatePatternToken(group, tokens[k], hotPx, 1f);
+                unitTokens.Add(tokens[k]);
             }
+
+            Transform group = CreateHighlightUnit(row, emphasis, unitTokens, hotPx);
+            for (int k = 0; k < unitTokens.Count; k++)
+                CreatePatternToken(group, unitTokens[k], hotPx, 1f);
             i = end;
         }
 
@@ -549,7 +719,7 @@ public class CanvasLessonPanel : MonoBehaviour
     private Transform CreateHighlightUnit(
         Transform parent,
         CanvasPatternEmphasisData emphasis,
-        int tokenCount,
+        List<string> unitTokens,
         float tokenPx)
     {
         bool red = emphasis.redBorder;
@@ -594,8 +764,14 @@ public class CanvasLessonPanel : MonoBehaviour
         hlg.childControlWidth = true;
         hlg.childControlHeight = true;
 
-        int n = Mathf.Max(1, tokenCount);
-        float w = hlg.padding.left + hlg.padding.right + n * tokenPx + Mathf.Max(0, n - 1) * hlg.spacing;
+        int n = unitTokens != null ? unitTokens.Count : 0;
+        float contentW = 0f;
+        for (int i = 0; i < n; i++)
+        {
+            if (i > 0) contentW += hlg.spacing;
+            contentW += TokenSlotWidth(unitTokens[i], tokenPx);
+        }
+        float w = hlg.padding.left + hlg.padding.right + Mathf.Max(contentW, tokenPx);
         float h = hlg.padding.top + hlg.padding.bottom + tokenPx;
         var le = go.GetComponent<LayoutElement>();
         le.minWidth = le.preferredWidth = w;
@@ -644,39 +820,54 @@ public class CanvasLessonPanel : MonoBehaviour
         }
     }
 
-    /// <summary>Four short dashes — “what comes next?” blank inside the pattern row.</summary>
-    private static void CreatePatternBlankDash(Transform parent, float px, float alpha)
+    /// <summary>
+    /// Pattern blank — same thin gray line (or custom line sprite) as yellow-strip blank slots.
+    /// </summary>
+    private void CreatePatternBlankDash(Transform parent, float px, float alpha)
     {
-        float w = Mathf.Max(px * 1.2f, 56f);
-        var go = new GameObject("BlankDash", typeof(RectTransform), typeof(HorizontalLayoutGroup), typeof(LayoutElement), typeof(CanvasGroup));
+        float w = BlankSlotWidth(px);
+        var go = new GameObject("BlankLine", typeof(RectTransform), typeof(LayoutElement), typeof(CanvasGroup));
         go.transform.SetParent(parent, false);
         go.GetComponent<CanvasGroup>().alpha = alpha;
-
-        var hlg = go.GetComponent<HorizontalLayoutGroup>();
-        hlg.spacing = 5f;
-        hlg.childAlignment = TextAnchor.MiddleCenter;
-        hlg.childForceExpandWidth = false;
-        hlg.childForceExpandHeight = false;
-        hlg.padding = new RectOffset(4, 4, 0, 0);
 
         var le = go.GetComponent<LayoutElement>();
         le.preferredWidth = w;
         le.preferredHeight = px;
         le.minWidth = w;
         le.minHeight = px;
+        le.flexibleWidth = 0f;
+        le.flexibleHeight = 0f;
 
-        for (int d = 0; d < 4; d++)
+        var lineGo = new GameObject("Line", typeof(RectTransform), typeof(Image));
+        lineGo.transform.SetParent(go.transform, false);
+        var lineRt = lineGo.GetComponent<RectTransform>();
+        lineRt.anchorMin = new Vector2(0.5f, 0.5f);
+        lineRt.anchorMax = new Vector2(0.5f, 0.5f);
+        lineRt.pivot = new Vector2(0.5f, 0.5f);
+
+        var img = lineGo.GetComponent<Image>();
+        img.raycastTarget = false;
+        if (blankLineSprite != null)
         {
-            var dash = new GameObject("Dash", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
-            dash.transform.SetParent(go.transform, false);
-            var dimg = dash.GetComponent<Image>();
-            dimg.color = new Color(0.12f, 0.14f, 0.2f, 0.92f);
-            dimg.raycastTarget = false;
-            var dle = dash.GetComponent<LayoutElement>();
-            dle.preferredWidth = Mathf.Max(10f, px * 0.18f);
-            dle.preferredHeight = Mathf.Max(5f, px * 0.08f);
-            dle.minWidth = dle.preferredWidth;
-            dle.minHeight = dle.preferredHeight;
+            img.sprite = blankLineSprite;
+            img.preserveAspect = true;
+            img.color = Color.white;
+            float h = Mathf.Max(blankLineHeight * 4f, px * 0.42f);
+            lineRt.sizeDelta = new Vector2(w, h);
+        }
+        else if (useBlankLineStyle || blankSprite == null)
+        {
+            img.sprite = null;
+            img.color = blankLineColor;
+            float h = Mathf.Clamp(blankLineHeight, 4f, 12f);
+            lineRt.sizeDelta = new Vector2(Mathf.Max(28f, w * 0.92f), h);
+        }
+        else
+        {
+            img.sprite = blankSprite;
+            img.preserveAspect = true;
+            img.color = Color.white;
+            lineRt.sizeDelta = new Vector2(w * 0.9f, px * 0.5f);
         }
     }
 

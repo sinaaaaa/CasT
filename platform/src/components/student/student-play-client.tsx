@@ -203,7 +203,7 @@ export function StudentPlayClient({
             ref={iframeRef}
             src={iframeSrc}
             title="Robot Coding Game"
-            className="block min-h-dvh w-full border-0 bg-black [&:fullscreen]:h-screen [&:fullscreen]:min-h-0 [&:fullscreen]:w-screen"
+            className="absolute inset-0 block h-dvh min-h-dvh w-full border-0 bg-black [&:fullscreen]:h-screen [&:fullscreen]:min-h-0 [&:fullscreen]:w-screen"
             allow="autoplay; fullscreen"
             allowFullScreen
           />

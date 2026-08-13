@@ -6,10 +6,10 @@
     <title>Unity WebGL Player | coding-block</title>
     <link rel="shortcut icon" href="TemplateData/favicon.ico">
     <link rel="stylesheet" href="TemplateData/style.css">
-  </head>
+  <style>/* sparc-viewport-fill */html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#000;}#unity-container{position:fixed!important;inset:0!important;left:0!important;top:0!important;transform:none!important;width:100%!important;height:100%!important;}#unity-canvas{position:fixed!important;inset:0!important;width:100%!important;height:100%!important;display:block;}#unity-footer{display:none!important;}</style><script>/* StudentGameConfig bridge */try{if(window.parent&&window.parent.StudentGameConfig&&!window.StudentGameConfig)window.StudentGameConfig=window.parent.StudentGameConfig;}catch(e){}</script><style>canvas,#unity-container,#unity-canvas{touch-action:none;-ms-touch-action:none;}</style><script>document.addEventListener('touchmove',function(e){if(e.touches.length>1)e.preventDefault();},{passive:false});</script><script>/* sparc-webgl-guards */(function(){try{var o=screen.orientation;if(!o)screen.orientation=o={};if(typeof o.lock!=='function')o.lock=function(){return Promise.resolve();};}catch(e){}})();</script></head>
   <body>
     <div id="unity-container" class="unity-desktop">
-      <canvas id="unity-canvas" width=960 height=600 tabindex="-1"></canvas>
+      <canvas id="unity-canvas" width=1920 height=1080 tabindex="-1"></canvas>
       <div id="unity-loading-bar">
         <div id="unity-logo"></div>
         <div id="unity-progress-bar-empty">
@@ -59,9 +59,9 @@
       var buildUrl = "Build";
       var loaderUrl = buildUrl + "/unity.loader.js";
       var config = {
-        dataUrl: buildUrl + "/b7cf1e1ec2b5e78ea51309961f19da65.data",
-        frameworkUrl: buildUrl + "/ba8f4d6a203150e140de35da5ab4c0b0.js",
-        codeUrl: buildUrl + "/1356aeef05201fb03a2087f50dfbc400.wasm",
+        dataUrl: buildUrl + "/78aa2ea54fddd640ac7930bb33311817.data",
+        frameworkUrl: buildUrl + "/1312a2f7b6c68cbc00bf8ce4e28ab199.js",
+        codeUrl: buildUrl + "/1430edfa703c1ac7a475cda64a62d101.wasm",
         streamingAssetsUrl: "StreamingAssets",
         companyName: "DefaultCompany",
         productName: "coding-block",
@@ -94,8 +94,8 @@
       } else {
         // Desktop style: Render the game canvas in a window that can be maximized to fullscreen:
 
-        canvas.style.width = "960px";
-        canvas.style.height = "600px";
+        canvas.style.width = "100%";
+        canvas.style.height = "100%";
       }
 
       loadingBar.style.display = "block";
@@ -105,7 +105,7 @@
       script.onload = () => {
         createUnityInstance(canvas, config, (progress) => {
           progressBarFull.style.width = 100 * progress + "%";
-              }).then((unityInstance) => {
+              }).then((unityInstance) => {window.unityInstance=unityInstance;
                 loadingBar.style.display = "none";
                 fullscreenButton.onclick = () => {
                   unityInstance.SetFullscreen(1);
@@ -118,5 +118,5 @@
       document.body.appendChild(script);
 
     </script>
-  </body>
+  <script>/* sparc-viewport-fill-js */(function(){function fill(){var c=document.querySelector('#unity-container');var a=document.querySelector('#unity-canvas');if(!c||!a)return;c.style.cssText='position:fixed;inset:0;left:0;top:0;transform:none;width:100%;height:100%;';a.style.width='100%';a.style.height='100%';}fill();window.addEventListener('resize',fill);})();</script><script>/* sparc-fullscreen-bridge */window.addEventListener('message',function(e){var u=window.unityInstance;if(!u)return;if(e.data==='sparc-enter-fullscreen')u.SetFullscreen(1);if(e.data==='sparc-exit-fullscreen')u.SetFullscreen(0);});</script></body>
 </html>

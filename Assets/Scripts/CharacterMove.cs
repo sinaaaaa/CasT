@@ -4087,6 +4087,13 @@ public class CharacterMove : MonoBehaviour
 
         canvasLessonPanel.BindActionSprites(
             forwardSprite, backwardSprite, rotateLeftSprite, rotateRightSprite, repeatSprite, blankSlotSprite);
+        // Only canvasBlankSlotSprite overrides the thin line; yellow blankSlotSprite stays for strip squares elsewhere.
+        canvasLessonPanel.BindBlankLineStyle(
+            canvasBlankSlotSprite,
+            canvasBlankUseLineStyle,
+            canvasBlankLineWidth,
+            canvasBlankLineHeight,
+            canvasBlankLineColor);
 
         if (levelData?.canvasLesson == null)
         {

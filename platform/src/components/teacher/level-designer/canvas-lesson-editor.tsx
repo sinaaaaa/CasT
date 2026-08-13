@@ -116,16 +116,14 @@ const TOKEN_STYLE: Record<
     icon: <CornerDownRight className="h-3.5 w-3.5 text-orange-600" />,
   },
   blank: {
-    bg: "bg-slate-50",
-    border: "border-dashed border-slate-400",
-    text: "text-slate-700",
+    bg: "bg-transparent",
+    border: "border-transparent",
+    text: "text-slate-600",
     icon: (
-      <span className="inline-flex items-center gap-0.5" aria-hidden>
-        <span className="h-0.5 w-2 rounded-full bg-slate-700" />
-        <span className="h-0.5 w-2 rounded-full bg-slate-700" />
-        <span className="h-0.5 w-2 rounded-full bg-slate-700" />
-        <span className="h-0.5 w-2 rounded-full bg-slate-700" />
-      </span>
+      <span
+        className="inline-block h-1.5 w-10 rounded-full bg-slate-500/85"
+        aria-hidden
+      />
     ),
   },
   "repeat:1": {
@@ -161,17 +159,15 @@ function isBlankToken(action: string) {
   return action.trim().toLowerCase() === "blank";
 }
 
-function BlankDashMark({ className }: { className?: string }) {
+function BlankLineMark({ className }: { className?: string }) {
   return (
     <span
-      className={cn("inline-flex items-center justify-center gap-1", className)}
+      className={cn(
+        "inline-block h-1.5 w-10 shrink-0 rounded-full bg-slate-500/85",
+        className
+      )}
       aria-hidden
-    >
-      <span className="h-1 w-2.5 rounded-full bg-slate-800" />
-      <span className="h-1 w-2.5 rounded-full bg-slate-800" />
-      <span className="h-1 w-2.5 rounded-full bg-slate-800" />
-      <span className="h-1 w-2.5 rounded-full bg-slate-800" />
-    </span>
+    />
   );
 }
 
@@ -217,7 +213,7 @@ function TokenChip({
     >
       {showGrip && <GripVertical className="h-3.5 w-3.5 shrink-0 text-slate-400" />}
       {blank ? (
-        <BlankDashMark />
+        <BlankLineMark />
       ) : iconPath ? (
         <Image src={iconPath} alt="" width={dim - 10} height={dim - 10} className="object-contain" />
       ) : (
@@ -380,10 +376,10 @@ function PatternTokenIcon({
           "inline-flex items-center justify-center",
           dimmed && "opacity-70"
         )}
-        style={{ width: Math.max(px * 1.15, 56), height: px }}
+        style={{ width: Math.max(px * 0.9, 48), height: px }}
         title="Blank — student fills this"
       >
-        <BlankDashMark />
+        <BlankLineMark className="w-[92%]" />
       </span>
     );
   }
@@ -433,7 +429,7 @@ function PatternPreviewRow({ lesson }: { lesson: CanvasLessonConfig }) {
     <div className="relative flex flex-col items-center gap-2">
       <motion.div
         layout
-        className="relative flex flex-wrap items-end justify-center gap-3 rounded-[1.6rem] px-4 py-3"
+        className="relative flex max-w-full flex-nowrap items-center justify-center gap-2 overflow-hidden rounded-[1.6rem] px-5 py-4"
         style={{
           background: "#F6F7FF",
           boxShadow: "inset 0 0 0 3px #8D9AD1, 0 8px 20px -12px rgba(55,65,110,0.35)",
@@ -769,7 +765,7 @@ function StudentCanvasPreview({
       </div>
 
       {/* White board */}
-      <div className="relative mx-3 mt-3 min-h-[220px] rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="relative mx-2 mt-3 min-h-[280px] overflow-hidden rounded-2xl border-2 border-slate-200/90 bg-white p-6 shadow-sm">
         <div
           className="pointer-events-none absolute inset-0 opacity-[0.04]"
           style={{
@@ -778,14 +774,14 @@ function StudentCanvasPreview({
             backgroundSize: "18px 18px",
           }}
         />
-        <div className="relative z-[1] flex flex-col items-center gap-4 text-center">
+        <div className="relative z-[1] flex flex-col items-center gap-5 text-center">
           <AnimatePresence mode="wait">
             {lesson.prompt?.trim() ? (
               <motion.p
                 key={lesson.prompt}
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="max-w-md text-base font-semibold leading-snug text-slate-800"
+                className="max-w-2xl text-lg font-semibold leading-snug text-slate-800"
               >
                 {lesson.prompt}
               </motion.p>
@@ -834,7 +830,7 @@ function StudentCanvasPreview({
           )}
 
           {(lesson.patternPreview?.length ?? 0) > 0 && (
-            <div className="w-full max-w-lg">
+            <div className="w-full max-w-3xl overflow-hidden">
               {resolveCanvasSectionLabel(lesson.patternLabel, null) && (
                 <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-violet-600">
                   {resolveCanvasSectionLabel(lesson.patternLabel, null)}
