@@ -124,10 +124,23 @@ public class CanvasLessonPanel : MonoBehaviour
             var hlg = patternRow.GetComponent<HorizontalLayoutGroup>();
             if (hlg != null)
             {
-                hlg.spacing = 14f;
+                hlg.spacing = 16f;
                 hlg.childAlignment = TextAnchor.MiddleCenter;
+                hlg.padding = new RectOffset(8, 8, 4, 4);
             }
         }
+
+        CenterLessonCard();
+    }
+
+    private void CenterLessonCard()
+    {
+        if (panelRoot == null) return;
+        panelRoot.anchorMin = new Vector2(0.5f, 0.56f);
+        panelRoot.anchorMax = new Vector2(0.5f, 0.56f);
+        panelRoot.pivot = new Vector2(0.5f, 0.5f);
+        panelRoot.anchoredPosition = Vector2.zero;
+        panelRoot.localScale = Vector3.one;
     }
 
     /// <summary>
@@ -193,11 +206,11 @@ public class CanvasLessonPanel : MonoBehaviour
         var rootGo = new GameObject("CanvasLessonPanel", typeof(RectTransform), typeof(Image), typeof(VerticalLayoutGroup), typeof(ContentSizeFitter));
         rootGo.transform.SetParent(canvasParent, false);
         panelRoot = rootGo.GetComponent<RectTransform>();
-        // Upper playfield — keep clear of the center RUN button.
-        panelRoot.anchorMin = new Vector2(0.5f, 0.74f);
-        panelRoot.anchorMax = new Vector2(0.5f, 0.74f);
+        // Center of the green playfield, above the yellow strip / RUN.
+        panelRoot.anchorMin = new Vector2(0.5f, 0.56f);
+        panelRoot.anchorMax = new Vector2(0.5f, 0.56f);
         panelRoot.pivot = new Vector2(0.5f, 0.5f);
-        panelRoot.sizeDelta = new Vector2(640f, 280f);
+        panelRoot.sizeDelta = new Vector2(680f, 280f);
         panelRoot.anchoredPosition = Vector2.zero;
 
         var bg = rootGo.GetComponent<Image>();
@@ -225,6 +238,9 @@ public class CanvasLessonPanel : MonoBehaviour
         var fitter = rootGo.GetComponent<ContentSizeFitter>();
         fitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
         fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+        var panelLe = rootGo.AddComponent<LayoutElement>();
+        panelLe.minWidth = 560f;
+        panelLe.preferredWidth = 680f;
 
         promptText = CreateTmp("Prompt", panelRoot, 32, FontStyles.Bold, new Color(0.12f, 0.14f, 0.22f));
         promptText.alignment = TextAlignmentOptions.Center;
@@ -367,7 +383,13 @@ public class CanvasLessonPanel : MonoBehaviour
             while (end < tokens.Count && highlighted.Contains(end))
                 end++;
 
-            Transform group = CreateHighlightUnit(row, emphasis);
+            int tokenCount = 0;
+            for (int k = i; k < end; k++)
+            {
+                if (!string.IsNullOrWhiteSpace(tokens[k])) tokenCount++;
+            }
+
+            Transform group = CreateHighlightUnit(row, emphasis, tokenCount, hotPx);
             for (int k = i; k < end; k++)
             {
                 if (string.IsNullOrWhiteSpace(tokens[k])) continue;
@@ -380,7 +402,11 @@ public class CanvasLessonPanel : MonoBehaviour
             RestartBlink();
     }
 
-    private Transform CreateHighlightUnit(Transform parent, CanvasPatternEmphasisData emphasis)
+    private Transform CreateHighlightUnit(
+        Transform parent,
+        CanvasPatternEmphasisData emphasis,
+        int tokenCount,
+        float tokenPx)
     {
         bool red = emphasis.redBorder;
         var go = new GameObject(
@@ -388,7 +414,6 @@ public class CanvasLessonPanel : MonoBehaviour
             typeof(RectTransform),
             typeof(Image),
             typeof(HorizontalLayoutGroup),
-            typeof(ContentSizeFitter),
             typeof(LayoutElement),
             typeof(CanvasGroup));
         go.transform.SetParent(parent, false);
@@ -425,9 +450,12 @@ public class CanvasLessonPanel : MonoBehaviour
         hlg.childControlWidth = true;
         hlg.childControlHeight = true;
 
-        var fitter = go.GetComponent<ContentSizeFitter>();
-        fitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
-        fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+        int n = Mathf.Max(1, tokenCount);
+        float w = hlg.padding.left + hlg.padding.right + n * tokenPx + Mathf.Max(0, n - 1) * hlg.spacing;
+        float h = hlg.padding.top + hlg.padding.bottom + tokenPx;
+        var le = go.GetComponent<LayoutElement>();
+        le.minWidth = le.preferredWidth = w;
+        le.minHeight = le.preferredHeight = h;
 
         if (emphasis.blink)
         {
@@ -835,13 +863,34 @@ public class CanvasLessonPanel : MonoBehaviour
     {
         var canvases = FindObjectsByType<Canvas>(FindObjectsInactive.Include, FindObjectsSortMode.None);
         Canvas best = null;
+        float bestArea = -1f;
+        foreach (var c in canvases)
+        {
+            if (c == null || !c.isActiveAndEnabled) continue;
+            if (c.renderMode != RenderMode.ScreenSpaceOverlay) continue;
+            // Skip nested override canvases — they are often tiny chrome strips.
+            if (c.transform.parent != null && c.transform.parent.GetComponentInParent<Canvas>() != null)
+                continue;
+            float area = c.pixelRect.width * c.pixelRect.height;
+            if (area > bestArea)
+            {
+                bestArea = area;
+                best = c;
+            }
+        }
+        if (best != null) return best;
+
         foreach (var c in canvases)
         {
             if (c == null || !c.isActiveAndEnabled) continue;
             if (c.renderMode == RenderMode.ScreenSpaceOverlay)
                 return c;
-            if (best == null) best = c;
         }
-        return best;
+        foreach (var c in canvases)
+        {
+            if (c != null && c.isActiveAndEnabled)
+                return c;
+        }
+        return null;
     }
 }
