@@ -47,11 +47,11 @@ public class CanvasLessonPanel : MonoBehaviour
     private static readonly Dictionary<string, Sprite> UrlSpriteCache = new Dictionary<string, Sprite>();
     private static readonly Dictionary<string, AudioClip> UrlAudioClipCache = new Dictionary<string, AudioClip>();
 
-    public void EnsureBuilt()
-    {
-        if (_built && panelRoot != null) return;
+    private RectTransform _alignWith;
 
-        Canvas canvas = FindOverlayCanvas();
+    public void EnsureBuilt(Canvas preferredHost = null)
+    {
+        Canvas canvas = preferredHost != null ? preferredHost.rootCanvas : FindOverlayCanvas();
         if (canvas == null)
         {
             Debug.LogWarning("[CanvasLessonPanel] No canvas found — panel not created.");
@@ -60,13 +60,17 @@ public class CanvasLessonPanel : MonoBehaviour
 
         if (panelRoot == null)
             BuildPanel(canvas.transform);
+        else if (panelRoot.parent != canvas.transform)
+            panelRoot.SetParent(canvas.transform, false);
 
         _built = panelRoot != null;
     }
 
-    public void Show(CanvasLessonData lesson)
+    public void Show(CanvasLessonData lesson, RectTransform alignWith = null)
     {
-        EnsureBuilt();
+        _alignWith = alignWith;
+        Canvas host = alignWith != null ? alignWith.GetComponentInParent<Canvas>() : null;
+        EnsureBuilt(host);
         if (panelRoot == null) return;
 
         _current = lesson;
@@ -113,14 +117,16 @@ public class CanvasLessonPanel : MonoBehaviour
         float basePx = ResolvePatternTokenPx(emphasis.scale);
         var highlightUnit = ResolveEmphasisHighlightChunk(emphasis, lesson.exampleChunk);
         var highlighted = ResolveHighlightedPatternIndices(lesson.patternPreview, highlightUnit, emphasis);
+        int patternCount = lesson.patternPreview != null ? lesson.patternPreview.Count : 0;
+        float patternPx = FitTokenPx(basePx, patternCount, 680f);
         StopBlink();
-        PopulateTokenRow(patternRow, lesson.patternPreview, basePx, highlighted, emphasis);
+        PopulateTokenRow(patternRow, lesson.patternPreview, patternPx, highlighted, emphasis);
 
         if (patternRow != null)
         {
             var rowLe = patternRow.GetComponent<LayoutElement>();
             if (rowLe != null)
-                rowLe.minHeight = Mathf.Max(56f, basePx * (emphasis.bigger && highlighted.Count > 0 ? 1.45f : 1.15f));
+                rowLe.minHeight = Mathf.Max(56f, patternPx * (emphasis.bigger && highlighted.Count > 0 ? 1.45f : 1.15f));
             var hlg = patternRow.GetComponent<HorizontalLayoutGroup>();
             if (hlg != null)
             {
@@ -136,11 +142,47 @@ public class CanvasLessonPanel : MonoBehaviour
     private void CenterLessonCard()
     {
         if (panelRoot == null) return;
-        panelRoot.anchorMin = new Vector2(0.5f, 0.56f);
-        panelRoot.anchorMax = new Vector2(0.5f, 0.56f);
-        panelRoot.pivot = new Vector2(0.5f, 0.5f);
-        panelRoot.anchoredPosition = Vector2.zero;
+
         panelRoot.localScale = Vector3.one;
+        panelRoot.localRotation = Quaternion.identity;
+        panelRoot.pivot = new Vector2(0.5f, 0.5f);
+        panelRoot.anchorMin = new Vector2(0.5f, 0.5f);
+        panelRoot.anchorMax = new Vector2(0.5f, 0.5f);
+
+        Vector2 pos = new Vector2(0f, 48f);
+        RectTransform parentRt = panelRoot.parent as RectTransform;
+        RectTransform strip = _alignWith;
+
+        if (parentRt != null && strip != null)
+        {
+            Canvas canvas = panelRoot.GetComponentInParent<Canvas>();
+            Camera cam = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay
+                ? canvas.worldCamera
+                : null;
+
+            Vector3 stripCenterWorld = strip.TransformPoint(strip.rect.center);
+            Vector2 stripScreen = RectTransformUtility.WorldToScreenPoint(cam, stripCenterWorld);
+            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(parentRt, stripScreen, cam, out Vector2 stripLocal))
+                pos.x = stripLocal.x;
+
+            Vector3 stripTopWorld = strip.TransformPoint(new Vector3(strip.rect.center.x, strip.rect.yMax, 0f));
+            Vector2 stripTopScreen = RectTransformUtility.WorldToScreenPoint(cam, stripTopWorld);
+            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(parentRt, stripTopScreen, cam, out Vector2 stripTopLocal))
+            {
+                float playfieldTop = parentRt.rect.yMax;
+                pos.y = (playfieldTop + stripTopLocal.y) * 0.5f;
+            }
+        }
+
+        panelRoot.anchoredPosition = pos;
+    }
+
+    private static float FitTokenPx(float desiredPx, int count, float maxRowWidth)
+    {
+        if (count <= 0) return desiredPx;
+        const float spacing = 10f;
+        float fitted = (maxRowWidth - (count - 1) * spacing) / count;
+        return Mathf.Clamp(fitted, 42f, desiredPx);
     }
 
     /// <summary>
@@ -206,12 +248,12 @@ public class CanvasLessonPanel : MonoBehaviour
         var rootGo = new GameObject("CanvasLessonPanel", typeof(RectTransform), typeof(Image), typeof(VerticalLayoutGroup), typeof(ContentSizeFitter));
         rootGo.transform.SetParent(canvasParent, false);
         panelRoot = rootGo.GetComponent<RectTransform>();
-        // Center of the green playfield, above the yellow strip / RUN.
-        panelRoot.anchorMin = new Vector2(0.5f, 0.56f);
-        panelRoot.anchorMax = new Vector2(0.5f, 0.56f);
+        // Center of the playfield; Show() realigns to the yellow strip.
+        panelRoot.anchorMin = new Vector2(0.5f, 0.5f);
+        panelRoot.anchorMax = new Vector2(0.5f, 0.5f);
         panelRoot.pivot = new Vector2(0.5f, 0.5f);
         panelRoot.sizeDelta = new Vector2(680f, 280f);
-        panelRoot.anchoredPosition = Vector2.zero;
+        panelRoot.anchoredPosition = new Vector2(0f, 48f);
 
         var bg = rootGo.GetComponent<Image>();
         bg.color = new Color(1f, 1f, 1f, 0.98f);

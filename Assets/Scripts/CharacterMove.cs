@@ -4093,7 +4093,9 @@ public class CharacterMove : MonoBehaviour
             canvasLessonPanel.Hide();
             return;
         }
-        canvasLessonPanel.Show(levelData.canvasLesson);
+        canvasLessonPanel.Show(
+            levelData.canvasLesson,
+            dropZonePanel != null ? dropZonePanel : actionQueueTransform as RectTransform);
         canvasLessonPanel.EnsureBehindGameplayChrome();
         EnsureCanvasChromeAboveLessonPanel();
     }
