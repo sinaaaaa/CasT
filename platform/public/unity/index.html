@@ -3,10 +3,14 @@
   <head>
     <meta charset="utf-8">
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, shrink-to-fit=yes">
     <title>Unity WebGL Player | coding-block</title>
     <link rel="shortcut icon" href="TemplateData/favicon.ico">
     <link rel="stylesheet" href="TemplateData/style.css">
-  <style>/* sparc-viewport-fill */html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#000;}#unity-container{position:fixed!important;inset:0!important;left:0!important;top:0!important;transform:none!important;width:100%!important;height:100%!important;}#unity-canvas{position:fixed!important;inset:0!important;width:100%!important;height:100%!important;display:block;}#unity-footer{display:none!important;}</style><script>/* StudentGameConfig bridge */try{if(window.parent&&window.parent.StudentGameConfig&&!window.StudentGameConfig)window.StudentGameConfig=window.parent.StudentGameConfig;}catch(e){}</script><style>canvas,#unity-container,#unity-canvas{touch-action:none;-ms-touch-action:none;}</style><script>document.addEventListener('touchmove',function(e){if(e.touches.length>1)e.preventDefault();},{passive:false});</script><script>/* sparc-webgl-guards */(function(){try{var o=screen.orientation;if(!o)screen.orientation=o={};if(typeof o.lock!=='function')o.lock=function(){return Promise.resolve();};}catch(e){}})();</script></head>
+    <style>/* sparc-aspect-fit */html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#000;display:flex;align-items:center;justify-content:center;}#unity-container{position:relative!important;left:auto!important;top:auto!important;transform:none!important;margin:0;line-height:0;}#unity-canvas{display:block;}#unity-footer{display:none!important;}canvas,#unity-container,#unity-canvas{touch-action:none;-ms-touch-action:none;}</style>
+    <script>/* StudentGameConfig bridge */try{if(window.parent&&window.parent.StudentGameConfig&&!window.StudentGameConfig)window.StudentGameConfig=window.parent.StudentGameConfig;}catch(e){}</script>
+    <script>/* sparc-webgl-guards */(function(){try{var o=screen.orientation;if(!o)screen.orientation=o={};if(typeof o.lock!=='function')o.lock=function(){return Promise.resolve();};}catch(e){}})();</script>
+  </head>
   <body>
     <div id="unity-container" class="unity-desktop">
       <canvas id="unity-canvas" width=1920 height=1080 tabindex="-1"></canvas>
@@ -32,12 +36,31 @@
       var fullscreenButton = document.querySelector("#unity-fullscreen-button");
       var warningBanner = document.querySelector("#unity-warning");
 
-      // Shows a temporary message banner/ribbon for a few seconds, or
-      // a permanent error message on top of the canvas if type=='error'.
-      // If type=='warning', a yellow highlight color is used.
-      // Modify or remove this function to customize the visually presented
-      // way that non-critical warnings and error messages are presented to the
-      // user.
+      // Design resolution — keep this aspect in the small iframe AND in browser fullscreen
+      // so UI / board / strip stay in the same relative positions (uniform scale only).
+      var DESIGN_W = 1920;
+      var DESIGN_H = 1080;
+      var DESIGN_ASPECT = DESIGN_W / DESIGN_H;
+
+      function fitUnityStage() {
+        var availW = window.innerWidth || document.documentElement.clientWidth || DESIGN_W;
+        var availH = window.innerHeight || document.documentElement.clientHeight || DESIGN_H;
+        var cssW, cssH;
+        if (availW / Math.max(1, availH) > DESIGN_ASPECT) {
+          cssH = availH;
+          cssW = Math.floor(availH * DESIGN_ASPECT);
+        } else {
+          cssW = availW;
+          cssH = Math.floor(availW / DESIGN_ASPECT);
+        }
+        cssW = Math.max(2, cssW);
+        cssH = Math.max(2, cssH);
+        container.style.width = cssW + "px";
+        container.style.height = cssH + "px";
+        canvas.style.width = cssW + "px";
+        canvas.style.height = cssH + "px";
+      }
+
       function unityShowBanner(msg, type) {
         function updateBannerVisibility() {
           warningBanner.style.display = warningBanner.children.length ? 'block' : 'none';
@@ -69,34 +92,16 @@
         showBanner: unityShowBanner,
       };
 
-      // By default, Unity keeps WebGL canvas render target size matched with
-      // the DOM size of the canvas element (scaled by window.devicePixelRatio)
-      // Set this to false if you want to decouple this synchronization from
-      // happening inside the engine, and you would instead like to size up
-      // the canvas DOM size and WebGL render target sizes yourself.
-      // config.matchWebGLToCanvasSize = false;
-
       if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
-        // Mobile device style: fill the whole browser client area with the game canvas:
-
-        var meta = document.createElement('meta');
-        meta.name = 'viewport';
-        meta.content = 'width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, shrink-to-fit=yes';
-        document.getElementsByTagName('head')[0].appendChild(meta);
         container.className = "unity-mobile";
         canvas.className = "unity-mobile";
-
-        // To lower canvas resolution on mobile devices to gain some
-        // performance, uncomment the following line:
-        // config.devicePixelRatio = 1;
-
-
-      } else {
-        // Desktop style: Render the game canvas in a window that can be maximized to fullscreen:
-
-        canvas.style.width = "100%";
-        canvas.style.height = "100%";
       }
+
+      fitUnityStage();
+      window.addEventListener("resize", fitUnityStage);
+      window.addEventListener("orientationchange", function () {
+        setTimeout(fitUnityStage, 50);
+      });
 
       loadingBar.style.display = "block";
 
@@ -105,11 +110,15 @@
       script.onload = () => {
         createUnityInstance(canvas, config, (progress) => {
           progressBarFull.style.width = 100 * progress + "%";
-              }).then((unityInstance) => {window.unityInstance=unityInstance;
+              }).then((unityInstance) => {
+                window.unityInstance = unityInstance;
                 loadingBar.style.display = "none";
-                fullscreenButton.onclick = () => {
-                  unityInstance.SetFullscreen(1);
-                };
+                fitUnityStage();
+                if (fullscreenButton) {
+                  fullscreenButton.onclick = () => {
+                    unityInstance.SetFullscreen(1);
+                  };
+                }
               }).catch((message) => {
                 alert(message);
               });
@@ -117,6 +126,11 @@
 
       document.body.appendChild(script);
 
+      document.addEventListener('touchmove', function (e) {
+        if (e.touches.length > 1) e.preventDefault();
+      }, { passive: false });
+
     </script>
-  <script>/* sparc-viewport-fill-js */(function(){function fill(){var c=document.querySelector('#unity-container');var a=document.querySelector('#unity-canvas');if(!c||!a)return;c.style.cssText='position:fixed;inset:0;left:0;top:0;transform:none;width:100%;height:100%;';a.style.width='100%';a.style.height='100%';}fill();window.addEventListener('resize',fill);})();</script><script>/* sparc-fullscreen-bridge */window.addEventListener('message',function(e){var u=window.unityInstance;if(!u)return;if(e.data==='sparc-enter-fullscreen')u.SetFullscreen(1);if(e.data==='sparc-exit-fullscreen')u.SetFullscreen(0);});</script></body>
+    <script>/* sparc-fullscreen-bridge */window.addEventListener('message',function(e){var u=window.unityInstance;if(!u)return;if(e.data==='sparc-enter-fullscreen')u.SetFullscreen(1);if(e.data==='sparc-exit-fullscreen')u.SetFullscreen(0);});</script>
+  </body>
 </html>

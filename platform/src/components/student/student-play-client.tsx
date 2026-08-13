@@ -35,6 +35,8 @@ function buildUnityUrl(baseUrl: string, config: StudentGameConfig): string {
   url.searchParams.set("studentCode", config.studentCode);
   url.searchParams.set("token", config.sessionToken);
   url.searchParams.set("apiBaseUrl", config.apiBaseUrl);
+  // Bust stale WebGL index/CSS caches when the embed layout changes.
+  url.searchParams.set("v", "aspectfit-16x9");
   if (config.gameApiKey) {
     url.searchParams.set("gameApiKey", config.gameApiKey);
   }
@@ -203,7 +205,7 @@ export function StudentPlayClient({
             ref={iframeRef}
             src={iframeSrc}
             title="Robot Coding Game"
-            className="absolute inset-0 block h-dvh min-h-dvh w-full border-0 bg-black [&:fullscreen]:h-screen [&:fullscreen]:min-h-0 [&:fullscreen]:w-screen"
+            className="absolute inset-0 block h-dvh min-h-dvh w-full border-0 bg-black [&:fullscreen]:fixed [&:fullscreen]:inset-0 [&:fullscreen]:h-screen [&:fullscreen]:min-h-0 [&:fullscreen]:w-screen"
             allow="autoplay; fullscreen"
             allowFullScreen
           />

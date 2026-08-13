@@ -58,7 +58,7 @@ public static class WebGLBuildScript
         InjectStudentConfigBridge(outputDir);
         InjectTouchGestureGuards(outputDir);
         InjectWebGlBrowserGuards(outputDir);
-        InjectViewportFill(outputDir);
+        InjectAspectFit(outputDir);
         InjectFullscreenBridge(outputDir);
         Debug.Log("[WebGLBuildScript] Build succeeded: " + outputDir);
         if (exitWhenDone)
@@ -138,9 +138,6 @@ public static class WebGLBuildScript
             "if(typeof o.lock!=='function')o.lock=function(){return Promise.resolve();};}catch(e){}})();" +
             "</script>" +
             "<style>/* sparc-webgl-guards */html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#000;}" +
-            "#unity-container,#unity-container.unity-desktop,#unity-container.unity-mobile," +
-            "#unity-canvas,.unity-mobile #unity-canvas{position:fixed;inset:0;left:0;top:0;transform:none;" +
-            "width:100%!important;height:100%!important;}" +
             "#unity-footer{display:none!important;}</style>";
 
         if (html.Contains("</head>"))
@@ -152,10 +149,10 @@ public static class WebGLBuildScript
     }
 
     /// <summary>
-    /// Makes the WebGL canvas fill the iframe/window on desktop + mobile (no 960×600 letterbox).
-    /// Browser fullscreen is optional — this is "full view" without SetFullscreen.
+    /// Keeps a locked 16:9 stage centered in the iframe (letterbox OK).
+    /// Small frame and browser fullscreen share the same layout proportions — only uniform scale changes.
     /// </summary>
-    private static void InjectViewportFill(string outputDir)
+    private static void InjectAspectFit(string outputDir)
     {
         var indexPath = Path.Combine(outputDir, "index.html");
         var stylePath = Path.Combine(outputDir, "TemplateData", "style.css");
@@ -164,7 +161,7 @@ public static class WebGLBuildScript
 
         var html = File.ReadAllText(indexPath);
 
-        // Strip Unity Default template's fixed desktop canvas size (960×600, 1920×1080, etc.).
+        // Remove Unity Default fixed desktop sizes; aspect-fit JS owns sizing.
         html = System.Text.RegularExpressions.Regex.Replace(
             html,
             @"canvas\.style\.width\s*=\s*""\d+px"";",
@@ -173,47 +170,40 @@ public static class WebGLBuildScript
             html,
             @"canvas\.style\.height\s*=\s*""\d+px"";",
             "canvas.style.height = \"100%\";");
-        html = System.Text.RegularExpressions.Regex.Replace(
-            html,
-            @"canvas\.style\.width\s*=\s*'\d+px';",
-            "canvas.style.width = '100%';");
-        html = System.Text.RegularExpressions.Regex.Replace(
-            html,
-            @"canvas\.style\.height\s*=\s*'\d+px';",
-            "canvas.style.height = '100%';");
-        html = System.Text.RegularExpressions.Regex.Replace(
-            html,
-            @"width=\d+\s+height=\d+",
-            "width=1920 height=1080");
 
-        const string marker = "sparc-viewport-fill";
+        const string marker = "sparc-aspect-fit";
         if (!html.Contains(marker))
         {
-            const string snippet =
-                "<style>/* sparc-viewport-fill */" +
-                "html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#000;}" +
-                "#unity-container{position:fixed!important;inset:0!important;left:0!important;top:0!important;" +
-                "transform:none!important;width:100%!important;height:100%!important;}" +
-                "#unity-canvas{position:fixed!important;inset:0!important;width:100%!important;height:100%!important;display:block;}" +
-                "#unity-footer{display:none!important;}" +
-                "</style>";
+            const string head =
+                "<style>/* sparc-aspect-fit */" +
+                "html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#000;" +
+                "display:flex;align-items:center;justify-content:center;}" +
+                "#unity-container{position:relative!important;left:auto!important;top:auto!important;" +
+                "transform:none!important;margin:0;line-height:0;}" +
+                "#unity-canvas{display:block;}" +
+                "#unity-footer{display:none!important;}</style>";
 
             if (html.Contains("</head>"))
-                html = html.Replace("</head>", snippet + "</head>");
+                html = html.Replace("</head>", head + "</head>");
             else
-                html = snippet + html;
+                html = head + html;
         }
 
-        // Ensure desktop also runs the fill sizing (Unity only did 100% for mobile).
-        if (!html.Contains("sparc-viewport-fill-js"))
+        if (!html.Contains("sparc-aspect-fit-js"))
         {
             const string js =
-                "<script>/* sparc-viewport-fill-js */" +
-                "(function(){function fill(){var c=document.querySelector('#unity-container');" +
+                "<script>/* sparc-aspect-fit-js */" +
+                "(function(){var DW=1920,DH=1080,A=DW/DH;" +
+                "function fit(){var c=document.querySelector('#unity-container');" +
                 "var a=document.querySelector('#unity-canvas');if(!c||!a)return;" +
-                "c.style.cssText='position:fixed;inset:0;left:0;top:0;transform:none;width:100%;height:100%;';" +
-                "a.style.width='100%';a.style.height='100%';}" +
-                "fill();window.addEventListener('resize',fill);})();</script>";
+                "var W=window.innerWidth||DW,H=window.innerHeight||DH,w,h;" +
+                "if(W/Math.max(1,H)>A){h=H;w=Math.floor(H*A);}else{w=W;h=Math.floor(W/A);}" +
+                "w=Math.max(2,w);h=Math.max(2,h);" +
+                "c.style.width=w+'px';c.style.height=h+'px';" +
+                "a.style.width=w+'px';a.style.height=h+'px';}" +
+                "fit();window.addEventListener('resize',fit);" +
+                "window.addEventListener('orientationchange',function(){setTimeout(fit,50);});})();" +
+                "</script>";
 
             if (html.Contains("</body>"))
                 html = html.Replace("</body>", js + "</body>");
@@ -221,20 +211,24 @@ public static class WebGLBuildScript
                 html = html + js;
         }
 
+        // Drop older stretch-fill injects if a rebuild reintroduced them.
+        html = html.Replace("/* sparc-viewport-fill */", "/* sparc-viewport-fill-disabled */");
+        html = html.Replace("/* sparc-viewport-fill-js */", "/* sparc-viewport-fill-js-disabled */");
+
         File.WriteAllText(indexPath, html);
 
         if (File.Exists(stylePath))
         {
             var css = File.ReadAllText(stylePath);
-            if (!css.Contains("sparc-viewport-fill"))
+            if (!css.Contains("sparc-aspect-fit"))
             {
                 css +=
-                    "\n/* sparc-viewport-fill */\n" +
-                    "html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#000;}\n" +
+                    "\n/* sparc-aspect-fit */\n" +
+                    "html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#000;" +
+                    "display:flex;align-items:center;justify-content:center;}\n" +
                     "#unity-container,#unity-container.unity-desktop,#unity-container.unity-mobile{" +
-                    "position:fixed!important;inset:0!important;left:0!important;top:0!important;" +
-                    "transform:none!important;width:100%!important;height:100%!important;}\n" +
-                    "#unity-canvas,.unity-mobile #unity-canvas{width:100%!important;height:100%!important;display:block;}\n" +
+                    "position:relative!important;left:auto!important;top:auto!important;" +
+                    "transform:none!important;margin:0;line-height:0;}\n" +
                     "#unity-footer{display:none!important;}\n";
                 File.WriteAllText(stylePath, css);
             }
