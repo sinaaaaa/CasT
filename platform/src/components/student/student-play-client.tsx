@@ -35,7 +35,7 @@ function buildUnityUrl(baseUrl: string, config: StudentGameConfig): string {
   url.searchParams.set("studentCode", config.studentCode);
   url.searchParams.set("token", config.sessionToken);
   url.searchParams.set("apiBaseUrl", config.apiBaseUrl);
-  url.searchParams.set("v", "smallframe-2");
+  url.searchParams.set("v", "frame-chrome-1");
   if (config.gameApiKey) {
     url.searchParams.set("gameApiKey", config.gameApiKey);
   }
@@ -52,11 +52,6 @@ function isDocumentFullscreen(): boolean {
   return !!(document.fullscreenElement ?? document.webkitFullscreenElement);
 }
 
-function isDesktopPointer(): boolean {
-  if (typeof window === "undefined") return true;
-  return window.matchMedia("(pointer: fine)").matches;
-}
-
 export function StudentPlayClient({
   config,
   unityGameUrl,
@@ -68,7 +63,6 @@ export function StudentPlayClient({
   const [status, setStatus] = useState<"loading" | "ready" | "missing">("loading");
   const [iframeSrc, setIframeSrc] = useState(unityGameUrl);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [showFullscreenControl, setShowFullscreenControl] = useState(false);
 
   useEffect(() => {
     window.StudentGameConfig = config;
@@ -81,14 +75,6 @@ export function StudentPlayClient({
       })
       .catch(() => setStatus("missing"));
   }, [config, unityGameUrl]);
-
-  useEffect(() => {
-    const syncFullscreenControl = () => setShowFullscreenControl(isDesktopPointer());
-    syncFullscreenControl();
-    const mq = window.matchMedia("(pointer: fine)");
-    mq.addEventListener("change", syncFullscreenControl);
-    return () => mq.removeEventListener("change", syncFullscreenControl);
-  }, []);
 
   useEffect(() => {
     const syncFullscreen = () => setIsFullscreen(isDocumentFullscreen());
@@ -121,7 +107,7 @@ export function StudentPlayClient({
   }, []);
 
   const controlButtonClass =
-    "pointer-events-auto inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-slate-950/75 text-white shadow-lg backdrop-blur transition hover:bg-slate-900/90";
+    "pointer-events-auto inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/25 bg-slate-950/80 text-white shadow-lg backdrop-blur transition hover:bg-slate-900/95 sm:h-10 sm:w-10";
 
   return (
     <div className="student-zone min-h-dvh bg-black text-white">
@@ -129,33 +115,8 @@ export function StudentPlayClient({
       <InstallPlayAppPrompt gameReady={status === "ready"} />
       <div
         ref={gameShellRef}
-        className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-black px-3 py-4 sm:px-6 [&:fullscreen]:justify-center [&:fullscreen]:p-0"
+        className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-black p-3 sm:p-5"
       >
-        {status === "ready" && (
-          <div className="pointer-events-none absolute left-3 top-3 z-30 flex items-center gap-2 sm:left-4 sm:top-4">
-            <Link
-              href={homeHref}
-              className={controlButtonClass}
-              aria-label="Back to home"
-              title="Home"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </Link>
-            {showFullscreenControl && (
-              <button
-                type="button"
-                onClick={toggleFullscreen}
-                className={controlButtonClass}
-                aria-pressed={isFullscreen}
-                aria-label={isFullscreen ? "Exit full screen" : "Enter full screen"}
-                title={isFullscreen ? "Exit full screen" : "Full screen"}
-              >
-                {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-              </button>
-            )}
-          </div>
-        )}
-
         {status === "loading" && (
           <div className="absolute inset-0 z-10 flex min-h-dvh flex-col items-center justify-center gap-3 bg-slate-950">
             <Loader2 className="h-10 w-10 animate-spin text-sky-400" />
@@ -193,28 +154,47 @@ export function StudentPlayClient({
             </Link>
           </div>
         ) : (
-          <>
-            {/* Small framed stage on load; expands when the user chooses full screen. */}
-            <div
-              ref={frameRef}
-              className="relative w-full max-w-[960px] overflow-hidden rounded-xl border border-white/10 bg-black shadow-2xl shadow-black/60 [&:fullscreen]:aspect-auto [&:fullscreen]:h-screen [&:fullscreen]:max-h-none [&:fullscreen]:max-w-none [&:fullscreen]:rounded-none [&:fullscreen]:border-0 [&:fullscreen]:w-screen"
-              style={{ aspectRatio: "16 / 9" }}
-            >
-              <iframe
-                ref={iframeRef}
-                src={iframeSrc}
-                title="Robot Coding Game"
-                className="absolute inset-0 block h-full w-full border-0 bg-black"
-                allow="autoplay; fullscreen"
-                allowFullScreen
-              />
-            </div>
-            {!isFullscreen && showFullscreenControl && (
-              <p className="mt-3 text-center text-xs text-slate-500">
-                Tap the expand button for full screen
-              </p>
+          <div
+            ref={frameRef}
+            className="relative overflow-hidden rounded-xl border border-white/15 bg-black shadow-2xl shadow-black/70 [&:fullscreen]:h-screen [&:fullscreen]:w-screen [&:fullscreen]:max-h-none [&:fullscreen]:max-w-none [&:fullscreen]:rounded-none [&:fullscreen]:border-0"
+            style={{
+              width: "min(92vw, calc(88dvh * 16 / 9))",
+              maxWidth: "1400px",
+              aspectRatio: "16 / 9",
+            }}
+          >
+            <iframe
+              ref={iframeRef}
+              src={iframeSrc}
+              title="Robot Coding Game"
+              className="absolute inset-0 block h-full w-full border-0 bg-black"
+              allow="autoplay; fullscreen"
+              allowFullScreen
+            />
+
+            {status === "ready" && (
+              <>
+                <Link
+                  href={homeHref}
+                  className={`${controlButtonClass} absolute left-2 top-2 z-30 sm:left-3 sm:top-3`}
+                  aria-label="Back to home"
+                  title="Home"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </Link>
+                <button
+                  type="button"
+                  onClick={toggleFullscreen}
+                  className={`${controlButtonClass} absolute right-2 top-2 z-30 sm:right-3 sm:top-3`}
+                  aria-pressed={isFullscreen}
+                  aria-label={isFullscreen ? "Exit full screen" : "Enter full screen"}
+                  title={isFullscreen ? "Exit full screen" : "Full screen"}
+                >
+                  {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                </button>
+              </>
             )}
-          </>
+          </div>
         )}
       </div>
     </div>
