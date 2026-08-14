@@ -368,14 +368,14 @@ function PatternTokenIcon({
   dimmed?: boolean;
 }) {
   if (isBlankToken(action)) {
-    const lineH = Math.max(12, Math.round(px * 0.2));
+    const lineH = Math.max(24, Math.round(px * 0.4));
     return (
       <span
         className={cn(
           "relative inline-flex items-end justify-center",
           dimmed && "opacity-90"
         )}
-        style={{ width: px, height: px, paddingBottom: px * 0.06 }}
+        style={{ width: px, height: px, paddingBottom: px * 0.04 }}
         title="Blank — student fills this"
       >
         <BlankLineMark className="w-[92%] rounded-md bg-slate-800" height={lineH} />

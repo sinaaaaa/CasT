@@ -848,9 +848,9 @@ public class CanvasLessonPanel : MonoBehaviour
         lineRt.pivot = new Vector2(0.5f, 0.5f);
         lineRt.anchoredPosition = new Vector2(0f, slot * 0.16f);
 
-        // Match underline weight under the arrow icons (wide + thick).
+        // Match underline weight under the arrow icons (wide + thick — ~2× prior height).
         float lineW = slot * 0.92f;
-        float lineH = Mathf.Clamp(slot * 0.2f, 12f, 22f);
+        float lineH = Mathf.Clamp(slot * 0.4f, 24f, 44f);
 
         var img = lineGo.GetComponent<Image>();
         img.raycastTarget = false;
@@ -859,7 +859,7 @@ public class CanvasLessonPanel : MonoBehaviour
             img.sprite = blankLineSprite;
             img.preserveAspect = true;
             img.color = Color.white;
-            lineH = Mathf.Max(lineH, slot * 0.22f);
+            lineH = Mathf.Max(lineH, slot * 0.44f);
             lineW = slot * 0.94f;
         }
         else

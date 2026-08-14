@@ -35,8 +35,7 @@ function buildUnityUrl(baseUrl: string, config: StudentGameConfig): string {
   url.searchParams.set("studentCode", config.studentCode);
   url.searchParams.set("token", config.sessionToken);
   url.searchParams.set("apiBaseUrl", config.apiBaseUrl);
-  // Bust stale WebGL index/CSS caches when the embed layout changes.
-  url.searchParams.set("v", "aspectfit-nofullscreen-1");
+  url.searchParams.set("v", "smallframe-2");
   if (config.gameApiKey) {
     url.searchParams.set("gameApiKey", config.gameApiKey);
   }
@@ -65,6 +64,7 @@ export function StudentPlayClient({
 }: Props) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const gameShellRef = useRef<HTMLDivElement>(null);
+  const frameRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "missing">("loading");
   const [iframeSrc, setIframeSrc] = useState(unityGameUrl);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -101,24 +101,22 @@ export function StudentPlayClient({
   }, []);
 
   const toggleFullscreen = useCallback(async () => {
-    const iframe = iframeRef.current;
-    if (!iframe) return;
+    const frame = frameRef.current;
+    if (!frame) return;
 
     try {
-      // Browser fullscreen on the iframe only — never call Unity SetFullscreen
-      // (that throws "Fullscreen request denied" inside an iframe and crashes the player).
       if (isDocumentFullscreen()) {
         if (document.exitFullscreen) await document.exitFullscreen();
         else if (document.webkitExitFullscreen) await document.webkitExitFullscreen();
         return;
       }
 
-      const target = iframe as HTMLElement & { webkitRequestFullscreen?: () => Promise<void> };
+      const target = frame as HTMLElement & { webkitRequestFullscreen?: () => Promise<void> };
       if (target.requestFullscreen) await target.requestFullscreen();
       else if (target.webkitRequestFullscreen) await target.webkitRequestFullscreen();
       else if (gameShellRef.current?.requestFullscreen) await gameShellRef.current.requestFullscreen();
     } catch {
-      // Fullscreen API is limited on some browsers; aspect-fit still keeps layout correct.
+      // Fullscreen API is limited on some browsers; the framed layout still works.
     }
   }, []);
 
@@ -129,9 +127,12 @@ export function StudentPlayClient({
     <div className="student-zone min-h-dvh bg-black text-white">
       <LandscapeRequiredOverlay />
       <InstallPlayAppPrompt gameReady={status === "ready"} />
-      <div ref={gameShellRef} className="relative min-h-dvh overflow-hidden bg-black">
+      <div
+        ref={gameShellRef}
+        className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-black px-3 py-4 sm:px-6 [&:fullscreen]:justify-center [&:fullscreen]:p-0"
+      >
         {status === "ready" && (
-          <div className="pointer-events-none absolute left-3 top-3 z-20 flex items-center gap-2">
+          <div className="pointer-events-none absolute left-3 top-3 z-30 flex items-center gap-2 sm:left-4 sm:top-4">
             <Link
               href={homeHref}
               className={controlButtonClass}
@@ -192,14 +193,28 @@ export function StudentPlayClient({
             </Link>
           </div>
         ) : (
-          <iframe
-            ref={iframeRef}
-            src={iframeSrc}
-            title="Robot Coding Game"
-            className="absolute inset-0 block h-dvh min-h-dvh w-full border-0 bg-black [&:fullscreen]:fixed [&:fullscreen]:inset-0 [&:fullscreen]:h-screen [&:fullscreen]:min-h-0 [&:fullscreen]:w-screen"
-            allow="autoplay; fullscreen"
-            allowFullScreen
-          />
+          <>
+            {/* Small framed stage on load; expands when the user chooses full screen. */}
+            <div
+              ref={frameRef}
+              className="relative w-full max-w-[960px] overflow-hidden rounded-xl border border-white/10 bg-black shadow-2xl shadow-black/60 [&:fullscreen]:aspect-auto [&:fullscreen]:h-screen [&:fullscreen]:max-h-none [&:fullscreen]:max-w-none [&:fullscreen]:rounded-none [&:fullscreen]:border-0 [&:fullscreen]:w-screen"
+              style={{ aspectRatio: "16 / 9" }}
+            >
+              <iframe
+                ref={iframeRef}
+                src={iframeSrc}
+                title="Robot Coding Game"
+                className="absolute inset-0 block h-full w-full border-0 bg-black"
+                allow="autoplay; fullscreen"
+                allowFullScreen
+              />
+            </div>
+            {!isFullscreen && showFullscreenControl && (
+              <p className="mt-3 text-center text-xs text-slate-500">
+                Tap the expand button for full screen
+              </p>
+            )}
+          </>
         )}
       </div>
     </div>
