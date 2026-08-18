@@ -7,11 +7,15 @@ import {
   DEFAULT_CANVAS_LESSON,
   DEFAULT_CANVAS_PATTERN_EMPHASIS,
   contiguousHighlightRuns,
+  countActionInPattern,
+  defaultCountPrompt,
+  formatCountAnswerToken,
   resolveCanvasPatternTokenPx,
   resolveCanvasSectionLabel,
   resolveEmphasisHighlightChunk,
   resolveEnabledActionButtons,
   resolveHighlightedPatternIndices,
+  type CanvasCountAction,
   type CanvasLessonConfig,
   type CanvasPatternEmphasis,
   type LevelGameplayConfig,
@@ -31,6 +35,7 @@ import {
   CornerDownRight,
   Eye,
   GripVertical,
+  Hash,
   Highlighter,
   ImageIcon,
   LayoutTemplate,
@@ -74,6 +79,12 @@ const STRIP_MODES: {
     label: "Seeded program",
     hint: "Pre-filled starter blocks",
     icon: <LayoutTemplate className="h-4 w-4" />,
+  },
+  {
+    value: "COUNT_ANSWER",
+    label: "Count answer",
+    hint: "Pattern + number counter (+/−)",
+    icon: <Hash className="h-4 w-4" />,
   },
 ];
 
@@ -145,6 +156,47 @@ const TOKEN_STYLE: Record<
     icon: <RotateCcw className="h-3.5 w-3.5 text-fuchsia-700" />,
   },
 };
+
+function CountAnswerCounterPreview({
+  value,
+  min = 0,
+  max = 20,
+  onChange,
+  readOnly = false,
+}: {
+  value: number;
+  min?: number;
+  max?: number;
+  onChange?: (n: number) => void;
+  readOnly?: boolean;
+}) {
+  const clamp = (n: number) => Math.max(min, Math.min(max, n));
+  return (
+    <div className="inline-flex items-center gap-1.5">
+      <button
+        type="button"
+        disabled={readOnly || value <= min}
+        onClick={() => onChange?.(clamp(value - 1))}
+        className="flex h-10 w-10 items-center justify-center rounded-lg border border-amber-400/80 bg-white text-lg font-bold text-slate-700 shadow-sm disabled:opacity-40"
+        aria-label="Decrease count"
+      >
+        −
+      </button>
+      <span className="flex h-10 min-w-[2.75rem] items-center justify-center rounded-lg border border-amber-400/80 bg-white px-2 text-xl font-bold tabular-nums text-slate-900 shadow-sm">
+        {value}
+      </span>
+      <button
+        type="button"
+        disabled={readOnly || value >= max}
+        onClick={() => onChange?.(clamp(value + 1))}
+        className="flex h-10 w-10 items-center justify-center rounded-lg border border-amber-400/80 bg-white text-lg font-bold text-slate-700 shadow-sm disabled:opacity-40"
+        aria-label="Increase count"
+      >
+        +
+      </button>
+    </div>
+  );
+}
 
 function tokenLabel(value: string) {
   if (value === "blank") return "Blank";
@@ -866,6 +918,14 @@ function StudentCanvasPreview({
                 Set starter program below…
               </span>
             ))}
+          {stripMode === "COUNT_ANSWER" && (
+            <CountAnswerCounterPreview
+              value={lesson.countInitialValue ?? 0}
+              min={lesson.countMin ?? 0}
+              max={lesson.countMax ?? 20}
+              readOnly
+            />
+          )}
         </div>
       </div>
     </div>
@@ -879,12 +939,52 @@ export function CanvasLessonEditor({ config, onChange }: Props) {
   };
   const enabled = new Set(resolveEnabledActionButtons(config));
   const repeatVisible = enabled.has("repeat");
+  const isCountMode = lesson.stripMode === "COUNT_ANSWER";
+  const countAction = (lesson.countAction ?? "forward") as CanvasCountAction;
+  const patternCount = countActionInPattern(lesson.patternPreview, countAction);
 
   function patch(partial: Partial<CanvasLessonConfig>) {
-    onChange({
-      ...config,
-      canvasLesson: { ...lesson, ...partial },
-    });
+    const next: CanvasLessonConfig = { ...lesson, ...partial };
+    const updates: LevelGameplayConfig = { ...config, canvasLesson: next };
+
+    if (next.stripMode === "COUNT_ANSWER") {
+      updates.enabledActionButtons = [];
+      const correct = next.correctCount ?? patternCount;
+      updates.assessment = {
+        ...config.assessment,
+        correctPrograms: [formatCountAnswerToken(correct)],
+      };
+    }
+
+    onChange(updates);
+  }
+
+  function selectStripMode(mode: CanvasLessonConfig["stripMode"]) {
+    if (mode === "COUNT_ANSWER") {
+      const action = (lesson.countAction ?? "forward") as CanvasCountAction;
+      const auto = countActionInPattern(lesson.patternPreview, action);
+      const correct = lesson.correctCount ?? auto;
+      onChange({
+        ...config,
+        enabledActionButtons: [],
+        canvasLesson: {
+          ...lesson,
+          stripMode: "COUNT_ANSWER",
+          countAction: action,
+          correctCount: correct,
+          countInitialValue: lesson.countInitialValue ?? 0,
+          countMin: lesson.countMin ?? 0,
+          countMax: lesson.countMax ?? 20,
+          prompt: lesson.prompt?.trim() || defaultCountPrompt(action),
+        },
+        assessment: {
+          ...config.assessment,
+          correctPrograms: [formatCountAnswerToken(correct)],
+        },
+      });
+      return;
+    }
+    patch({ stripMode: mode });
   }
 
   function setRepeatVisible(visible: boolean) {
@@ -918,6 +1018,7 @@ export function CanvasLessonEditor({ config, onChange }: Props) {
 
       <div className="grid gap-6 p-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)] lg:p-6">
         <div className="space-y-6">
+          {!isCountMode && (
           <label
             className={cn(
               "flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-3 transition",
@@ -942,17 +1043,18 @@ export function CanvasLessonEditor({ config, onChange }: Props) {
               </span>
             </span>
           </label>
+          )}
 
           <div>
             <p className="mb-2 text-sm font-semibold text-slate-800">How the yellow strip starts</p>
-            <div className="grid gap-2 sm:grid-cols-3">
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
               {STRIP_MODES.map((m) => {
                 const active = lesson.stripMode === m.value;
                 return (
                   <button
                     key={m.value}
                     type="button"
-                    onClick={() => patch({ stripMode: m.value })}
+                    onClick={() => selectStripMode(m.value)}
                     className={cn(
                       "group rounded-2xl border px-3 py-3 text-left transition",
                       active
@@ -1032,6 +1134,100 @@ export function CanvasLessonEditor({ config, onChange }: Props) {
                   />
                 ))}
               </div>
+            </div>
+          )}
+
+          {isCountMode && (
+            <div className="space-y-4 rounded-2xl border border-violet-200 bg-violet-50/40 p-4">
+              <p className="text-sm font-semibold text-violet-950">Count question</p>
+              <p className="text-xs text-violet-800/80">
+                Students see the pattern on the white board and answer with a +/− counter in the yellow strip.
+                Motion blocks are hidden for this mode.
+              </p>
+              <label className="block space-y-2">
+                <span className="text-sm font-medium text-violet-950">Count which action?</span>
+                <select
+                  className="h-10 w-full max-w-xs rounded-xl border border-violet-200 bg-white px-3 text-sm"
+                  value={countAction}
+                  onChange={(e) => {
+                    const action = e.target.value as CanvasCountAction;
+                    const auto = countActionInPattern(lesson.patternPreview, action);
+                    patch({
+                      countAction: action,
+                      correctCount: auto,
+                      prompt: defaultCountPrompt(action),
+                    });
+                  }}
+                >
+                  <option value="forward">Forward arrows</option>
+                  <option value="backward">Backward arrows</option>
+                  <option value="turn left">Turn left</option>
+                  <option value="turn right">Turn right</option>
+                </select>
+              </label>
+              <div className="flex flex-wrap items-end gap-4">
+                <label className="block space-y-2">
+                  <span className="text-sm font-medium text-violet-950">Correct count</span>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="outline"
+                      className="h-10 w-10"
+                      onClick={() =>
+                        patch({
+                          correctCount: Math.max(0, (lesson.correctCount ?? patternCount) - 1),
+                        })
+                      }
+                    >
+                      <Minus className="h-4 w-4" />
+                    </Button>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={99}
+                      value={lesson.correctCount ?? patternCount}
+                      onChange={(e) =>
+                        patch({
+                          correctCount: Math.max(0, Math.min(99, Number(e.target.value) || 0)),
+                        })
+                      }
+                      className="h-10 w-16 text-center"
+                    />
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="outline"
+                      className="h-10 w-10"
+                      onClick={() =>
+                        patch({
+                          correctCount: Math.min(99, (lesson.correctCount ?? patternCount) + 1),
+                        })
+                      }
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </label>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="mb-0.5"
+                  onClick={() => patch({ correctCount: patternCount })}
+                >
+                  Use pattern count ({patternCount})
+                </Button>
+              </div>
+              <label className="block space-y-2">
+                <span className="text-sm font-medium text-violet-950">Student counter starts at</span>
+                <CountAnswerCounterPreview
+                  value={lesson.countInitialValue ?? 0}
+                  min={lesson.countMin ?? 0}
+                  max={lesson.countMax ?? 20}
+                  onChange={(n) => patch({ countInitialValue: n })}
+                />
+              </label>
             </div>
           )}
 

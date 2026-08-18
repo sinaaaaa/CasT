@@ -78,7 +78,7 @@ export function StepGridSetup({ config, onChange, currentLevelId }: Props) {
                 <p className="line-clamp-3 text-sm font-medium text-slate-800">
                   {config.canvasLesson?.prompt?.trim() || "Prompt appears on the white board"}
                 </p>
-                <div className="mt-3 flex min-h-[2.75rem] flex-wrap justify-center gap-1.5 rounded-lg bg-amber-200/80 px-2 py-2">
+                <div className="mt-3 flex min-h-[2.75rem] flex-wrap items-center justify-center gap-1.5 rounded-lg bg-amber-200/80 px-2 py-2">
                   {(config.canvasLesson?.stripMode ?? "EMPTY") === "BLANKS"
                     ? Array.from({ length: config.canvasLesson?.blankSlotCount ?? 4 }).map((_, i) => (
                         <span
@@ -88,7 +88,15 @@ export function StepGridSetup({ config, onChange, currentLevelId }: Props) {
                           _
                         </span>
                       ))
-                    : (
+                    : (config.canvasLesson?.stripMode ?? "EMPTY") === "COUNT_ANSWER"
+                      ? (
+                          <span className="inline-flex items-center gap-1 rounded-lg border border-amber-400/80 bg-white px-2 py-1 text-sm font-bold tabular-nums text-slate-900">
+                            <span className="text-slate-500">−</span>
+                            {config.canvasLesson?.countInitialValue ?? 0}
+                            <span className="text-slate-500">+</span>
+                          </span>
+                        )
+                      : (
                         <span className="self-center text-[11px] font-medium text-amber-900/70">
                           Yellow strip
                         </span>

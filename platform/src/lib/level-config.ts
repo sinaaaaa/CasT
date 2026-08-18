@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { LevelType } from "@prisma/client";
+import { expandRepeatTokens } from "@/lib/assessment/expand-repeats";
 
 const vec2 = z.object({ x: z.number().int(), y: z.number().int() });
 
@@ -21,7 +22,21 @@ export const blankDataSchema = z.object({
 });
 
 /** Canvas (strip-only) lesson content shown on the white board + yellow-strip seeding. */
-export const canvasStripModeSchema = z.enum(["EMPTY", "BLANKS", "SEED_PROGRAM"]);
+export const canvasStripModeSchema = z.enum([
+  "EMPTY",
+  "BLANKS",
+  "SEED_PROGRAM",
+  "COUNT_ANSWER",
+]);
+
+/** Which motion token students count in the pattern (for COUNT_ANSWER strip). */
+export const canvasCountActionSchema = z.enum([
+  "forward",
+  "backward",
+  "turn left",
+  "turn right",
+]);
+export type CanvasCountAction = z.infer<typeof canvasCountActionSchema>;
 
 /** Overall size of pattern icons on the white board. */
 export const canvasPatternScaleSchema = z.enum(["normal", "large", "xlarge"]);
@@ -82,6 +97,14 @@ export const canvasLessonSchema = z.object({
   patternEmphasis: canvasPatternEmphasisSchema.optional(),
   /** For BLANKS: number of underscore slots students fill by drag. */
   blankSlotCount: z.number().int().min(1).max(20).optional(),
+  /** For COUNT_ANSWER: which action icon to count in the pattern. */
+  countAction: canvasCountActionSchema.optional(),
+  /** For COUNT_ANSWER: the numeric answer students must enter. */
+  correctCount: z.number().int().min(0).max(99).optional(),
+  /** Starting value on the yellow-strip counter (default 0). */
+  countInitialValue: z.number().int().min(0).max(99).optional(),
+  countMin: z.number().int().min(0).max(99).optional(),
+  countMax: z.number().int().min(0).max(99).optional(),
 });
 
 export type CanvasLessonConfig = z.infer<typeof canvasLessonSchema>;
@@ -101,6 +124,52 @@ export const itemPurposeSchema = z.enum(["ASSESSMENT", "INTRO"]).default("ASSESS
 export type ItemPurpose = z.infer<typeof itemPurposeSchema>;
 
 /** Resolved section label for Unity / preview. `null` = hide. */
+export function formatCountAnswerToken(count: number): string {
+  return `count:${Math.max(0, Math.min(99, Math.round(count)))}`;
+}
+
+export function parseCountAnswerToken(token: string): number | null {
+  const t = token.trim().toLowerCase();
+  if (!t.startsWith("count:")) return null;
+  const n = Number(t.slice(6));
+  return Number.isFinite(n) ? Math.max(0, Math.min(99, Math.round(n))) : null;
+}
+
+function normalizeCountableToken(t: string): string {
+  const x = normalizePatternToken(t);
+  if (x === "left" || x === "rotate left") return "turn left";
+  if (x === "right" || x === "rotate right") return "turn right";
+  return x;
+}
+
+/** Count how many of `action` appear in the pattern (after expanding repeats). */
+export function countActionInPattern(
+  pattern: string[] | undefined,
+  action: string
+): number {
+  if (!pattern?.length) return 0;
+  const tokens = pattern.filter((t) => normalizePatternToken(t) !== "blank");
+  const expanded = expandRepeatTokens(tokens);
+  const target = normalizeCountableToken(action);
+  return expanded.filter((t) => normalizeCountableToken(t) === target).length;
+}
+
+export function defaultCountPrompt(action: string): string {
+  const labels: Record<string, string> = {
+    forward: "forwards",
+    backward: "backwards",
+    "turn left": "turn-left arrows",
+    "turn right": "turn-right arrows",
+  };
+  return `How many ${labels[action] ?? action} do you see?`;
+}
+
+export function isCountAnswerStrip(
+  config: LevelGameplayConfig | null | undefined
+): boolean {
+  return config?.canvasLesson?.stripMode === "COUNT_ANSWER";
+}
+
 export function resolveCanvasSectionLabel(
   configured: string | undefined,
   fallbackWhenOmitted: string | null
@@ -432,6 +501,7 @@ export function countsTowardAssessment(
 export function resolveEnabledActionButtons(
   config: LevelGameplayConfig
 ): RobotActionButton[] {
+  if (isCountAnswerStrip(config)) return [];
   const custom = config.enabledActionButtons;
   if (custom && custom.length > 0) {
     const valid = custom.filter((a) =>

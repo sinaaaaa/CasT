@@ -281,7 +281,7 @@ public class LevelData
 [System.Serializable]
 public class CanvasLessonData
 {
-    /// <summary>EMPTY | BLANKS | SEED_PROGRAM</summary>
+    /// <summary>EMPTY | BLANKS | SEED_PROGRAM | COUNT_ANSWER</summary>
     public string stripMode = "EMPTY";
     [TextArea(2, 5)]
     public string prompt;
@@ -297,6 +297,14 @@ public class CanvasLessonData
     public string patternLabel;
     /// <summary>Pattern size + chunk highlight (bigger / red border / blink).</summary>
     public CanvasPatternEmphasisData patternEmphasis = new CanvasPatternEmphasisData();
+    /// <summary>COUNT_ANSWER: motion token to count (forward, backward, turn left, turn right).</summary>
+    public string countAction = "forward";
+    /// <summary>COUNT_ANSWER: expected numeric answer.</summary>
+    public int correctCount;
+    /// <summary>COUNT_ANSWER: starting counter value in the yellow strip.</summary>
+    public int countInitialValue;
+    public int countMin;
+    public int countMax = 20;
 }
 
 /// <summary>How pattern tokens are sized and which chunk matches get visual emphasis.</summary>
@@ -1527,6 +1535,8 @@ public class CharacterMove : MonoBehaviour
                 tokens.Add(ProgramSequenceUtil.FormatRepeatStart(r.repeatCount));
             else if (r.isRepeatEnd)
                 tokens.Add("repeat-end");
+            else if (r.isCountAnswer)
+                tokens.Add(ProgramSequenceUtil.FormatCountToken(r.countValue));
             else if (!string.IsNullOrEmpty(r.actionLabel))
                 tokens.Add(r.actionLabel);
             else if (r.action != null)
@@ -1640,6 +1650,9 @@ public class CharacterMove : MonoBehaviour
 
     private List<string> ResolveEnabledActionButtons(LevelData levelData)
     {
+        if (UsesCanvasCountAnswer(levelData))
+            return new List<string>();
+
         if (levelData != null && levelData.enabledActionButtons != null && levelData.enabledActionButtons.Count > 0)
             return levelData.enabledActionButtons;
 
@@ -1765,9 +1778,11 @@ public class CharacterMove : MonoBehaviour
         if (canvas && levelData != null)
         {
             levelData.runRobotOnSubmit = false;
+            if (UsesCanvasCountAnswer(levelData))
+                levelData.enabledActionButtons = new List<string>();
             // Default palette when unset — do NOT force Repeat on; teachers control visibility
             // via enabledActionButtons (dashboard Rules / Canvas lesson toggle).
-            if (levelData.enabledActionButtons == null || levelData.enabledActionButtons.Count == 0)
+            else if (levelData.enabledActionButtons == null || levelData.enabledActionButtons.Count == 0)
             {
                 levelData.enabledActionButtons = new List<string>
                 {
@@ -4198,6 +4213,12 @@ public class CharacterMove : MonoBehaviour
             return;
         }
 
+        if (mode == "COUNT_ANSWER")
+        {
+            SeedCanvasCountAnswer(levelData);
+            return;
+        }
+
         // EMPTY
         ClearActionQueueVisual();
     }
@@ -4256,6 +4277,27 @@ public class CharacterMove : MonoBehaviour
         actionQueueTransform.gameObject.SetActive(true);
         if (runButton != null) runButton.interactable = true;
         Debug.Log($"[CharacterMove] Canvas BLANKS seeded ({count} slots, lineStyle={canvasBlankUseLineStyle}).");
+    }
+
+    private bool UsesCanvasCountAnswer(LevelData levelData)
+    {
+        return UsesCanvas(levelData) && ResolveCanvasStripMode(levelData) == "COUNT_ANSWER";
+    }
+
+    private void SeedCanvasCountAnswer(LevelData levelData)
+    {
+        ClearActionQueueVisual();
+        if (actionQueueTransform == null) return;
+
+        var lesson = levelData?.canvasLesson;
+        int initial = lesson != null ? lesson.countInitialValue : 0;
+        int min = lesson != null ? lesson.countMin : 0;
+        int max = lesson != null && lesson.countMax > 0 ? lesson.countMax : 20;
+
+        CanvasCountAnswerBlock.Create(actionQueueTransform, this, initial, min, max);
+        actionQueueTransform.gameObject.SetActive(true);
+        if (runButton != null) runButton.interactable = true;
+        Debug.Log($"[CharacterMove] Canvas COUNT_ANSWER seeded (initial={initial}, min={min}, max={max}).");
     }
 
     /// <summary>Empty canvas slot — uses custom sprite, or a thin gray dash (not a yellow square).</summary>
@@ -6009,6 +6051,15 @@ public class CharacterMove : MonoBehaviour
     private bool StudentProgramMatchesCorrectPatterns(LevelData levelData)
     {
         var student = CollectProgramTokensFromUI();
+
+        if (UsesCanvasCountAnswer(levelData))
+        {
+            int expected = levelData?.canvasLesson?.correctCount ?? 0;
+            if (student.Count == 1 && ProgramSequenceUtil.IsCountToken(student[0], out int answer))
+                return answer == expected;
+            return false;
+        }
+
         if (levelData?.correctPrograms != null && levelData.correctPrograms.Count > 0)
         {
             if (ProgramSequenceUtil.MatchesAnyProgram(student, levelData.correctPrograms))
@@ -6070,9 +6121,12 @@ public class CharacterMove : MonoBehaviour
 
         if (chatGPTResponseText != null)
         {
-            chatGPTResponseText.text = acceptedCount > 1
-                ? "Not yet — try another way"
-                : "Not quite — check your arrows and repeat.";
+            if (UsesCanvasCountAnswer(levelData))
+                chatGPTResponseText.text = "Not quite — count again and try.";
+            else
+                chatGPTResponseText.text = acceptedCount > 1
+                    ? "Not yet — try another way"
+                    : "Not quite — check your arrows and repeat.";
         }
         EnsureCanvasChromeAboveLessonPanel();
         HandleRunFailure(levelData, "pattern");

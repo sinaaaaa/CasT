@@ -119,6 +119,11 @@ public class CanvasLessonDto
     public string chunkLabel;
     public string patternLabel;
     public CanvasPatternEmphasisDto patternEmphasis;
+    public string countAction = "forward";
+    public int correctCount;
+    public int countInitialValue;
+    public int countMin;
+    public int countMax = 20;
 }
 
 [Serializable]
@@ -326,6 +331,13 @@ public static class LevelConfigMapper
                 chunkLabel = dto.canvasLesson.chunkLabel,
                 patternLabel = dto.canvasLesson.patternLabel,
                 patternEmphasis = MapPatternEmphasis(dto.canvasLesson.patternEmphasis),
+                countAction = string.IsNullOrEmpty(dto.canvasLesson.countAction)
+                    ? "forward"
+                    : dto.canvasLesson.countAction,
+                correctCount = dto.canvasLesson.correctCount,
+                countInitialValue = dto.canvasLesson.countInitialValue,
+                countMin = dto.canvasLesson.countMin,
+                countMax = dto.canvasLesson.countMax > 0 ? dto.canvasLesson.countMax : 20,
             };
             if (dto.canvasLesson.patternPreview != null && dto.canvasLesson.patternPreview.Length > 0)
                 ld.canvasLesson.patternPreview = new List<string>(dto.canvasLesson.patternPreview);

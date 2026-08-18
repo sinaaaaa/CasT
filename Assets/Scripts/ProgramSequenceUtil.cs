@@ -152,4 +152,27 @@ public static class ProgramSequenceUtil
         if (tokens == null || tokens.Count == 0) return "";
         return string.Join(";", tokens);
     }
+
+    public const int MinCountAnswer = 0;
+    public const int MaxCountAnswer = 99;
+
+    public static int ClampCountAnswer(int count) =>
+        Mathf.Clamp(count, MinCountAnswer, MaxCountAnswer);
+
+    public static bool IsCountToken(string token, out int count)
+    {
+        count = 0;
+        if (string.IsNullOrWhiteSpace(token)) return false;
+        string t = token.Trim().ToLowerInvariant();
+        if (!t.StartsWith("count:")) return false;
+        if (int.TryParse(t.Substring(6), out int n))
+        {
+            count = ClampCountAnswer(n);
+            return true;
+        }
+        return false;
+    }
+
+    public static string FormatCountToken(int count) =>
+        "count:" + ClampCountAnswer(count);
 }

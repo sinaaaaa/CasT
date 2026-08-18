@@ -22,6 +22,7 @@ export function StepProgramSetup({ levelType, config, onChange }: Props) {
   if (levelType === LevelType.DRAG_ACTIONS && isCanvasLayout(config)) {
     const stripMode = config.canvasLesson?.stripMode ?? "EMPTY";
     const acceptedCount = config.assessment?.correctPrograms?.length ?? 0;
+    const isCountMode = stripMode === "COUNT_ANSWER";
 
     return (
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
@@ -55,6 +56,7 @@ export function StepProgramSetup({ levelType, config, onChange }: Props) {
           </section>
         )}
 
+        {!isCountMode && (
         <section className="space-y-3 overflow-hidden rounded-2xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50/50 to-white p-1 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-3 px-4 pt-4 sm:px-5">
             <ItemBuilderStepFrame
@@ -76,6 +78,18 @@ export function StepProgramSetup({ levelType, config, onChange }: Props) {
             />
           </div>
         </section>
+        )}
+
+        {isCountMode && (
+          <section className="rounded-2xl border border-violet-200 bg-violet-50/50 px-4 py-4 text-sm text-violet-900">
+            <p className="font-semibold">Count answer mode</p>
+            <p className="mt-1 text-violet-800/90">
+              The correct number is set in the canvas studio above (
+              {config.canvasLesson?.correctCount ?? 0}). Students use +/− in the yellow strip — no
+              accepted-program list needed.
+            </p>
+          </section>
+        )}
       </motion.div>
     );
   }

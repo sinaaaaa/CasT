@@ -12,7 +12,7 @@ import {
   simulateProgram,
 } from "@/lib/assessment/routeAnalysis";
 import { matchesAnyCorrectProgram, suggestProgramVariants } from "@/lib/assessment/expand-repeats";
-import { levelGameplayConfigSchema, type LevelGameplayConfig, isCanvasLayout, isIntroItem } from "@/lib/level-config";
+import { levelGameplayConfigSchema, type LevelGameplayConfig, isCanvasLayout, isIntroItem, parseCountAnswerToken, isCountAnswerStrip } from "@/lib/level-config";
 
 /** Unity JsonUtility may send 0/1 or string booleans — normalize for scoring. */
 export function parseUnityBoolean(value: unknown): boolean | null {
@@ -167,6 +167,23 @@ function resolveIntroPassed(params: {
 }
 
 /** Normalize Unity / API score + passed for storage across all level types. */
+function scoreCountAnswerAttempt(
+  config: LevelGameplayConfig,
+  finalCommand: string | null | undefined
+): { score: number; passed: boolean } | null {
+  if (!isCountAnswerStrip(config)) return null;
+  const expected = config.canvasLesson?.correctCount ?? 0;
+  const studentRaw = (finalCommand ?? "")
+    .split(/[;,]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (studentRaw.length !== 1) return { score: 0, passed: false };
+  const parsed = parseCountAnswerToken(studentRaw[0]!);
+  if (parsed === null) return { score: 0, passed: false };
+  const passed = parsed === expected;
+  return { score: passed ? 100 : 0, passed };
+}
+
 export function resolveAttemptEndScore(params: {
   levelType: LevelType;
   levelConfig: unknown;
@@ -186,6 +203,9 @@ export function resolveAttemptEndScore(params: {
   // Intro / practice items: still resolve pass for progression, but never store a grade.
   if (isIntroItem(config)) {
     if (config && isCanvasLayout(config)) {
+      const countResult = scoreCountAnswerAttempt(config, params.finalCommand);
+      if (countResult) return { score: null, passed: countResult.passed };
+
       const studentRaw = (params.finalCommand ?? "")
         .split(/[;,]/)
         .map((s) => s.trim())
@@ -205,6 +225,9 @@ export function resolveAttemptEndScore(params: {
   // Canvas / pattern levels: accept exact nested OR expanded-equivalent programs.
   // If teacher only authored a pattern preview, treat its smart variants as accepted.
   if (config && isCanvasLayout(config)) {
+    const countResult = scoreCountAnswerAttempt(config, params.finalCommand);
+    if (countResult) return countResult;
+
     const studentRaw = (params.finalCommand ?? "")
       .split(/[;,]/)
       .map((s) => s.trim())

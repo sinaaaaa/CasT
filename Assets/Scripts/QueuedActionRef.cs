@@ -16,6 +16,9 @@ public class QueuedActionRef : MonoBehaviour
     [System.NonSerialized] public bool isRepeatStart;
     [System.NonSerialized] public bool isRepeatEnd;
     [System.NonSerialized] public int repeatCount = 1;
+    /// <summary>True for COUNT_ANSWER yellow-strip counter block.</summary>
+    [System.NonSerialized] public bool isCountAnswer;
+    [System.NonSerialized] public int countValue;
     /// <summary>True when this block replaced a Canvas BLANKS dash slot — closing it restores the dash.</summary>
     [System.NonSerialized] public bool fillsCanvasBlankSlot;
 }
