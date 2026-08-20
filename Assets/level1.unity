@@ -15310,6 +15310,13 @@ MonoBehaviour:
   repeatBodyXOffset: 0
   repeatBodyHeightScale: 0.65
   repeatBodyYInset: 2
+  patternRepeatStartScale: 1.539
+  patternRepeatEndScale: 1.419
+  patternRepeatCounterScale: 1.204
+  patternRepeatCounterAnchorY: 0.22
+  patternRepeatCounterXOffset: 9.6
+  patternRepeatCounterYOffset: 4.2
+  patternRepeatEndWidthMult: 1.285
   studentResetButton: {fileID: 30797156}
   useDragAndDropForActions: 1
   numberLineVisual: {fileID: 0}

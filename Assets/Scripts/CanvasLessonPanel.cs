@@ -31,7 +31,20 @@ public class CanvasLessonPanel : MonoBehaviour
     public Sprite repeatSprite;
     public Sprite repeatStartSprite;
     public Sprite repeatEndSprite;
+    public Sprite repeatCountBoxSprite;
+    public Sprite repeatBodySprite;
+    public Sprite repeatMinusSprite;
+    public Sprite repeatPlusSprite;
     public Sprite blankSprite;
+
+    [Header("Pattern Repeat layout (bound from CharacterMove — canvas board only)")]
+    [Range(0.3f, 2.5f)] public float patternRepeatStartScale = 1f;
+    [Range(0.3f, 2.5f)] public float patternRepeatEndScale = 1f;
+    [Range(0.2f, 1.5f)] public float patternRepeatCounterScale = 0.45f;
+    [Range(0.05f, 0.9f)] public float patternRepeatCounterAnchorY = 0.22f;
+    [Range(-80f, 80f)] public float patternRepeatCounterXOffset = 0f;
+    [Range(-80f, 80f)] public float patternRepeatCounterYOffset = 0f;
+    [Range(1f, 3f)] public float patternRepeatEndWidthMult = 1.35f;
 
     [Header("Blank line (same as yellow-strip blank slots)")]
     public Sprite blankLineSprite;
@@ -58,6 +71,13 @@ public class CanvasLessonPanel : MonoBehaviour
     private static readonly Dictionary<string, AudioClip> UrlAudioClipCache = new Dictionary<string, AudioClip>();
 
     private RectTransform _alignWith;
+    private float _appliedCounterScale = float.NaN;
+    private float _appliedCounterAnchorY = float.NaN;
+    private float _appliedCounterXOffset = float.NaN;
+    private float _appliedCounterYOffset = float.NaN;
+    private float _appliedEndWidthMult = float.NaN;
+    private float _appliedStartScale = float.NaN;
+    private float _appliedEndScale = float.NaN;
 
     public void EnsureBuilt(Canvas preferredHost = null)
     {
@@ -114,13 +134,22 @@ public class CanvasLessonPanel : MonoBehaviour
         }
         PopulateTokenRow(exampleChunkRow, lesson.exampleChunk, 56f, null, null);
 
+        RebuildPatternPreview();
+        CenterLessonCard();
+    }
+
+    /// <summary>Rebuilds the pattern row from <see cref="_current"/> (live Inspector tweaks + Show).</summary>
+    public void RebuildPatternPreview()
+    {
+        var lesson = _current;
+        if (lesson == null || panelRoot == null) return;
+
         bool hasPattern = lesson.patternPreview != null && lesson.patternPreview.Count > 0;
         EnsurePatternShelf();
         if (_patternShelf != null)
             _patternShelf.gameObject.SetActive(hasPattern);
         if (_patternLabel != null)
         {
-            // Default: hide "PATTERN" — only show when teacher sets a non-empty label.
             string patternText = ResolveSectionLabel(lesson.patternLabel, null);
             bool showPatternLabel = hasPattern && !string.IsNullOrEmpty(patternText);
             _patternLabel.gameObject.SetActive(showPatternLabel);
@@ -131,16 +160,17 @@ public class CanvasLessonPanel : MonoBehaviour
         float cardW = ResolveLessonCardWidth();
         float shelfW = Mathf.Max(640f, cardW - 96f);
         float rowAvail = Mathf.Max(520f, shelfW - 72f);
+        float patternPx = 56f;
 
-        float basePx = ResolvePatternTokenPx(emphasis.scale);
-        var highlightUnit = ResolveEmphasisHighlightChunk(emphasis, lesson.exampleChunk);
-        var highlighted = ResolveHighlightedPatternIndices(lesson.patternPreview, highlightUnit, emphasis);
-        float patternPx = FitPatternTokenPx(lesson.patternPreview, basePx, rowAvail, emphasis, highlighted);
-        StopBlink();
-        PopulateTokenRow(patternRow, lesson.patternPreview, patternPx, highlighted, emphasis);
-
-        if (patternRow != null)
+        if (hasPattern && patternRow != null)
         {
+            float basePx = ResolvePatternTokenPx(emphasis.scale);
+            var highlightUnit = ResolveEmphasisHighlightChunk(emphasis, lesson.exampleChunk);
+            var highlighted = ResolveHighlightedPatternIndices(lesson.patternPreview, highlightUnit, emphasis);
+            patternPx = FitPatternTokenPx(lesson.patternPreview, basePx, rowAvail, emphasis, highlighted);
+            StopBlink();
+            PopulateTokenRow(patternRow, lesson.patternPreview, patternPx, highlighted, emphasis);
+
             var rowLe = patternRow.GetComponent<LayoutElement>();
             if (rowLe != null)
             {
@@ -162,10 +192,13 @@ public class CanvasLessonPanel : MonoBehaviour
             var rowFitter = patternRow.GetComponent<ContentSizeFitter>();
             if (rowFitter != null)
             {
-                // Prefer shrink-to-fit inside the shelf instead of growing the white card.
                 rowFitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
                 rowFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             }
+        }
+        else if (patternRow != null)
+        {
+            PopulateTokenRow(patternRow, null, 40f, null, null);
         }
 
         if (_patternShelf != null)
@@ -206,10 +239,13 @@ public class CanvasLessonPanel : MonoBehaviour
                 var promptLe = promptText.GetComponent<LayoutElement>();
                 if (promptLe != null) promptLe.preferredWidth = cardW - 100f;
             }
+
+            LayoutRebuilder.ForceRebuildLayoutImmediate(panelRoot);
         }
 
-        CenterLessonCard();
+        MarkPatternLayoutApplied();
     }
+
 
     private void CenterLessonCard()
     {
@@ -344,18 +380,18 @@ public class CanvasLessonPanel : MonoBehaviour
                         }
                     }
 
-                    float startW = sleevePx * 1.15f;
-                    float endW = sleevePx * 1.15f;
+                    float startW = sleevePx * 1.1f * Mathf.Clamp(patternRepeatStartScale, 0.3f, 2.5f);
+                    float endW = sleevePx * patternRepeatEndWidthMult * Mathf.Clamp(patternRepeatEndScale, 0.3f, 2.5f);
                     float bodyW = 0f;
                     int bodyVisible = 0;
                     for (int k = i + 1; k < endIdx; k++)
                     {
                         if (string.IsNullOrWhiteSpace(tokens[k])) continue;
-                        if (bodyVisible > 0) bodyW += 4f;
+                        if (bodyVisible > 0) bodyW += 2f;
                         bodyW += TokenSlotWidth(tokens[k], sleevePx);
                         bodyVisible++;
                     }
-                    total += 12f + startW + bodyW + endW;
+                    total += 8f + startW + bodyW + endW;
                     pieces++;
                     i = endIdx + 1;
                     continue;
@@ -440,7 +476,11 @@ public class CanvasLessonPanel : MonoBehaviour
         Sprite repeat,
         Sprite blank,
         Sprite repeatStart = null,
-        Sprite repeatEnd = null)
+        Sprite repeatEnd = null,
+        Sprite repeatCountBox = null,
+        Sprite repeatBody = null,
+        Sprite repeatMinus = null,
+        Sprite repeatPlus = null)
     {
         forwardSprite = forward;
         backwardSprite = backward;
@@ -450,6 +490,72 @@ public class CanvasLessonPanel : MonoBehaviour
         blankSprite = blank;
         repeatStartSprite = repeatStart != null ? repeatStart : repeat;
         repeatEndSprite = repeatEnd != null ? repeatEnd : repeat;
+        repeatCountBoxSprite = repeatCountBox;
+        repeatBodySprite = repeatBody;
+        repeatMinusSprite = repeatMinus;
+        repeatPlusSprite = repeatPlus;
+    }
+
+    public void BindPatternRepeatCounterLayout(
+        float startScale,
+        float endScale,
+        float counterScale,
+        float anchorY,
+        float xOffset,
+        float yOffset,
+        float endWidthMult)
+    {
+        patternRepeatStartScale = Mathf.Clamp(startScale, 0.3f, 2.5f);
+        patternRepeatEndScale = Mathf.Clamp(endScale, 0.3f, 2.5f);
+        patternRepeatCounterScale = Mathf.Clamp(counterScale, 0.2f, 1.5f);
+        patternRepeatCounterAnchorY = Mathf.Clamp(anchorY, 0.05f, 0.9f);
+        patternRepeatCounterXOffset = Mathf.Clamp(xOffset, -80f, 80f);
+        patternRepeatCounterYOffset = Mathf.Clamp(yOffset, -80f, 80f);
+        patternRepeatEndWidthMult = Mathf.Clamp(endWidthMult, 1f, 3f);
+    }
+
+    /// <summary>
+    /// Called every frame / OnValidate while playing so Inspector sliders update the board live.
+    /// </summary>
+    public void SyncLivePatternCounterLayout(
+        float startScale,
+        float endScale,
+        float counterScale,
+        float anchorY,
+        float xOffset,
+        float yOffset,
+        float endWidthMult)
+    {
+        if (!isActiveAndEnabled || panelRoot == null || !panelRoot.gameObject.activeInHierarchy)
+            return;
+        if (_current == null)
+            return;
+
+        bool changed =
+            !Mathf.Approximately(_appliedStartScale, startScale) ||
+            !Mathf.Approximately(_appliedEndScale, endScale) ||
+            !Mathf.Approximately(_appliedCounterScale, counterScale) ||
+            !Mathf.Approximately(_appliedCounterAnchorY, anchorY) ||
+            !Mathf.Approximately(_appliedCounterXOffset, xOffset) ||
+            !Mathf.Approximately(_appliedCounterYOffset, yOffset) ||
+            !Mathf.Approximately(_appliedEndWidthMult, endWidthMult);
+
+        BindPatternRepeatCounterLayout(startScale, endScale, counterScale, anchorY, xOffset, yOffset, endWidthMult);
+        if (!changed) return;
+
+        MarkPatternLayoutApplied();
+        RebuildPatternPreview();
+    }
+
+    private void MarkPatternLayoutApplied()
+    {
+        _appliedStartScale = patternRepeatStartScale;
+        _appliedEndScale = patternRepeatEndScale;
+        _appliedCounterScale = patternRepeatCounterScale;
+        _appliedCounterAnchorY = patternRepeatCounterAnchorY;
+        _appliedCounterXOffset = patternRepeatCounterXOffset;
+        _appliedCounterYOffset = patternRepeatCounterYOffset;
+        _appliedEndWidthMult = patternRepeatEndWidthMult;
     }
 
     public void BindBlankLineStyle(Sprite lineSprite, bool useLine, float width, float height, Color color)
@@ -818,7 +924,8 @@ public class CanvasLessonPanel : MonoBehaviour
     }
 
     /// <summary>
-    /// Yellow-strip style Repeat capsule: [Start ×N] body arrows [End].
+    /// Pattern Repeat matching the yellow strip: green Start, body arrows, red End
+    /// with the same yellow [-] [N] [+] counter overlay (not a separate xN badge).
     /// </summary>
     private void CreatePatternRepeatGroup(
         Transform parent,
@@ -840,49 +947,64 @@ public class CanvasLessonPanel : MonoBehaviour
         go.GetComponent<CanvasGroup>().alpha = alpha;
 
         var bg = go.GetComponent<Image>();
-        bg.sprite = GetRoundedSprite();
-        bg.type = Image.Type.Sliced;
-        bg.color = new Color(1f, 0.92f, 0.55f, 0.95f); // yellow sleeve
+        if (repeatBodySprite != null)
+        {
+            bg.sprite = repeatBodySprite;
+            bg.type = Image.Type.Sliced;
+            bg.color = Color.white;
+        }
+        else
+        {
+            bg.sprite = GetRoundedSprite();
+            bg.type = Image.Type.Sliced;
+            bg.color = new Color(1f, 0.93f, 0.45f, 0.98f);
+        }
         bg.raycastTarget = false;
 
         var hlg = go.GetComponent<HorizontalLayoutGroup>();
-        hlg.padding = new RectOffset(6, 6, 4, 4);
-        hlg.spacing = 4f;
+        hlg.padding = new RectOffset(4, 4, 4, 4);
+        hlg.spacing = 2f;
         hlg.childAlignment = TextAnchor.MiddleCenter;
         hlg.childForceExpandWidth = false;
         hlg.childForceExpandHeight = false;
         hlg.childControlWidth = true;
         hlg.childControlHeight = true;
 
-        float startW = px * 1.15f;
-        float endW = px * 1.15f;
+        // Start / End sized independently (canvas board only).
+        float startScale = Mathf.Clamp(patternRepeatStartScale, 0.3f, 2.5f);
+        float endScale = Mathf.Clamp(patternRepeatEndScale, 0.3f, 2.5f);
+        float startW = px * 1.1f * startScale;
+        float startH = px * 1.35f * startScale;
+        float endW = px * patternRepeatEndWidthMult * endScale;
+        float endH = px * 1.35f * endScale;
+        float capH = Mathf.Max(startH, endH);
         float bodyW = 0f;
         if (body != null)
         {
             for (int b = 0; b < body.Count; b++)
             {
-                if (b > 0) bodyW += 4f;
+                if (b > 0) bodyW += 2f;
                 bodyW += TokenSlotWidth(body[b], px);
             }
         }
-        float totalW = 12f + startW + bodyW + endW;
+        float totalW = 8f + startW + bodyW + endW;
 
         var le = go.GetComponent<LayoutElement>();
         le.preferredWidth = totalW;
         le.minWidth = totalW;
-        le.preferredHeight = px * 1.35f;
-        le.minHeight = px * 1.2f;
+        le.preferredHeight = capH;
+        le.minHeight = capH;
 
-        CreateRepeatBoundaryToken(go.transform, true, count, startW, px * 1.25f);
+        CreatePatternRepeatCap(go.transform, isStart: true, count, startW, startH);
         if (body != null)
         {
             for (int b = 0; b < body.Count; b++)
                 CreatePatternToken(go.transform, body[b], px, 1f);
         }
-        CreateRepeatBoundaryToken(go.transform, false, count, endW, px * 1.25f);
+        CreatePatternRepeatCap(go.transform, isStart: false, count, endW, endH);
     }
 
-    private void CreateRepeatBoundaryToken(Transform parent, bool isStart, int count, float width, float height)
+    private void CreatePatternRepeatCap(Transform parent, bool isStart, int count, float width, float height)
     {
         var go = new GameObject(
             isStart ? "RepeatStart" : "RepeatEnd",
@@ -896,53 +1018,96 @@ public class CanvasLessonPanel : MonoBehaviour
             ? (repeatStartSprite != null ? repeatStartSprite : repeatSprite)
             : (repeatEndSprite != null ? repeatEndSprite : repeatSprite);
         img.sprite = sp;
-        img.preserveAspect = true;
+        img.preserveAspect = false;
+        img.type = Image.Type.Simple;
         img.color = Color.white;
         img.raycastTarget = false;
 
         var le = go.GetComponent<LayoutElement>();
         le.preferredWidth = width;
+        le.minWidth = width * 0.9f;
         le.preferredHeight = height;
-        le.minWidth = width * 0.8f;
-        le.minHeight = height * 0.8f;
+        le.minHeight = height * 0.9f;
 
-        // Counter badge on start (and end for clarity).
-        if (isStart || count > 0)
+        // End shows count number only (no − / + on the canvas board).
+        if (!isStart)
+            CreatePatternCountBadge(go.transform, count);
+    }
+
+    /// <summary>
+    /// Count badge only on pattern Repeat End (no minus/plus). Canvas board only.
+    /// </summary>
+    private void CreatePatternCountBadge(Transform endCap, int count)
+    {
+        count = ProgramSequenceUtil.ClampRepeatCount(count);
+
+        float s = Mathf.Clamp(patternRepeatCounterScale, 0.2f, 1.5f);
+        float countBox = 30f * s;
+
+        var root = new GameObject("RepeatEndContent", typeof(RectTransform));
+        root.transform.SetParent(endCap, false);
+        var rt = root.GetComponent<RectTransform>();
+        float ay = Mathf.Clamp(patternRepeatCounterAnchorY, 0.05f, 0.9f);
+        rt.anchorMin = new Vector2(0.55f, ay);
+        rt.anchorMax = new Vector2(0.55f, ay);
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition = new Vector2(patternRepeatCounterXOffset, patternRepeatCounterYOffset);
+        rt.sizeDelta = new Vector2(countBox + 4f, countBox + 4f);
+
+        CreatePatternCountBox(
+            root.transform, Vector2.zero, new Vector2(0.5f, 0.5f), countBox, countBox, count);
+    }
+
+    private void CreatePatternCountBox(
+        Transform parent, Vector2 pos, Vector2 anchor, float w, float h, int value)
+    {
+        var countBox = new GameObject("CountBox", typeof(RectTransform), typeof(Image));
+        countBox.transform.SetParent(parent, false);
+        var cbrt = countBox.GetComponent<RectTransform>();
+        cbrt.anchorMin = cbrt.anchorMax = anchor;
+        cbrt.pivot = new Vector2(0.5f, 0.5f);
+        cbrt.anchoredPosition = pos;
+        cbrt.sizeDelta = new Vector2(w, h);
+        var cbImg = countBox.GetComponent<Image>();
+        if (repeatCountBoxSprite != null)
         {
-            var badge = new GameObject("Count", typeof(RectTransform), typeof(Image));
-            badge.transform.SetParent(go.transform, false);
-            var brt = badge.GetComponent<RectTransform>();
-            brt.anchorMin = new Vector2(0.5f, 0f);
-            brt.anchorMax = new Vector2(0.5f, 0f);
-            brt.pivot = new Vector2(0.5f, 0f);
-            brt.anchoredPosition = new Vector2(0f, height * 0.04f);
-            brt.sizeDelta = new Vector2(Mathf.Max(28f, width * 0.55f), Mathf.Max(18f, height * 0.28f));
-
-            var badgeBg = badge.GetComponent<Image>();
-            badgeBg.sprite = GetRoundedSprite();
-            badgeBg.type = Image.Type.Sliced;
-            badgeBg.color = isStart
-                ? new Color(1f, 1f, 1f, 0.95f)
-                : new Color(1f, 0.94f, 0.78f, 0.95f);
-            badgeBg.raycastTarget = false;
-
-            var tmp = CreateTmp("CountLabel", badge.transform, Mathf.Clamp(height * 0.18f, 11f, 16f), FontStyles.Bold, new Color(0.35f, 0.2f, 0.55f, 1f));
-            tmp.text = "×" + count;
-            tmp.alignment = TextAlignmentOptions.Center;
-            tmp.enableWordWrapping = false;
-            tmp.raycastTarget = false;
-            var labelLe = tmp.GetComponent<LayoutElement>();
-            if (labelLe != null)
-            {
-                labelLe.flexibleWidth = 0f;
-                labelLe.ignoreLayout = true;
-            }
-            var trt = tmp.GetComponent<RectTransform>();
-            trt.anchorMin = Vector2.zero;
-            trt.anchorMax = Vector2.one;
-            trt.offsetMin = Vector2.zero;
-            trt.offsetMax = Vector2.zero;
+            cbImg.sprite = repeatCountBoxSprite;
+            cbImg.type = Image.Type.Simple;
+            cbImg.preserveAspect = false;
+            cbImg.color = Color.white;
         }
+        else
+        {
+            cbImg.sprite = GetRoundedSprite();
+            cbImg.type = Image.Type.Sliced;
+            cbImg.color = Color.white;
+        }
+        cbImg.raycastTarget = false;
+
+        var tmp = CreateTmp(
+            "Count",
+            countBox.transform,
+            Mathf.Clamp(h * 0.55f, 14f, 28f),
+            FontStyles.Bold,
+            new Color(0.12f, 0.12f, 0.16f, 1f));
+        tmp.text = value.ToString();
+        tmp.alignment = TextAlignmentOptions.Center;
+        tmp.enableWordWrapping = false;
+        tmp.enableAutoSizing = true;
+        tmp.fontSizeMin = 12f;
+        tmp.fontSizeMax = Mathf.Clamp(h * 0.62f, 16f, 30f);
+        tmp.raycastTarget = false;
+        var labelLe = tmp.GetComponent<LayoutElement>();
+        if (labelLe != null)
+        {
+            labelLe.flexibleWidth = 0f;
+            labelLe.ignoreLayout = true;
+        }
+        var trt = tmp.GetComponent<RectTransform>();
+        trt.anchorMin = Vector2.zero;
+        trt.anchorMax = Vector2.one;
+        trt.offsetMin = new Vector2(2f, 2f);
+        trt.offsetMax = new Vector2(-2f, -2f);
     }
 
     private static bool TryParseRepeatStart(string raw, out int count)

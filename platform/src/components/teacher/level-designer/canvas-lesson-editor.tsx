@@ -483,29 +483,46 @@ function RepeatBoundaryIcon({
   count: number;
   px: number;
 }) {
-  const w = Math.round(px * 1.25);
+  if (kind === "start") {
+    const w = Math.round(px * 1.1);
+    const h = Math.round(px * 1.35);
+    return (
+      <span
+        className="relative inline-flex shrink-0 drop-shadow-sm"
+        style={{ width: w, height: h }}
+        title={`Repeat start x${count}`}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={REPEAT_ICON_PATHS.start}
+          alt=""
+          className="h-full w-full object-fill"
+        />
+      </span>
+    );
+  }
+
+  // End: count badge only (no − / + on the canvas board).
+  const w = Math.round(px * 1.35);
   const h = Math.round(px * 1.35);
+  const box = Math.max(16, Math.round(h * 0.32));
   return (
     <span
       className="relative inline-flex shrink-0 drop-shadow-sm"
       style={{ width: w, height: h }}
-      title={kind === "start" ? `Repeat start ×${count}` : `Repeat end ×${count}`}
+      title={`Repeat end x${count}`}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={kind === "start" ? REPEAT_ICON_PATHS.start : REPEAT_ICON_PATHS.end}
+        src={REPEAT_ICON_PATHS.end}
         alt=""
-        className="h-full w-full object-contain"
+        className="h-full w-full object-fill"
       />
       <span
-        className={cn(
-          "absolute bottom-1 left-1/2 z-[1] -translate-x-1/2 rounded px-1.5 py-0.5 text-[10px] font-bold tabular-nums shadow-sm",
-          kind === "start"
-            ? "bg-white/95 text-violet-800 ring-1 ring-violet-200"
-            : "rounded-full bg-amber-100/95 text-amber-900 ring-1 ring-amber-300/80"
-        )}
+        className="absolute bottom-[14%] left-[58%] z-[1] flex -translate-x-1/2 items-center justify-center rounded-md bg-white text-[10px] font-bold tabular-nums text-slate-900 shadow-sm"
+        style={{ width: box, height: box }}
       >
-        ×{count}
+        {count}
       </span>
     </span>
   );

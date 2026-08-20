@@ -212,36 +212,38 @@ function TokenBlock({
           alt=""
           width={repeatW}
           height={repeatH}
-          className="h-full w-full object-contain"
+          className="h-full w-full object-fill"
           aria-hidden
         />
         <span className="sr-only">Repeat start, {seg.count} times</span>
-        <span className="absolute bottom-1 left-1/2 z-[1] -translate-x-1/2 rounded bg-white/95 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-violet-800 shadow-sm ring-1 ring-violet-200">
-          ×{seg.count}
-        </span>
       </span>
     );
   }
 
   if (seg.kind === "repeat-end") {
     const n = count ?? 2;
+    const endW = Math.round(repeatW * 1.2);
+    const box = Math.max(18, Math.round(repeatH * 0.3));
     return (
       <span
         className="relative inline-flex shrink-0 drop-shadow-sm"
-        style={{ width: repeatW, height: repeatH }}
+        style={{ width: endW, height: repeatH }}
         title={`Repeat end ×${n}`}
       >
         <Image
           src={REPEAT_ICON_PATHS.end}
           alt=""
-          width={repeatW}
+          width={endW}
           height={repeatH}
-          className="h-full w-full object-contain"
+          className="h-full w-full object-fill"
           aria-hidden
         />
         <span className="sr-only">Repeat end</span>
-        <span className="absolute bottom-1.5 left-1/2 z-[1] flex -translate-x-1/2 items-center gap-0.5 rounded-full bg-amber-100/95 px-1 py-0.5 text-[9px] font-bold text-amber-900 shadow-sm ring-1 ring-amber-300/80">
-          ×{n}
+        <span
+          className="absolute bottom-[12%] left-1/2 z-[1] flex -translate-x-1/2 items-center justify-center rounded-md bg-white font-bold tabular-nums text-slate-900 shadow-sm"
+          style={{ width: box, height: box, fontSize: Math.max(11, box * 0.45) }}
+        >
+          {n}
         </span>
       </span>
     );

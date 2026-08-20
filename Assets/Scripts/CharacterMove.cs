@@ -463,6 +463,22 @@ public class CharacterMove : MonoBehaviour
     [Tooltip("Extra shrink from top/bottom (px). 0 = full Start/End height.")]
     [Range(0f, 30f)] public float repeatBodyYInset = 0f;
 
+    [Header("Pattern board Repeat (white-board only)")]
+    [Tooltip("Scale of Repeat START on the canvas pattern board.")]
+    [Range(0.3f, 2.5f)] public float patternRepeatStartScale = 1f;
+    [Tooltip("Scale of Repeat END on the canvas pattern board.")]
+    [Range(0.3f, 2.5f)] public float patternRepeatEndScale = 1f;
+    [Tooltip("Size of the count number badge on pattern Repeat End.")]
+    [Range(0.2f, 1.5f)] public float patternRepeatCounterScale = 0.45f;
+    [Tooltip("Vertical anchor on the End block (0 = bottom, 1 = top). ~0.22 sits on the yellow tray.")]
+    [Range(0.05f, 0.9f)] public float patternRepeatCounterAnchorY = 0.22f;
+    [Tooltip("Shift the count badge on X (pixels). Positive = right.")]
+    [Range(-80f, 80f)] public float patternRepeatCounterXOffset = 0f;
+    [Tooltip("Shift the count badge on Y (pixels). Positive = up.")]
+    [Range(-80f, 80f)] public float patternRepeatCounterYOffset = 0f;
+    [Tooltip("How wide the pattern Repeat End cap is vs a normal arrow.")]
+    [Range(1f, 3f)] public float patternRepeatEndWidthMult = 1.35f;
+
     [Header("Student UI")]
     [Tooltip("Optional. Clears the yellow-strip program and returns the robot to the level start (does not count as a failed attempt).")]
     public Button studentResetButton;
@@ -2958,6 +2974,26 @@ public class CharacterMove : MonoBehaviour
         // Use the context-menu "Clamp Virtual Entries Now" (or Play mode) to clamp the list.
         if (gridRows < 1) gridRows = 1;
         if (gridCols < 1) gridCols = 1;
+
+        // Live pattern-board counter sliders while playing.
+        if (Application.isPlaying)
+            SyncPatternBoardCounterLive();
+    }
+
+    /// <summary>
+    /// Live-apply Pattern board Repeat counter Inspector sliders while playing.
+    /// </summary>
+    private void SyncPatternBoardCounterLive()
+    {
+        if (canvasLessonPanel == null) return;
+        canvasLessonPanel.SyncLivePatternCounterLayout(
+            patternRepeatStartScale,
+            patternRepeatEndScale,
+            patternRepeatCounterScale,
+            patternRepeatCounterAnchorY,
+            patternRepeatCounterXOffset,
+            patternRepeatCounterYOffset,
+            patternRepeatEndWidthMult);
     }
 
     [ContextMenu("Clamp Virtual Entries Now")]
@@ -4109,7 +4145,16 @@ public class CharacterMove : MonoBehaviour
 
         canvasLessonPanel.BindActionSprites(
             forwardSprite, backwardSprite, rotateLeftSprite, rotateRightSprite,
-            repeatSprite, blankSlotSprite, repeatStartSprite, repeatEndSprite);
+            repeatSprite, blankSlotSprite, repeatStartSprite, repeatEndSprite,
+            repeatCountBoxSprite, repeatBodySprite, repeatMinusSprite, repeatPlusSprite);
+        canvasLessonPanel.BindPatternRepeatCounterLayout(
+            patternRepeatStartScale,
+            patternRepeatEndScale,
+            patternRepeatCounterScale,
+            patternRepeatCounterAnchorY,
+            patternRepeatCounterXOffset,
+            patternRepeatCounterYOffset,
+            patternRepeatEndWidthMult);
         // Only canvasBlankSlotSprite overrides the thin line; yellow blankSlotSprite stays for strip squares elsewhere.
         canvasLessonPanel.BindBlankLineStyle(
             canvasBlankSlotSprite,
@@ -5390,7 +5435,7 @@ public class CharacterMove : MonoBehaviour
             Time.timeScale = 1.0f;
         }
 
-
+        SyncPatternBoardCounterLive();
     }
 
     [System.Serializable]
