@@ -27,7 +27,7 @@ import { HintImageUpload } from "@/components/teacher/level-designer/hint-image-
 import { HintAudioUpload } from "@/components/teacher/level-designer/hint-audio-upload";
 import { CanvasStripModePicker } from "@/components/teacher/level-designer/canvas-strip-mode-picker";
 import { GUIDED_ACTIONS } from "@/lib/level-editor-constants";
-import { suggestProgramVariants } from "@/lib/assessment/expand-repeats";
+import { suggestProgramVariants, formatRepeatStart, parseRepeatStart } from "@/lib/assessment/expand-repeats";
 import { normalizeCommandToken, COMMAND_ICON_PATHS } from "@/lib/command-icons";
 import {
   getCanvasStripType,
@@ -264,6 +264,14 @@ function DragTokenRowEditor({
     onChange(next.map((b) => b.action));
   }
 
+  function setRepeatCountAt(index: number, nextCount: number) {
+    const next = [...tokens];
+    if (parseRepeatStart(next[index] ?? "") == null) return;
+    const count = Math.max(1, Math.min(9, nextCount));
+    next[index] = formatRepeatStart(count);
+    onChange(next);
+  }
+
   function onPaletteDragStart(e: React.DragEvent, value: string) {
     e.dataTransfer.setData("text/canvas-token", value);
     e.dataTransfer.effectAllowed = "copy";
@@ -328,26 +336,63 @@ function DragTokenRowEditor({
             onReorder={setBlocks}
             className="flex flex-wrap gap-2"
           >
-            {blocks.map((block, i) => (
-              <Reorder.Item
-                key={block.id}
-                value={block}
-                className="cursor-grab active:cursor-grabbing"
-                whileDrag={{ scale: 1.06, zIndex: 20 }}
-              >
-                <span className="inline-flex items-center gap-1">
-                  <TokenChip action={block.action} showGrip />
-                  <button
-                    type="button"
-                    className="rounded-md p-1 text-slate-300 hover:bg-red-50 hover:text-red-500"
-                    onClick={() => onChange(tokens.filter((_, j) => j !== i))}
-                    aria-label="Remove"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </span>
-              </Reorder.Item>
-            ))}
+            {blocks.map((block, i) => {
+              const repeatCount = parseRepeatStart(block.action);
+              return (
+                <Reorder.Item
+                  key={block.id}
+                  value={block}
+                  className="cursor-grab active:cursor-grabbing"
+                  whileDrag={{ scale: 1.06, zIndex: 20 }}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    <TokenChip action={block.action} showGrip />
+                    {repeatCount != null && (
+                      <span
+                        className="inline-flex items-center gap-0.5 rounded-lg bg-violet-50 p-0.5 ring-1 ring-violet-200"
+                        onPointerDown={(e) => e.stopPropagation()}
+                      >
+                        <button
+                          type="button"
+                          className="rounded p-0.5 text-violet-700 hover:bg-violet-100 disabled:opacity-40"
+                          disabled={repeatCount <= 1}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setRepeatCountAt(i, repeatCount - 1);
+                          }}
+                          aria-label="Decrease repeat count"
+                        >
+                          <Minus className="h-3.5 w-3.5" />
+                        </button>
+                        <span className="min-w-[1.25rem] text-center text-xs font-bold tabular-nums text-violet-900">
+                          {repeatCount}
+                        </span>
+                        <button
+                          type="button"
+                          className="rounded p-0.5 text-violet-700 hover:bg-violet-100 disabled:opacity-40"
+                          disabled={repeatCount >= 9}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setRepeatCountAt(i, repeatCount + 1);
+                          }}
+                          aria-label="Increase repeat count"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                        </button>
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      className="rounded-md p-1 text-slate-300 hover:bg-red-50 hover:text-red-500"
+                      onClick={() => onChange(tokens.filter((_, j) => j !== i))}
+                      aria-label="Remove"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </span>
+                </Reorder.Item>
+              );
+            })}
           </Reorder.Group>
         )}
       </div>
