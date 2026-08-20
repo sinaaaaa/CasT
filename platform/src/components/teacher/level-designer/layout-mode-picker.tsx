@@ -13,11 +13,36 @@ import {
   NUMBER_LINE_DEFAULT_TICKS,
 } from "@/lib/level-editor-constants";
 import { Grid3x3, Minus, SquareDashed } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 type Props = {
   config: LevelGameplayConfig;
   onChange: (config: LevelGameplayConfig) => void;
 };
+
+const LAYOUTS = [
+  {
+    id: "GRID" as const,
+    label: "6×6 Grid",
+    blurb: "Robot moves on a grid with goals and obstacles.",
+    icon: Grid3x3,
+    active: "bg-emerald-700 text-white shadow-sm",
+  },
+  {
+    id: "NUMBER_LINE" as const,
+    label: "Number line",
+    blurb: "Forward / backward along a line of ticks.",
+    icon: Minus,
+    active: "bg-indigo-700 text-white shadow-sm",
+  },
+  {
+    id: "CANVAS" as const,
+    label: "Canvas",
+    blurb: "Pattern board + yellow strip — no robot grid.",
+    icon: SquareDashed,
+    active: "bg-slate-900 text-white shadow-sm",
+  },
+];
 
 export function LayoutModePicker({ config, onChange }: Props) {
   const mode = config.layoutMode ?? "GRID";
@@ -84,43 +109,42 @@ export function LayoutModePicker({ config, onChange }: Props) {
   }
 
   return (
-    <div className="inline-flex flex-wrap gap-1 rounded-xl border border-slate-200 bg-white p-1">
-      <button
-        type="button"
-        onClick={() => setMode("GRID")}
-        className={`flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition ${
-          mode === "GRID"
-            ? "bg-emerald-600 text-white shadow-sm"
-            : "bg-slate-50 text-slate-700 hover:bg-slate-100"
-        }`}
-      >
-        <Grid3x3 className="h-4 w-4" />
-        6×6 Grid
-      </button>
-      <button
-        type="button"
-        onClick={() => setMode("NUMBER_LINE")}
-        className={`flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition ${
-          isNumberLineLayout(config)
-            ? "bg-indigo-600 text-white shadow-sm"
-            : "bg-slate-50 text-slate-700 hover:bg-slate-100"
-        }`}
-      >
-        <Minus className="h-4 w-4" />
-        Number line
-      </button>
-      <button
-        type="button"
-        onClick={() => setMode("CANVAS")}
-        className={`flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition ${
-          isCanvasLayout(config)
-            ? "bg-violet-600 text-white shadow-sm"
-            : "bg-slate-50 text-slate-700 hover:bg-slate-100"
-        }`}
-      >
-        <SquareDashed className="h-4 w-4" />
-        Canvas
-      </button>
+    <div className="grid gap-2 sm:grid-cols-3">
+      {LAYOUTS.map((layout) => {
+        const active =
+          layout.id === "GRID"
+            ? mode === "GRID" && !isNumberLineLayout(config) && !isCanvasLayout(config)
+            : layout.id === "NUMBER_LINE"
+              ? isNumberLineLayout(config)
+              : isCanvasLayout(config);
+        const Icon = layout.icon;
+        return (
+          <button
+            key={layout.id}
+            type="button"
+            onClick={() => setMode(layout.id)}
+            className={cn(
+              "flex flex-col items-start gap-2 rounded-2xl border px-4 py-3.5 text-left transition",
+              active
+                ? cn("border-transparent", layout.active)
+                : "border-slate-200 bg-white text-slate-800 hover:border-slate-300 hover:bg-slate-50"
+            )}
+          >
+            <Icon className={cn("h-5 w-5", active ? "opacity-95" : "text-slate-500")} />
+            <span>
+              <span className="block text-sm font-semibold">{layout.label}</span>
+              <span
+                className={cn(
+                  "mt-0.5 block text-xs leading-snug",
+                  active ? "text-white/80" : "text-slate-500"
+                )}
+              >
+                {layout.blurb}
+              </span>
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }

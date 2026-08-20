@@ -2,9 +2,10 @@
 
 import { motion } from "framer-motion";
 import { LevelType } from "@prisma/client";
-import { Blocks, MousePointerClick, Hash } from "lucide-react";
+import { Blocks, CheckCircle2, Hash, MousePointerClick } from "lucide-react";
 import type { LevelGameplayConfig } from "@/lib/level-config";
 import { isCanvasLayout } from "@/lib/level-config";
+import { getCanvasStripType } from "@/lib/canvas-strip-types";
 import { ItemBuilderPanel, ItemBuilderStepFrame } from "../item-builder-step-frame";
 import { VisualProgramBuilder } from "../visual-program-builder";
 import { CanvasLessonEditor } from "@/components/teacher/level-designer/canvas-lesson-editor";
@@ -20,65 +21,77 @@ export function StepProgramSetup({ levelType, config, onChange }: Props) {
   const isEditableDrag = levelType === LevelType.DRAG_EDIT_PROGRAM;
 
   if (levelType === LevelType.DRAG_ACTIONS && isCanvasLayout(config)) {
-    const stripMode = config.canvasLesson?.stripMode ?? "EMPTY";
+    const strip = getCanvasStripType(config.canvasLesson?.stripMode);
     const acceptedCount = config.assessment?.correctPrograms?.length ?? 0;
-    const isCountMode = stripMode === "COUNT_ANSWER";
 
     return (
-      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
         <ItemBuilderStepFrame
           icon={Blocks}
           title="Design the canvas item"
-          subtitle="Board and strip on the left · live preview on the right · then set accepted answers."
-          accent="teal"
+          subtitle={`${strip.label} — board + strip on the left, live preview on the right.`}
+          accent="violet"
         />
 
         <CanvasLessonEditor config={config} onChange={onChange} />
 
-        {stripMode === "SEED_PROGRAM" && (
-          <ItemBuilderPanel
-            title="Starter program"
-            description="Pre-loaded into the yellow strip. Students can edit before RUN."
-          >
-            <VisualProgramBuilder
-              config={config}
-              onChange={onChange}
-              showBlanks={false}
-              storage="guided"
-            />
-          </ItemBuilderPanel>
+        {strip.value === "SEED_PROGRAM" && (
+          <section className="space-y-3 overflow-hidden rounded-2xl border border-sky-200/80 bg-gradient-to-br from-sky-50/80 to-white p-1 shadow-sm">
+            <div className="px-4 pt-4 sm:px-5">
+              <ItemBuilderStepFrame
+                icon={Blocks}
+                title="Starter program (seeded strip)"
+                subtitle="Pre-loaded into the yellow strip. Students can edit these blocks before RUN."
+                accent="teal"
+              />
+            </div>
+            <div className="px-3 pb-4 sm:px-4">
+              <VisualProgramBuilder
+                config={config}
+                onChange={onChange}
+                showBlanks={false}
+                storage="guided"
+              />
+            </div>
+          </section>
         )}
 
-        {!isCountMode && (
-          <ItemBuilderPanel
-            title="Accepted programs"
-            description="Every correct strip answer — Repeat nesting and the same expanded arrows both count."
-          >
-            <div className="mb-3 flex justify-end">
-              <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800">
+        {strip.usesAcceptedPrograms && (
+          <section className="space-y-3 overflow-hidden rounded-2xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50/50 to-white p-1 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-3 px-4 pt-4 sm:px-5">
+              <ItemBuilderStepFrame
+                icon={CheckCircle2}
+                title="Accepted programs"
+                subtitle="Add every correct answer — Repeat nesting and the same expanded arrows can both be accepted."
+                accent="violet"
+              />
+              <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">
                 {acceptedCount} accepted
               </span>
             </div>
-            <VisualProgramBuilder
-              config={config}
-              onChange={onChange}
-              showBlanks={false}
-              storage="correctProgram"
-            />
-          </ItemBuilderPanel>
+            <div className="px-3 pb-4 sm:px-4">
+              <VisualProgramBuilder
+                config={config}
+                onChange={onChange}
+                showBlanks={false}
+                storage="correctProgram"
+              />
+            </div>
+          </section>
         )}
 
-        {isCountMode && (
-          <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-            <Hash className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
+        {!strip.usesAcceptedPrograms && (
+          <section className="flex items-start gap-3 rounded-2xl border border-violet-200 bg-violet-50/40 px-4 py-4 text-sm text-violet-950">
+            <Hash className="mt-0.5 h-5 w-5 shrink-0 text-violet-700" />
             <div>
-              <p className="font-medium text-slate-900">Count answer scoring</p>
-              <p className="mt-0.5 text-slate-600">
-                Correct count is set above ({config.canvasLesson?.correctCount ?? 0}). No accepted-program
-                list is needed — students submit with the +/− counter.
+              <p className="font-semibold">Count answer scoring</p>
+              <p className="mt-1 text-violet-900/85">
+                {strip.studentJob} Expected count is set in the studio above (
+                <strong>{config.canvasLesson?.correctCount ?? 0}</strong>). No accepted-program list
+                is needed.
               </p>
             </div>
-          </div>
+          </section>
         )}
       </motion.div>
     );
