@@ -952,7 +952,7 @@ export function CanvasLessonEditor({ config, onChange }: Props) {
       const correct = next.correctCount ?? patternCount;
       updates.assessment = {
         ...config.assessment,
-        correctPrograms: [formatCountAnswerToken(correct)],
+        correctPrograms: [[formatCountAnswerToken(correct)]],
       };
     }
 
@@ -979,7 +979,7 @@ export function CanvasLessonEditor({ config, onChange }: Props) {
         },
         assessment: {
           ...config.assessment,
-          correctPrograms: [formatCountAnswerToken(correct)],
+          correctPrograms: [[formatCountAnswerToken(correct)]],
         },
       });
       return;
