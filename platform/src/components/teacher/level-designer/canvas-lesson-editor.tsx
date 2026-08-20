@@ -42,7 +42,6 @@ import {
   GripVertical,
   Highlighter,
   ImageIcon,
-  LayoutTemplate,
   Minus,
   Plus,
   RotateCcw,
@@ -59,37 +58,6 @@ type Props = {
 };
 
 type TokenBlock = { id: string; action: string };
-
-function StudioSection({
-  step,
-  title,
-  description,
-  children,
-}: {
-  step?: string;
-  title: string;
-  description?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="space-y-3">
-      <div className="flex items-start gap-3">
-        {step && (
-          <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-900 text-[11px] font-bold text-white">
-            {step}
-          </span>
-        )}
-        <div className="min-w-0">
-          <h4 className="text-sm font-semibold text-slate-900">{title}</h4>
-          {description && (
-            <p className="mt-0.5 text-xs leading-relaxed text-slate-500">{description}</p>
-          )}
-        </div>
-      </div>
-      <div className={cn(step && "sm:pl-9")}>{children}</div>
-    </section>
-  );
-}
 const TOKEN_PALETTE = [
   "forward",
   "backward",
@@ -1019,183 +987,251 @@ export function CanvasLessonEditor({ config, onChange }: Props) {
   const stripMeta = getCanvasStripType(lesson.stripMode);
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <header className="flex flex-col gap-1 border-b border-slate-100 bg-[linear-gradient(135deg,#f8fafc_0%,#ffffff_45%,#f1f5f9_100%)] px-4 py-4 sm:flex-row sm:items-center sm:gap-4 sm:px-6">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-white shadow-sm">
-          <LayoutTemplate className="h-5 w-5" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <h3 className="text-base font-semibold text-slate-900">Canvas lesson studio</h3>
-          <p className="mt-0.5 text-sm text-slate-500">
-            Pick the student task, author the white board, then confirm the yellow strip in the preview.
-          </p>
-        </div>
-        <span className="inline-flex w-fit items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-          {stripMeta.label}
-        </span>
-      </header>
-
-      <div className="grid gap-8 p-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)] lg:p-6">
-        <div className="space-y-8">
-          <StudioSection
-            step="1"
-            title="Student task type"
-            description="This controls the yellow strip. Everything else on the board is shared."
-          >
+    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+      <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_minmax(260px,320px)]">
+        <div className="space-y-5 p-4 sm:p-5">
+          <div>
+            <p className="mb-2 text-sm font-semibold text-slate-900">Yellow strip</p>
             <CanvasStripModePicker
               value={(lesson.stripMode ?? "EMPTY") as CanvasStripMode}
               onChange={selectStripMode}
             />
-          </StudioSection>
+          </div>
 
           {lesson.stripMode === "BLANKS" && (
-            <StudioSection
-              step="2"
-              title="Blank slots"
-              description="How many dash slots appear in the yellow strip for students to fill."
-            >
-              <div className="flex flex-wrap items-end gap-4 rounded-2xl border border-amber-200/80 bg-amber-50/40 p-4">
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium text-amber-950">Slot count</span>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      type="button"
-                      size="icon"
-                      variant="outline"
-                      className="h-10 w-10"
-                      onClick={() =>
-                        patch({
-                          blankSlotCount: Math.max(1, (lesson.blankSlotCount ?? 4) - 1),
-                        })
-                      }
-                    >
-                      <Minus className="h-4 w-4" />
-                    </Button>
-                    <Input
-                      type="number"
-                      min={1}
-                      max={20}
-                      value={lesson.blankSlotCount ?? 4}
-                      onChange={(e) =>
-                        patch({
-                          blankSlotCount: Math.max(1, Math.min(20, Number(e.target.value) || 4)),
-                        })
-                      }
-                      className="h-10 w-16 text-center"
-                    />
-                    <Button
-                      type="button"
-                      size="icon"
-                      variant="outline"
-                      className="h-10 w-10"
-                      onClick={() =>
-                        patch({
-                          blankSlotCount: Math.min(20, (lesson.blankSlotCount ?? 4) + 1),
-                        })
-                      }
-                    >
-                      <Plus className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </label>
-                <div className="flex flex-wrap items-center gap-2 pb-1">
-                  {Array.from({ length: lesson.blankSlotCount ?? 4 }).map((_, i) => (
-                    <span
-                      key={i}
-                      className="inline-block h-1.5 w-10 rounded-full bg-slate-500/80"
-                      title="Blank dash"
-                    />
-                  ))}
-                </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-sm text-slate-600">Blank slots</span>
+              <div className="flex items-center gap-1.5">
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="outline"
+                  className="h-8 w-8"
+                  onClick={() =>
+                    patch({ blankSlotCount: Math.max(1, (lesson.blankSlotCount ?? 4) - 1) })
+                  }
+                >
+                  <Minus className="h-3.5 w-3.5" />
+                </Button>
+                <span className="w-8 text-center text-sm font-semibold tabular-nums">
+                  {lesson.blankSlotCount ?? 4}
+                </span>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="outline"
+                  className="h-8 w-8"
+                  onClick={() =>
+                    patch({ blankSlotCount: Math.min(20, (lesson.blankSlotCount ?? 4) + 1) })
+                  }
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </Button>
               </div>
-            </StudioSection>
+            </div>
           )}
 
           {isCountMode && (
-            <StudioSection
-              step="2"
-              title="Count answer"
-              description="Students answer with +/− only. Motion blocks stay hidden."
-            >
-              <div className="space-y-4 rounded-2xl border border-violet-200/70 bg-violet-50/30 p-4">
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium text-violet-950">Count which action?</span>
-                  <select
-                    className="h-10 w-full max-w-xs rounded-xl border border-violet-200 bg-white px-3 text-sm"
-                    value={countAction}
-                    onChange={(e) => {
-                      const action = e.target.value as CanvasCountAction;
-                      const auto = countActionInPattern(lesson.patternPreview, action);
-                      patch({
-                        countAction: action,
-                        correctCount: auto,
-                        prompt: defaultCountPrompt(action),
-                      });
-                    }}
-                  >
-                    <option value="forward">Forward arrows</option>
-                    <option value="backward">Backward arrows</option>
-                    <option value="turn left">Turn left</option>
-                    <option value="turn right">Turn right</option>
-                  </select>
-                </label>
-                <div className="flex flex-wrap items-end gap-4">
-                  <label className="block space-y-2">
-                    <span className="text-sm font-medium text-violet-950">Correct count</span>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        type="button"
-                        size="icon"
-                        variant="outline"
-                        className="h-10 w-10"
-                        onClick={() =>
-                          patch({
-                            correctCount: Math.max(0, (lesson.correctCount ?? patternCount) - 1),
-                          })
-                        }
-                      >
-                        <Minus className="h-4 w-4" />
-                      </Button>
-                      <Input
-                        type="number"
-                        min={0}
-                        max={99}
-                        value={lesson.correctCount ?? patternCount}
-                        onChange={(e) =>
-                          patch({
-                            correctCount: Math.max(0, Math.min(99, Number(e.target.value) || 0)),
-                          })
-                        }
-                        className="h-10 w-16 text-center"
-                      />
-                      <Button
-                        type="button"
-                        size="icon"
-                        variant="outline"
-                        className="h-10 w-10"
-                        onClick={() =>
-                          patch({
-                            correctCount: Math.min(99, (lesson.correctCount ?? patternCount) + 1),
-                          })
-                        }
-                      >
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </label>
+            <div className="flex flex-wrap items-end gap-4 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-3">
+              <label className="space-y-1">
+                <span className="text-xs font-medium text-slate-600">Count</span>
+                <select
+                  className="block h-9 rounded-lg border border-slate-200 bg-white px-2 text-sm"
+                  value={countAction}
+                  onChange={(e) => {
+                    const action = e.target.value as CanvasCountAction;
+                    const auto = countActionInPattern(lesson.patternPreview, action);
+                    patch({
+                      countAction: action,
+                      correctCount: auto,
+                      prompt: defaultCountPrompt(action),
+                    });
+                  }}
+                >
+                  <option value="forward">Forwards</option>
+                  <option value="backward">Backwards</option>
+                  <option value="turn left">Turn left</option>
+                  <option value="turn right">Turn right</option>
+                </select>
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs font-medium text-slate-600">Correct answer</span>
+                <div className="flex items-center gap-1.5">
                   <Button
                     type="button"
-                    variant="secondary"
-                    size="sm"
-                    className="mb-0.5"
+                    size="icon"
+                    variant="outline"
+                    className="h-8 w-8"
+                    onClick={() =>
+                      patch({
+                        correctCount: Math.max(0, (lesson.correctCount ?? patternCount) - 1),
+                      })
+                    }
+                  >
+                    <Minus className="h-3.5 w-3.5" />
+                  </Button>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={99}
+                    value={lesson.correctCount ?? patternCount}
+                    onChange={(e) =>
+                      patch({
+                        correctCount: Math.max(0, Math.min(99, Number(e.target.value) || 0)),
+                      })
+                    }
+                    className="h-8 w-14 text-center"
+                  />
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="outline"
+                    className="h-8 w-8"
+                    onClick={() =>
+                      patch({
+                        correctCount: Math.min(99, (lesson.correctCount ?? patternCount) + 1),
+                      })
+                    }
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </Button>
+                  <button
+                    type="button"
+                    className="text-xs font-medium text-slate-500 underline-offset-2 hover:underline"
                     onClick={() => patch({ correctCount: patternCount })}
                   >
-                    Use pattern count ({patternCount})
-                  </Button>
+                    from pattern ({patternCount})
+                  </button>
                 </div>
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium text-violet-950">
-                    Student counter starts at
+              </label>
+            </div>
+          )}
+
+          <label className="block space-y-1.5">
+            <span className="text-sm font-semibold text-slate-900">Prompt</span>
+            <textarea
+              className="min-h-[72px] w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200"
+              value={lesson.prompt ?? ""}
+              onChange={(e) => patch({ prompt: e.target.value })}
+              placeholder={
+                isCountMode
+                  ? "How many forwards do you see?"
+                  : "Build a program that matches the pattern…"
+              }
+            />
+          </label>
+
+          <DragTokenRowEditor
+            title="Pattern"
+            description="Shown on the white board."
+            tokens={lesson.patternPreview ?? []}
+            onChange={(patternPreview) => {
+              if (isCountMode) {
+                const action = (lesson.countAction ?? "forward") as CanvasCountAction;
+                const auto = countActionInPattern(patternPreview, action);
+                patch({
+                  patternPreview,
+                  correctCount: lesson.correctCount ?? auto,
+                });
+              } else {
+                patch({ patternPreview });
+              }
+            }}
+            accent="violet"
+          />
+
+          {!isCountMode && (lesson.patternPreview?.length ?? 0) > 0 && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => {
+                const patternOnly = (lesson.patternPreview ?? []).filter(
+                  (t) => t.trim().toLowerCase() !== "blank"
+                );
+                const variants = suggestProgramVariants(patternOnly);
+                if (!variants.length) return;
+                onChange({
+                  ...config,
+                  canvasLesson: lesson,
+                  assessment: { ...config.assessment, correctPrograms: variants },
+                });
+              }}
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              Use pattern as accepted answers
+            </Button>
+          )}
+
+          <details className="group rounded-xl border border-slate-200">
+            <summary className="cursor-pointer list-none px-3 py-2.5 text-sm font-medium text-slate-700 [&::-webkit-details-marker]:hidden">
+              <span className="inline-flex items-center gap-2">
+                More options
+                <span className="text-xs font-normal text-slate-400 group-open:hidden">
+                  image, audio, chunk, labels, Repeat…
+                </span>
+              </span>
+            </summary>
+            <div className="space-y-4 border-t border-slate-100 px-3 py-3">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <HintImageUpload
+                  imageUrl={lesson.imageUrl}
+                  onChange={(url) => patch({ imageUrl: url })}
+                  label="Board image"
+                />
+                <HintAudioUpload
+                  audioUrl={lesson.audioUrl}
+                  playAutomatically={lesson.playAudioAutomatically !== false}
+                  onChange={(url) => patch({ audioUrl: url })}
+                  onPlayAutomaticallyChange={(v) => patch({ playAudioAutomatically: v })}
+                />
+              </div>
+
+              <label className="block space-y-1">
+                <span className="text-xs font-medium text-slate-600">Pattern label</span>
+                <Input
+                  value={lesson.patternLabel ?? ""}
+                  onChange={(e) => patch({ patternLabel: e.target.value })}
+                  placeholder="Optional — leave empty to hide"
+                  className="h-9"
+                />
+              </label>
+
+              {!isCountMode && (
+                <>
+                  <DragTokenRowEditor
+                    title="Example chunk"
+                    description="Optional chip on the board."
+                    tokens={lesson.exampleChunk ?? []}
+                    onChange={(exampleChunk) => patch({ exampleChunk })}
+                    accent="teal"
+                  />
+                  <label className="block space-y-1">
+                    <span className="text-xs font-medium text-slate-600">Chunk label</span>
+                    <Input
+                      value={lesson.chunkLabel ?? "CHUNK"}
+                      onChange={(e) => patch({ chunkLabel: e.target.value })}
+                      placeholder="CHUNK"
+                      className="h-9"
+                    />
+                  </label>
+                  <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-slate-300"
+                      checked={repeatVisible}
+                      onChange={(e) => setRepeatVisible(e.target.checked)}
+                    />
+                    Show Repeat in palette
+                  </label>
+                </>
+              )}
+
+              {isCountMode && (
+                <label className="block space-y-1.5">
+                  <span className="text-xs font-medium text-slate-600">
+                    Counter starts at
                   </span>
                   <CountAnswerCounterPreview
                     value={lesson.countInitialValue ?? 0}
@@ -1204,192 +1240,32 @@ export function CanvasLessonEditor({ config, onChange }: Props) {
                     onChange={(n) => patch({ countInitialValue: n })}
                   />
                 </label>
-              </div>
-            </StudioSection>
-          )}
-
-          <StudioSection
-            step={isCountMode || lesson.stripMode === "BLANKS" ? "3" : "2"}
-            title="White board content"
-            description="Prompt, pattern, and optional chunk — what students see above the strip."
-          >
-            <div className="space-y-5">
-              <label className="block space-y-2">
-                <span className="text-sm font-semibold text-slate-800">Prompt</span>
-                <textarea
-                  className="min-h-[96px] w-full rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm shadow-inner transition focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200"
-                  value={lesson.prompt ?? ""}
-                  onChange={(e) => patch({ prompt: e.target.value })}
-                  placeholder={
-                    isCountMode
-                      ? "e.g. How many forwards do you see?"
-                      : "e.g. Find the chunk that repeats in this pattern…"
-                  }
-                />
-              </label>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
-                  <HintImageUpload
-                    imageUrl={lesson.imageUrl}
-                    onChange={(url) => patch({ imageUrl: url })}
-                    label="Board image"
-                  />
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
-                  <HintAudioUpload
-                    audioUrl={lesson.audioUrl}
-                    playAutomatically={lesson.playAudioAutomatically !== false}
-                    onChange={(url) => patch({ audioUrl: url })}
-                    onPlayAutomaticallyChange={(v) => patch({ playAudioAutomatically: v })}
-                  />
-                </div>
-              </div>
-
-              <DragTokenRowEditor
-                title="Pattern preview"
-                description="Drag blocks from the palette. Add Blank for a dashed “what comes next?” gap."
-                tokens={lesson.patternPreview ?? []}
-                onChange={(patternPreview) => {
-                  const next = { patternPreview };
-                  if (isCountMode) {
-                    const action = (lesson.countAction ?? "forward") as CanvasCountAction;
-                    const auto = countActionInPattern(patternPreview, action);
-                    patch({ ...next, correctCount: lesson.correctCount ?? auto });
-                  } else {
-                    patch(next);
-                  }
-                }}
-                accent="violet"
-              />
-
-              <label className="block space-y-1.5">
-                <span className="text-sm font-semibold text-slate-800">Pattern label</span>
-                <Input
-                  value={lesson.patternLabel ?? ""}
-                  onChange={(e) => patch({ patternLabel: e.target.value })}
-                  placeholder="Leave blank to hide (recommended)"
-                  className="h-10 rounded-xl"
-                />
-                <p className="text-xs text-slate-500">
-                  Empty = no heading above the pattern. Add text only if students need one.
-                </p>
-              </label>
-
-              {!isCountMode && (lesson.patternPreview?.length ?? 0) > 0 && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full gap-2 border-emerald-300 bg-emerald-50 text-emerald-900 hover:bg-emerald-100"
-                  onClick={() => {
-                    const patternOnly = (lesson.patternPreview ?? []).filter(
-                      (t) => t.trim().toLowerCase() !== "blank"
-                    );
-                    const variants = suggestProgramVariants(patternOnly);
-                    if (!variants.length) return;
-                    onChange({
-                      ...config,
-                      canvasLesson: lesson,
-                      assessment: {
-                        ...config.assessment,
-                        correctPrograms: variants,
-                      },
-                    });
-                  }}
-                >
-                  <Sparkles className="h-4 w-4" />
-                  Use pattern as accepted answers (smart Repeat ↔ expanded)
-                </Button>
               )}
 
-              {!isCountMode && (
-                <>
-                  <DragTokenRowEditor
-                    title="Example chunk"
-                    description="Optional unit students should notice (chip on the board)."
-                    tokens={lesson.exampleChunk ?? []}
-                    onChange={(exampleChunk) => patch({ exampleChunk })}
-                    accent="teal"
-                  />
-
-                  <label className="block space-y-1.5">
-                    <span className="text-sm font-semibold text-slate-800">Chunk label</span>
-                    <Input
-                      value={lesson.chunkLabel ?? "CHUNK"}
-                      onChange={(e) => patch({ chunkLabel: e.target.value })}
-                      placeholder="CHUNK"
-                      className="h-10 rounded-xl"
-                    />
-                    <p className="text-xs text-slate-500">
-                      Clear the field to hide the chunk heading. Default is “CHUNK”.
-                    </p>
-                  </label>
-
-                  <PatternEmphasisControls
-                    lesson={lesson}
-                    onChange={(patternEmphasis) => patch({ patternEmphasis })}
-                  />
-                </>
-              )}
-
-              {isCountMode && (lesson.patternPreview?.length ?? 0) > 0 && (
+              {(lesson.patternPreview?.length ?? 0) > 0 && (
                 <PatternEmphasisControls
                   lesson={lesson}
                   onChange={(patternEmphasis) => patch({ patternEmphasis })}
                 />
               )}
-            </div>
-          </StudioSection>
-
-          {!isCountMode && (
-            <StudioSection
-              step={lesson.stripMode === "BLANKS" ? "4" : "3"}
-              title="Palette"
-              description="Which action buttons students can drag into the strip."
-            >
-              <label
-                className={cn(
-                  "flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-3 transition",
-                  repeatVisible
-                    ? "border-slate-400 bg-slate-50"
-                    : "border-slate-200 bg-white"
-                )}
-              >
-                <input
-                  type="checkbox"
-                  className="mt-1 h-4 w-4 rounded border-slate-300"
-                  checked={repeatVisible}
-                  onChange={(e) => setRepeatVisible(e.target.checked)}
-                />
-                <span>
-                  <span className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                    <RotateCcw className="h-4 w-4 text-slate-700" />
-                    Show Repeat in the game palette
-                  </span>
-                  <span className="mt-0.5 block text-xs text-slate-500">
-                    Uncheck to hide Repeat (students only get arrow blocks).
-                  </span>
-                </span>
-              </label>
 
               {lesson.stripMode === "SEED_PROGRAM" && (
-                <p className="mt-3 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2.5 text-xs leading-relaxed text-sky-900">
-                  Seeded strip uses the <strong>starter program</strong> section below. Accepted
-                  answers are separate — list every valid student solution under Accepted programs.
+                <p className="text-xs text-slate-500">
+                  Set the starter blocks in the section below this studio.
                 </p>
               )}
-            </StudioSection>
-          )}
+            </div>
+          </details>
         </div>
 
-        <aside className="lg:sticky lg:top-4 lg:self-start">
+        <aside className="border-t border-slate-100 bg-slate-50/60 p-3 lg:border-l lg:border-t-0">
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+            Preview · {stripMeta.label}
+          </p>
           <StudentCanvasPreview
             lesson={lesson}
             guidedActions={config.guidedActions ?? []}
           />
-          <p className="mt-3 text-center text-[11px] text-slate-400">
-            Preview mirrors Unity white board + yellow strip
-          </p>
         </aside>
       </div>
     </section>

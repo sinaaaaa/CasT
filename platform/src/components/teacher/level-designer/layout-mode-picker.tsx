@@ -21,32 +21,12 @@ type Props = {
 };
 
 const LAYOUTS = [
-  {
-    id: "GRID" as const,
-    label: "6×6 Grid",
-    blurb: "Robot moves on a grid with goals and obstacles.",
-    icon: Grid3x3,
-    active: "bg-emerald-700 text-white shadow-sm",
-  },
-  {
-    id: "NUMBER_LINE" as const,
-    label: "Number line",
-    blurb: "Forward / backward along a line of ticks.",
-    icon: Minus,
-    active: "bg-indigo-700 text-white shadow-sm",
-  },
-  {
-    id: "CANVAS" as const,
-    label: "Canvas",
-    blurb: "Pattern board + yellow strip — no robot grid.",
-    icon: SquareDashed,
-    active: "bg-slate-900 text-white shadow-sm",
-  },
+  { id: "GRID" as const, label: "6×6 Grid", icon: Grid3x3 },
+  { id: "NUMBER_LINE" as const, label: "Number line", icon: Minus },
+  { id: "CANVAS" as const, label: "Canvas", icon: SquareDashed },
 ];
 
 export function LayoutModePicker({ config, onChange }: Props) {
-  const mode = config.layoutMode ?? "GRID";
-
   function setMode(next: "GRID" | "NUMBER_LINE" | "CANVAS") {
     if (next === "NUMBER_LINE") {
       onChange(
@@ -109,11 +89,11 @@ export function LayoutModePicker({ config, onChange }: Props) {
   }
 
   return (
-    <div className="grid gap-2 sm:grid-cols-3">
+    <div className="inline-flex flex-wrap gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
       {LAYOUTS.map((layout) => {
         const active =
           layout.id === "GRID"
-            ? mode === "GRID" && !isNumberLineLayout(config) && !isCanvasLayout(config)
+            ? !isNumberLineLayout(config) && !isCanvasLayout(config)
             : layout.id === "NUMBER_LINE"
               ? isNumberLineLayout(config)
               : isCanvasLayout(config);
@@ -124,24 +104,14 @@ export function LayoutModePicker({ config, onChange }: Props) {
             type="button"
             onClick={() => setMode(layout.id)}
             className={cn(
-              "flex flex-col items-start gap-2 rounded-2xl border px-4 py-3.5 text-left transition",
+              "inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition",
               active
-                ? cn("border-transparent", layout.active)
-                : "border-slate-200 bg-white text-slate-800 hover:border-slate-300 hover:bg-slate-50"
+                ? "bg-white text-slate-900 shadow-sm"
+                : "text-slate-500 hover:text-slate-800"
             )}
           >
-            <Icon className={cn("h-5 w-5", active ? "opacity-95" : "text-slate-500")} />
-            <span>
-              <span className="block text-sm font-semibold">{layout.label}</span>
-              <span
-                className={cn(
-                  "mt-0.5 block text-xs leading-snug",
-                  active ? "text-white/80" : "text-slate-500"
-                )}
-              >
-                {layout.blurb}
-              </span>
-            </span>
+            <Icon className="h-4 w-4" />
+            {layout.label}
           </button>
         );
       })}

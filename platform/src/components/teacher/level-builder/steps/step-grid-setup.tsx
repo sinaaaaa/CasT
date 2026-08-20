@@ -8,12 +8,8 @@ import { NumberLineDesigner } from "@/components/teacher/level-designer/number-l
 import { LayoutModePicker } from "@/components/teacher/level-designer/layout-mode-picker";
 import { CopyLevelLayout } from "@/components/teacher/level-designer/copy-level-layout";
 import { isCanvasLayout, isNumberLineLayout } from "@/lib/level-config";
-import {
-  CANVAS_STRIP_ACCENT_CLASS,
-  getCanvasStripType,
-} from "@/lib/canvas-strip-types";
+import { getCanvasStripType } from "@/lib/canvas-strip-types";
 import { ItemBuilderStepFrame } from "../item-builder-step-frame";
-import { cn } from "@/lib/utils";
 
 type Props = {
   config: LevelGameplayConfig;
@@ -23,7 +19,6 @@ type Props = {
 
 export function StepGridSetup({ config, onChange, currentLevelId }: Props) {
   const strip = getCanvasStripType(config.canvasLesson?.stripMode);
-  const accent = CANVAS_STRIP_ACCENT_CLASS[strip.accent];
 
   return (
     <motion.div
@@ -35,7 +30,7 @@ export function StepGridSetup({ config, onChange, currentLevelId }: Props) {
       <ItemBuilderStepFrame
         icon={Grid3x3}
         title="Design the board"
-        subtitle="Choose a 6×6 grid, number line, or canvas (pattern board + yellow strip)."
+        subtitle="Grid, number line, or canvas."
         accent="teal"
       />
 
@@ -50,90 +45,12 @@ export function StepGridSetup({ config, onChange, currentLevelId }: Props) {
       <LayoutModePicker config={config} onChange={onChange} />
 
       {isCanvasLayout(config) ? (
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="grid gap-0 lg:grid-cols-[1.05fr_0.95fr]">
-            <div className="space-y-4 p-5 sm:p-6">
-              <div>
-                <p className="text-sm font-semibold text-slate-900">Canvas playfield</p>
-                <p className="mt-1 text-sm leading-relaxed text-slate-600">
-                  No robot grid. Students work in the yellow strip while the white board shows your
-                  pattern lesson. Detail the task in the Program step.
-                </p>
-              </div>
-              <dl className="grid gap-2 text-sm">
-                <div className="flex items-center justify-between gap-4 rounded-xl bg-slate-50 px-3 py-2.5 ring-1 ring-slate-100">
-                  <dt className="text-slate-500">Task type</dt>
-                  <dd>
-                    <span
-                      className={cn(
-                        "rounded-full px-2.5 py-0.5 text-xs font-semibold",
-                        accent.soft
-                      )}
-                    >
-                      {strip.label}
-                    </span>
-                  </dd>
-                </div>
-                <div className="flex justify-between gap-4 rounded-xl bg-slate-50 px-3 py-2.5 ring-1 ring-slate-100">
-                  <dt className="text-slate-500">Yellow strip</dt>
-                  <dd className="text-right text-xs font-medium text-slate-800">
-                    {strip.stripSummary}
-                  </dd>
-                </div>
-                <div className="flex justify-between gap-4 rounded-xl bg-slate-50 px-3 py-2.5 ring-1 ring-slate-100">
-                  <dt className="text-slate-500">Pattern tiles</dt>
-                  <dd className="font-semibold text-slate-900">
-                    {config.canvasLesson?.patternPreview?.length ?? 0}
-                  </dd>
-                </div>
-                {strip.usesAcceptedPrograms ? (
-                  <div className="flex justify-between gap-4 rounded-xl bg-slate-50 px-3 py-2.5 ring-1 ring-slate-100">
-                    <dt className="text-slate-500">Accepted programs</dt>
-                    <dd className="font-semibold text-slate-900">
-                      {config.assessment?.correctPrograms?.length ?? 0}
-                    </dd>
-                  </div>
-                ) : (
-                  <div className="flex justify-between gap-4 rounded-xl bg-slate-50 px-3 py-2.5 ring-1 ring-slate-100">
-                    <dt className="text-slate-500">Correct count</dt>
-                    <dd className="font-semibold text-slate-900">
-                      {config.canvasLesson?.correctCount ?? 0}
-                    </dd>
-                  </div>
-                )}
-              </dl>
-              <p className="text-xs leading-relaxed text-slate-500">{strip.studentJob}</p>
-            </div>
-            <div className="border-t border-slate-100 bg-slate-50/80 p-4 lg:border-l lg:border-t-0">
-              <div className="rounded-xl border border-slate-200 bg-white p-4 text-center shadow-sm">
-                <p className="line-clamp-3 text-sm font-medium text-slate-800">
-                  {config.canvasLesson?.prompt?.trim() || "Prompt appears on the white board"}
-                </p>
-                <div className="mt-3 flex min-h-[2.75rem] flex-wrap items-center justify-center gap-1.5 rounded-lg bg-gradient-to-b from-amber-200 to-amber-300 px-2 py-2">
-                  {strip.value === "BLANKS"
-                    ? Array.from({ length: config.canvasLesson?.blankSlotCount ?? 4 }).map((_, i) => (
-                        <span
-                          key={i}
-                          className="inline-block h-1.5 w-8 rounded-full bg-slate-500/80"
-                        />
-                      ))
-                    : strip.value === "COUNT_ANSWER"
-                      ? (
-                          <span className="inline-flex items-center gap-1.5 rounded-lg border border-amber-400/80 bg-white px-2.5 py-1 text-sm font-bold tabular-nums text-slate-900 shadow-sm">
-                            <span className="text-slate-400">−</span>
-                            {config.canvasLesson?.countInitialValue ?? 0}
-                            <span className="text-slate-400">+</span>
-                          </span>
-                        )
-                      : (
-                        <span className="self-center text-[11px] font-medium text-amber-950/70">
-                          {strip.stripSummary}
-                        </span>
-                      )}
-                </div>
-              </div>
-            </div>
-          </div>
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          <span className="font-medium text-slate-900">Canvas</span>
+          {" · "}
+          {strip.label}
+          {" — "}
+          {strip.studentJob} Continue in the Program step.
         </div>
       ) : isNumberLineLayout(config) ? (
         <NumberLineDesigner config={config} onChange={onChange} />
