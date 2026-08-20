@@ -23,7 +23,7 @@ import {
   type RobotActionButton,
 } from "@/lib/level-config";
 import { FACING_OPTIONS, NUMBER_LINE_FACING_OPTIONS } from "@/lib/level-editor-constants";
-import { Textarea } from "@/components/ui/textarea";
+import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import {
   ActionButtonChips,
   AttemptPicker,
@@ -178,13 +178,14 @@ export function RulesStepContent({ levelType, config, onChange }: Props) {
             <div className="grid gap-4 lg:grid-cols-1">
               <label className="block space-y-2">
                 <span className="text-sm font-semibold text-slate-700">Wrong attempt message</span>
-                <Textarea
-                  rows={2}
-                  placeholder="Leave empty for no text in the game"
+                <RichTextEditor
                   value={config.attemptFailureMessage ?? ""}
-                  onChange={(e) =>
-                    patch({ attemptFailureMessage: e.target.value || undefined })
+                  onChange={(html) =>
+                    patch({ attemptFailureMessage: html || undefined })
                   }
+                  placeholder="Leave empty for no text in the game"
+                  minHeight={64}
+                  compact
                 />
                 <span className="text-xs text-slate-500">
                   Placeholders: {"{attempt}"}, {"{maxAttempts}"}, {"{reason}"}
@@ -192,25 +193,27 @@ export function RulesStepContent({ levelType, config, onChange }: Props) {
               </label>
               <label className="block space-y-2">
                 <span className="text-sm font-semibold text-slate-700">Success message</span>
-                <Textarea
-                  rows={2}
-                  placeholder="Leave empty for no text in the game"
+                <RichTextEditor
                   value={config.attemptSuccessMessage ?? ""}
-                  onChange={(e) =>
-                    patch({ attemptSuccessMessage: e.target.value || undefined })
+                  onChange={(html) =>
+                    patch({ attemptSuccessMessage: html || undefined })
                   }
+                  placeholder="Leave empty for no text in the game"
+                  minHeight={64}
+                  compact
                 />
                 <span className="text-xs text-slate-500">Placeholders: {"{levelName}"}</span>
               </label>
               <label className="block space-y-2">
                 <span className="text-sm font-semibold text-slate-700">Max attempts message</span>
-                <Textarea
-                  rows={2}
-                  placeholder="Leave empty for no text in the game"
+                <RichTextEditor
                   value={config.maxAttemptsMessage ?? ""}
-                  onChange={(e) =>
-                    patch({ maxAttemptsMessage: e.target.value || undefined })
+                  onChange={(html) =>
+                    patch({ maxAttemptsMessage: html || undefined })
                   }
+                  placeholder="Leave empty for no text in the game"
+                  minHeight={64}
+                  compact
                 />
                 <span className="text-xs text-slate-500">
                   Placeholders: {"{levelName}"}, {"{maxAttempts}"}

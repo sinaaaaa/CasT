@@ -29,6 +29,8 @@ public class CanvasLessonPanel : MonoBehaviour
     public Sprite turnLeftSprite;
     public Sprite turnRightSprite;
     public Sprite repeatSprite;
+    public Sprite repeatStartSprite;
+    public Sprite repeatEndSprite;
     public Sprite blankSprite;
 
     [Header("Blank line (same as yellow-strip blank slots)")]
@@ -93,7 +95,8 @@ public class CanvasLessonPanel : MonoBehaviour
 
         if (promptText != null)
         {
-            promptText.text = lesson.prompt ?? "";
+            promptText.richText = true;
+            promptText.text = HtmlToTmpRichText.Convert(lesson.prompt ?? "");
             promptText.gameObject.SetActive(!string.IsNullOrWhiteSpace(lesson.prompt));
         }
 
@@ -312,6 +315,53 @@ public class CanvasLessonPanel : MonoBehaviour
                 continue;
             }
 
+            if (TryParseRepeatStart(tokens[i], out _) )
+            {
+                int endIdx = -1;
+                for (int j = i + 1; j < tokens.Count; j++)
+                {
+                    if (IsRepeatEndToken(tokens[j]))
+                    {
+                        endIdx = j;
+                        break;
+                    }
+                    if (TryParseRepeatStart(tokens[j], out _))
+                        break;
+                }
+
+                if (endIdx > i)
+                {
+                    float sleevePx = tokenPx;
+                    if (applyEmphasis)
+                    {
+                        for (int k = i; k <= endIdx; k++)
+                        {
+                            if (highlighted.Contains(k))
+                            {
+                                sleevePx = hotPx;
+                                break;
+                            }
+                        }
+                    }
+
+                    float startW = sleevePx * 1.15f;
+                    float endW = sleevePx * 1.15f;
+                    float bodyW = 0f;
+                    int bodyVisible = 0;
+                    for (int k = i + 1; k < endIdx; k++)
+                    {
+                        if (string.IsNullOrWhiteSpace(tokens[k])) continue;
+                        if (bodyVisible > 0) bodyW += 4f;
+                        bodyW += TokenSlotWidth(tokens[k], sleevePx);
+                        bodyVisible++;
+                    }
+                    total += 12f + startW + bodyW + endW;
+                    pieces++;
+                    i = endIdx + 1;
+                    continue;
+                }
+            }
+
             bool hot = applyEmphasis && highlighted.Contains(i);
             if (!hot)
             {
@@ -382,7 +432,15 @@ public class CanvasLessonPanel : MonoBehaviour
         _current = null;
     }
 
-    public void BindActionSprites(Sprite forward, Sprite backward, Sprite left, Sprite right, Sprite repeat, Sprite blank)
+    public void BindActionSprites(
+        Sprite forward,
+        Sprite backward,
+        Sprite left,
+        Sprite right,
+        Sprite repeat,
+        Sprite blank,
+        Sprite repeatStart = null,
+        Sprite repeatEnd = null)
     {
         forwardSprite = forward;
         backwardSprite = backward;
@@ -390,6 +448,8 @@ public class CanvasLessonPanel : MonoBehaviour
         turnRightSprite = right;
         repeatSprite = repeat;
         blankSprite = blank;
+        repeatStartSprite = repeatStart != null ? repeatStart : repeat;
+        repeatEndSprite = repeatEnd != null ? repeatEnd : repeat;
     }
 
     public void BindBlankLineStyle(Sprite lineSprite, bool useLine, float width, float height, Color color)
@@ -687,6 +747,47 @@ public class CanvasLessonPanel : MonoBehaviour
                 continue;
             }
 
+            // Group repeat:N … body … repeat-end into a yellow sleeve (start / counter / end).
+            if (TryParseRepeatStart(tokens[i], out int repeatCount))
+            {
+                int endIdx = -1;
+                for (int j = i + 1; j < tokens.Count; j++)
+                {
+                    if (IsRepeatEndToken(tokens[j]))
+                    {
+                        endIdx = j;
+                        break;
+                    }
+                    if (TryParseRepeatStart(tokens[j], out _))
+                        break; // nested not supported — fall through as plain tokens
+                }
+
+                if (endIdx > i)
+                {
+                    var body = new List<string>();
+                    for (int k = i + 1; k < endIdx; k++)
+                    {
+                        if (!string.IsNullOrWhiteSpace(tokens[k]))
+                            body.Add(tokens[k]);
+                    }
+                    float sleevePx = basePx;
+                    if (applyEmphasis)
+                    {
+                        for (int k = i; k <= endIdx; k++)
+                        {
+                            if (highlighted.Contains(k))
+                            {
+                                sleevePx = hotPx;
+                                break;
+                            }
+                        }
+                    }
+                    CreatePatternRepeatGroup(row, repeatCount, body, sleevePx, applyEmphasis ? 0.9f : 1f);
+                    i = endIdx + 1;
+                    continue;
+                }
+            }
+
             bool hot = applyEmphasis && highlighted.Contains(i);
             if (!hot)
             {
@@ -714,6 +815,144 @@ public class CanvasLessonPanel : MonoBehaviour
 
         if (applyEmphasis && emphasis.blink && _blinkTargets.Count > 0)
             RestartBlink();
+    }
+
+    /// <summary>
+    /// Yellow-strip style Repeat capsule: [Start ×N] body arrows [End].
+    /// </summary>
+    private void CreatePatternRepeatGroup(
+        Transform parent,
+        int count,
+        List<string> body,
+        float px,
+        float alpha)
+    {
+        count = ProgramSequenceUtil.ClampRepeatCount(count);
+
+        var go = new GameObject(
+            "RepeatGroup",
+            typeof(RectTransform),
+            typeof(Image),
+            typeof(HorizontalLayoutGroup),
+            typeof(LayoutElement),
+            typeof(CanvasGroup));
+        go.transform.SetParent(parent, false);
+        go.GetComponent<CanvasGroup>().alpha = alpha;
+
+        var bg = go.GetComponent<Image>();
+        bg.sprite = GetRoundedSprite();
+        bg.type = Image.Type.Sliced;
+        bg.color = new Color(1f, 0.92f, 0.55f, 0.95f); // yellow sleeve
+        bg.raycastTarget = false;
+
+        var hlg = go.GetComponent<HorizontalLayoutGroup>();
+        hlg.padding = new RectOffset(6, 6, 4, 4);
+        hlg.spacing = 4f;
+        hlg.childAlignment = TextAnchor.MiddleCenter;
+        hlg.childForceExpandWidth = false;
+        hlg.childForceExpandHeight = false;
+        hlg.childControlWidth = true;
+        hlg.childControlHeight = true;
+
+        float startW = px * 1.15f;
+        float endW = px * 1.15f;
+        float bodyW = 0f;
+        if (body != null)
+        {
+            for (int b = 0; b < body.Count; b++)
+            {
+                if (b > 0) bodyW += 4f;
+                bodyW += TokenSlotWidth(body[b], px);
+            }
+        }
+        float totalW = 12f + startW + bodyW + endW;
+
+        var le = go.GetComponent<LayoutElement>();
+        le.preferredWidth = totalW;
+        le.minWidth = totalW;
+        le.preferredHeight = px * 1.35f;
+        le.minHeight = px * 1.2f;
+
+        CreateRepeatBoundaryToken(go.transform, true, count, startW, px * 1.25f);
+        if (body != null)
+        {
+            for (int b = 0; b < body.Count; b++)
+                CreatePatternToken(go.transform, body[b], px, 1f);
+        }
+        CreateRepeatBoundaryToken(go.transform, false, count, endW, px * 1.25f);
+    }
+
+    private void CreateRepeatBoundaryToken(Transform parent, bool isStart, int count, float width, float height)
+    {
+        var go = new GameObject(
+            isStart ? "RepeatStart" : "RepeatEnd",
+            typeof(RectTransform),
+            typeof(Image),
+            typeof(LayoutElement));
+        go.transform.SetParent(parent, false);
+
+        var img = go.GetComponent<Image>();
+        Sprite sp = isStart
+            ? (repeatStartSprite != null ? repeatStartSprite : repeatSprite)
+            : (repeatEndSprite != null ? repeatEndSprite : repeatSprite);
+        img.sprite = sp;
+        img.preserveAspect = true;
+        img.color = Color.white;
+        img.raycastTarget = false;
+
+        var le = go.GetComponent<LayoutElement>();
+        le.preferredWidth = width;
+        le.preferredHeight = height;
+        le.minWidth = width * 0.8f;
+        le.minHeight = height * 0.8f;
+
+        // Counter badge on start (and end for clarity).
+        if (isStart || count > 0)
+        {
+            var badge = new GameObject("Count", typeof(RectTransform), typeof(Image));
+            badge.transform.SetParent(go.transform, false);
+            var brt = badge.GetComponent<RectTransform>();
+            brt.anchorMin = new Vector2(0.5f, 0f);
+            brt.anchorMax = new Vector2(0.5f, 0f);
+            brt.pivot = new Vector2(0.5f, 0f);
+            brt.anchoredPosition = new Vector2(0f, height * 0.04f);
+            brt.sizeDelta = new Vector2(Mathf.Max(28f, width * 0.55f), Mathf.Max(18f, height * 0.28f));
+
+            var badgeBg = badge.GetComponent<Image>();
+            badgeBg.sprite = GetRoundedSprite();
+            badgeBg.type = Image.Type.Sliced;
+            badgeBg.color = isStart
+                ? new Color(1f, 1f, 1f, 0.95f)
+                : new Color(1f, 0.94f, 0.78f, 0.95f);
+            badgeBg.raycastTarget = false;
+
+            var tmp = CreateTmp("CountLabel", badge.transform, Mathf.Clamp(height * 0.18f, 11f, 16f), FontStyles.Bold, new Color(0.35f, 0.2f, 0.55f, 1f));
+            tmp.text = "×" + count;
+            tmp.alignment = TextAlignmentOptions.Center;
+            tmp.enableWordWrapping = false;
+            tmp.raycastTarget = false;
+            var labelLe = tmp.GetComponent<LayoutElement>();
+            if (labelLe != null)
+            {
+                labelLe.flexibleWidth = 0f;
+                labelLe.ignoreLayout = true;
+            }
+            var trt = tmp.GetComponent<RectTransform>();
+            trt.anchorMin = Vector2.zero;
+            trt.anchorMax = Vector2.one;
+            trt.offsetMin = Vector2.zero;
+            trt.offsetMax = Vector2.zero;
+        }
+    }
+
+    private static bool TryParseRepeatStart(string raw, out int count)
+    {
+        return ProgramSequenceUtil.IsRepeatStartToken(raw, out count);
+    }
+
+    private static bool IsRepeatEndToken(string raw)
+    {
+        return ProgramSequenceUtil.IsRepeatEndToken(raw);
     }
 
     private Transform CreateHighlightUnit(
@@ -1080,7 +1319,11 @@ public class CanvasLessonPanel : MonoBehaviour
         if (t == "turn left" || t == "left") return turnLeftSprite;
         if (t == "turn right" || t == "right") return turnRightSprite;
         if (t == "blank") return blankSprite;
-        if (t.StartsWith("repeat") || t == "repeat-end" || t == "end-repeat")
+        if (IsRepeatEndToken(raw))
+            return repeatEndSprite != null ? repeatEndSprite : (repeatSprite != null ? repeatSprite : forwardSprite);
+        if (TryParseRepeatStart(raw, out _))
+            return repeatStartSprite != null ? repeatStartSprite : (repeatSprite != null ? repeatSprite : forwardSprite);
+        if (t.StartsWith("repeat"))
             return repeatSprite != null ? repeatSprite : forwardSprite;
         return null;
     }

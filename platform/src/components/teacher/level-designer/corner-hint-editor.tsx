@@ -2,6 +2,7 @@
 
 import type { LevelGameplayConfig } from "@/lib/level-config";
 import { Input } from "@/components/ui/input";
+import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { HintImageUpload } from "./hint-image-upload";
 import { HintAudioUpload } from "./hint-audio-upload";
 import { MessageSquare } from "lucide-react";
@@ -66,11 +67,11 @@ export function CornerHintEditor({
         </div>
         <label className="block space-y-2 lg:col-span-1">
           <span className="text-sm font-medium text-slate-700">Instructions</span>
-          <textarea
-            className="min-h-[100px] w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm shadow-inner focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+          <RichTextEditor
             value={hint.body ?? ""}
-            onChange={(e) => patch({ body: e.target.value })}
+            onChange={(body) => patch({ body })}
             placeholder="Tell students what to do in simple words…"
+            minHeight={100}
           />
         </label>
         <div className="lg:col-span-2">

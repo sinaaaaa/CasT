@@ -4108,7 +4108,8 @@ public class CharacterMove : MonoBehaviour
             canvasLessonPanel = GetComponent<CanvasLessonPanel>() ?? gameObject.AddComponent<CanvasLessonPanel>();
 
         canvasLessonPanel.BindActionSprites(
-            forwardSprite, backwardSprite, rotateLeftSprite, rotateRightSprite, repeatSprite, blankSlotSprite);
+            forwardSprite, backwardSprite, rotateLeftSprite, rotateRightSprite,
+            repeatSprite, blankSlotSprite, repeatStartSprite, repeatEndSprite);
         // Only canvasBlankSlotSprite overrides the thin line; yellow blankSlotSprite stays for strip squares elsewhere.
         canvasLessonPanel.BindBlankLineStyle(
             canvasBlankSlotSprite,

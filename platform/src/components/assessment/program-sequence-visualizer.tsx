@@ -59,11 +59,14 @@ export function ProgramSequenceVisualizer({
   size = 44,
   className,
   tone = "neutral",
+  sleeve = "emerald",
 }: {
   tokens: string[];
   size?: number;
   className?: string;
   tone?: "match" | "miss" | "neutral";
+  /** Yellow matches the in-game Repeat strip / pattern board sleeve. */
+  sleeve?: "emerald" | "amber";
 }) {
   if (!tokens.length) {
     return <span className="text-sm text-muted-foreground">Empty program</span>;
@@ -115,11 +118,13 @@ export function ProgramSequenceVisualizer({
   }
 
   const sleeveTone =
-    tone === "match"
-      ? "bg-emerald-200/70 ring-emerald-300/60"
-      : tone === "miss"
-        ? "bg-sky-200/50 ring-sky-200/80"
-        : "bg-emerald-200/60 ring-emerald-200/70";
+    sleeve === "amber"
+      ? "bg-amber-200/75 ring-amber-300/70"
+      : tone === "match"
+        ? "bg-emerald-200/70 ring-emerald-300/60"
+        : tone === "miss"
+          ? "bg-sky-200/50 ring-sky-200/80"
+          : "bg-emerald-200/60 ring-emerald-200/70";
 
   return (
     <ol

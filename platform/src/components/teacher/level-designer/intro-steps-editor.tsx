@@ -8,6 +8,7 @@ import { HintImageUpload } from "./hint-image-upload";
 import { HintAudioUpload } from "./hint-audio-upload";
 import { DesignerSection } from "./designer-section";
 import { IntroStepFieldsEditor } from "./intro-step-fields-editor";
+import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { ListOrdered, Plus } from "lucide-react";
 
 type Props = {
@@ -180,11 +181,15 @@ export function IntroStepsEditor({ config, onChange, forLevelZero }: Props) {
                   </label>
                   <label className="block text-sm">
                     <span className="font-medium text-slate-700">Tip message</span>
-                    <textarea
-                      className="mt-1.5 min-h-[72px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                      value={step.stepHint?.body ?? ""}
-                      onChange={(e) => patchStepHint(i, { body: e.target.value })}
-                    />
+                    <div className="mt-1.5">
+                      <RichTextEditor
+                        value={step.stepHint?.body ?? ""}
+                        onChange={(body) => patchStepHint(i, { body })}
+                        placeholder="Tip message for this step…"
+                        minHeight={72}
+                        compact
+                      />
+                    </div>
                   </label>
                   <div className="lg:col-span-2 space-y-4">
                     <HintImageUpload

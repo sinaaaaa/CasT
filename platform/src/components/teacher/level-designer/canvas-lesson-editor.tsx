@@ -27,8 +27,9 @@ import { HintImageUpload } from "@/components/teacher/level-designer/hint-image-
 import { HintAudioUpload } from "@/components/teacher/level-designer/hint-audio-upload";
 import { CanvasStripModePicker } from "@/components/teacher/level-designer/canvas-strip-mode-picker";
 import { GUIDED_ACTIONS } from "@/lib/level-editor-constants";
-import { suggestProgramVariants, formatRepeatStart, parseRepeatStart } from "@/lib/assessment/expand-repeats";
+import { suggestProgramVariants, formatRepeatStart, parseRepeatStart, isRepeatEnd } from "@/lib/assessment/expand-repeats";
 import { normalizeCommandToken, COMMAND_ICON_PATHS } from "@/lib/command-icons";
+import { REPEAT_ICON_PATHS } from "@/components/assessment/program-sequence-visualizer";
 import {
   getCanvasStripType,
   type CanvasStripMode,
@@ -50,6 +51,8 @@ import {
   X,
   Zap,
 } from "lucide-react";
+import { RichTextEditor, RichTextPreview } from "@/components/ui/rich-text-editor";
+import { richTextToPlain } from "@/lib/rich-text";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -471,6 +474,103 @@ function PatternTokenIcon({
   );
 }
 
+function RepeatBoundaryIcon({
+  kind,
+  count,
+  px,
+}: {
+  kind: "start" | "end";
+  count: number;
+  px: number;
+}) {
+  const w = Math.round(px * 1.25);
+  const h = Math.round(px * 1.35);
+  return (
+    <span
+      className="relative inline-flex shrink-0 drop-shadow-sm"
+      style={{ width: w, height: h }}
+      title={kind === "start" ? `Repeat start ×${count}` : `Repeat end ×${count}`}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={kind === "start" ? REPEAT_ICON_PATHS.start : REPEAT_ICON_PATHS.end}
+        alt=""
+        className="h-full w-full object-contain"
+      />
+      <span
+        className={cn(
+          "absolute bottom-1 left-1/2 z-[1] -translate-x-1/2 rounded px-1.5 py-0.5 text-[10px] font-bold tabular-nums shadow-sm",
+          kind === "start"
+            ? "bg-white/95 text-violet-800 ring-1 ring-violet-200"
+            : "rounded-full bg-amber-100/95 text-amber-900 ring-1 ring-amber-300/80"
+        )}
+      >
+        ×{count}
+      </span>
+    </span>
+  );
+}
+
+type PatternVisualPiece =
+  | { type: "tokens"; start: number; end: number }
+  | {
+      type: "repeat";
+      start: number;
+      end: number;
+      count: number;
+      bodyStart: number;
+      bodyEnd: number;
+    };
+
+function buildPatternVisualPieces(tokens: string[]): PatternVisualPiece[] {
+  const pieces: PatternVisualPiece[] = [];
+  let i = 0;
+  while (i < tokens.length) {
+    const count = parseRepeatStart(tokens[i] ?? "");
+    if (count != null) {
+      let endIdx = -1;
+      for (let j = i + 1; j < tokens.length; j++) {
+        if (isRepeatEnd(tokens[j] ?? "")) {
+          endIdx = j;
+          break;
+        }
+        if (parseRepeatStart(tokens[j] ?? "") != null) break;
+      }
+      if (endIdx > i) {
+        pieces.push({
+          type: "repeat",
+          start: i,
+          end: endIdx + 1,
+          count,
+          bodyStart: i + 1,
+          bodyEnd: endIdx,
+        });
+        i = endIdx + 1;
+        continue;
+      }
+    }
+    const flatStart = i;
+    i += 1;
+    while (i < tokens.length) {
+      const nextCount = parseRepeatStart(tokens[i] ?? "");
+      if (nextCount != null) {
+        let hasEnd = false;
+        for (let j = i + 1; j < tokens.length; j++) {
+          if (isRepeatEnd(tokens[j] ?? "")) {
+            hasEnd = true;
+            break;
+          }
+          if (parseRepeatStart(tokens[j] ?? "") != null) break;
+        }
+        if (hasEnd) break;
+      }
+      i += 1;
+    }
+    pieces.push({ type: "tokens", start: flatStart, end: i });
+  }
+  return pieces;
+}
+
 function PatternPreviewRow({ lesson }: { lesson: CanvasLessonConfig }) {
   const emphasis = {
     ...DEFAULT_CANVAS_PATTERN_EMPHASIS,
@@ -488,8 +588,8 @@ function PatternPreviewRow({ lesson }: { lesson: CanvasLessonConfig }) {
   );
   const basePx = resolveCanvasPatternTokenPx(emphasis.scale);
   const hotPx = emphasis.bigger ? Math.round(basePx * 1.22) : basePx;
-  const runs = contiguousHighlightRuns(tokens.length, highlighted);
   const hasHot = highlighted.size > 0;
+  const pieces = buildPatternVisualPieces(tokens);
 
   return (
     <div className="relative flex flex-col items-center gap-2">
@@ -501,68 +601,108 @@ function PatternPreviewRow({ lesson }: { lesson: CanvasLessonConfig }) {
           boxShadow: "inset 0 0 0 3px #8D9AD1, 0 8px 20px -12px rgba(55,65,110,0.35)",
         }}
       >
-        {runs.map((run) => {
-          const slice = tokens.slice(run.start, run.end);
-          if (!run.hot) {
+        {pieces.map((piece) => {
+          if (piece.type === "repeat") {
+            const body = tokens.slice(piece.bodyStart, piece.bodyEnd);
+            const sleeveHot = Array.from(
+              { length: piece.end - piece.start },
+              (_, n) => piece.start + n
+            ).some((idx) => highlighted.has(idx));
+            const px = sleeveHot ? hotPx : basePx;
             return (
-              <div key={`rest-${run.start}`} className="flex items-end gap-2">
-                {slice.map((t, n) => (
+              <div
+                key={`rep-${piece.start}`}
+                className="inline-flex items-center gap-1 rounded-2xl bg-amber-200/80 px-1 py-1 ring-1 ring-amber-300/70"
+                title={`Repeat ×${piece.count}`}
+              >
+                <RepeatBoundaryIcon kind="start" count={piece.count} px={px} />
+                {body.map((t, n) => (
                   <PatternTokenIcon
-                    key={`${t}-${run.start + n}`}
+                    key={`${t}-${piece.bodyStart + n}`}
                     action={t}
-                    px={basePx}
-                    dimmed={hasHot}
+                    px={px}
                   />
                 ))}
+                <RepeatBoundaryIcon kind="end" count={piece.count} px={px} />
               </div>
             );
           }
 
+          const sliceTokens = tokens.slice(piece.start, piece.end);
+          const localHighlighted = new Set(
+            Array.from(highlighted)
+              .filter((idx) => idx >= piece.start && idx < piece.end)
+              .map((idx) => idx - piece.start)
+          );
+          const runs = contiguousHighlightRuns(sliceTokens.length, localHighlighted);
+
           return (
-            <motion.div
-              key={`unit-${run.start}`}
-              layout
-              initial={{ opacity: 0, y: 8, scale: 0.92 }}
-              animate={
-                emphasis.blink
-                  ? { opacity: 1, y: [0, -5, 0], scale: [1, 1.035, 1] }
-                  : { opacity: 1, y: 0, scale: 1 }
-              }
-              transition={
-                emphasis.blink
-                  ? { duration: 1.8, repeat: Infinity, ease: [0.45, 0.05, 0.55, 0.95] }
-                  : { type: "spring", stiffness: 380, damping: 24 }
-              }
-              className="relative flex items-end gap-1.5 rounded-[1.4rem] px-3 py-2"
-              style={{
-                background: emphasis.redBorder ? "#FFF7F0" : "#FFF9ED",
-                boxShadow: emphasis.redBorder
-                  ? "inset 0 0 0 3px #E24B3A, 0 10px 28px -10px rgba(226,75,58,0.55)"
-                  : "inset 0 0 0 2px #E8B84A, 0 8px 20px -10px rgba(232,184,74,0.45)",
-              }}
-              title="Repeating unit"
-            >
-              {emphasis.blink && (
-                <motion.span
-                  aria-hidden
-                  className="pointer-events-none absolute -inset-1 rounded-[1.55rem]"
-                  style={{
-                    boxShadow: emphasis.redBorder
-                      ? "0 0 0 2px rgba(226,75,58,0.35)"
-                      : "0 0 0 2px rgba(232,184,74,0.4)",
-                  }}
-                  animate={{ opacity: [0.85, 0.15, 0.85], scale: [1, 1.04, 1] }}
-                  transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
-                />
-              )}
-              {slice.map((t, n) => (
-                <PatternTokenIcon
-                  key={`${t}-${run.start + n}`}
-                  action={t}
-                  px={hotPx}
-                />
-              ))}
-            </motion.div>
+            <div key={`flat-${piece.start}`} className="flex items-end gap-2">
+              {runs.map((run) => {
+                const slice = sliceTokens.slice(run.start, run.end);
+                if (!run.hot) {
+                  return (
+                    <div key={`rest-${piece.start + run.start}`} className="flex items-end gap-2">
+                      {slice.map((t, n) => (
+                        <PatternTokenIcon
+                          key={`${t}-${piece.start + run.start + n}`}
+                          action={t}
+                          px={basePx}
+                          dimmed={hasHot}
+                        />
+                      ))}
+                    </div>
+                  );
+                }
+
+                return (
+                  <motion.div
+                    key={`unit-${piece.start + run.start}`}
+                    layout
+                    initial={{ opacity: 0, y: 8, scale: 0.92 }}
+                    animate={
+                      emphasis.blink
+                        ? { opacity: 1, y: [0, -5, 0], scale: [1, 1.035, 1] }
+                        : { opacity: 1, y: 0, scale: 1 }
+                    }
+                    transition={
+                      emphasis.blink
+                        ? { duration: 1.8, repeat: Infinity, ease: [0.45, 0.05, 0.55, 0.95] }
+                        : { type: "spring", stiffness: 380, damping: 24 }
+                    }
+                    className="relative flex items-end gap-1.5 rounded-[1.4rem] px-3 py-2"
+                    style={{
+                      background: emphasis.redBorder ? "#FFF7F0" : "#FFF9ED",
+                      boxShadow: emphasis.redBorder
+                        ? "inset 0 0 0 3px #E24B3A, 0 10px 28px -10px rgba(226,75,58,0.55)"
+                        : "inset 0 0 0 2px #E8B84A, 0 8px 20px -10px rgba(232,184,74,0.45)",
+                    }}
+                    title="Repeating unit"
+                  >
+                    {emphasis.blink && (
+                      <motion.span
+                        aria-hidden
+                        className="pointer-events-none absolute -inset-1 rounded-[1.55rem]"
+                        style={{
+                          boxShadow: emphasis.redBorder
+                            ? "0 0 0 2px rgba(226,75,58,0.35)"
+                            : "0 0 0 2px rgba(232,184,74,0.4)",
+                        }}
+                        animate={{ opacity: [0.85, 0.15, 0.85], scale: [1, 1.04, 1] }}
+                        transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+                      />
+                    )}
+                    {slice.map((t, n) => (
+                      <PatternTokenIcon
+                        key={`${t}-${piece.start + run.start + n}`}
+                        action={t}
+                        px={hotPx}
+                      />
+                    ))}
+                  </motion.div>
+                );
+              })}
+            </div>
           );
         })}
       </motion.div>
@@ -844,14 +984,14 @@ function StudentCanvasPreview({
         <div className="relative z-[1] flex flex-col items-center gap-5 text-center">
           <AnimatePresence mode="wait">
             {lesson.prompt?.trim() ? (
-              <motion.p
-                key={lesson.prompt}
+              <motion.div
+                key={richTextToPlain(lesson.prompt) || lesson.prompt}
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="max-w-2xl text-lg font-semibold leading-snug text-slate-800"
               >
-                {lesson.prompt}
-              </motion.p>
+                <RichTextPreview html={lesson.prompt} empty="Add a prompt…" />
+              </motion.div>
             ) : (
               <p className="text-sm italic text-slate-400">Add a prompt…</p>
             )}
@@ -1154,15 +1294,15 @@ export function CanvasLessonEditor({ config, onChange }: Props) {
 
           <label className="block space-y-1.5">
             <span className="text-sm font-semibold text-slate-900">Prompt</span>
-            <textarea
-              className="min-h-[72px] w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200"
+            <RichTextEditor
               value={lesson.prompt ?? ""}
-              onChange={(e) => patch({ prompt: e.target.value })}
+              onChange={(prompt) => patch({ prompt })}
               placeholder={
                 isCountMode
                   ? "How many forwards do you see?"
                   : "Build a program that matches the pattern…"
               }
+              minHeight={72}
             />
           </label>
 

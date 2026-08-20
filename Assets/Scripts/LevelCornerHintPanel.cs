@@ -190,7 +190,8 @@ public class LevelCornerHintPanel : MonoBehaviour
 
         if (bodyText != null)
         {
-            bodyText.text = hint.body ?? "";
+            bodyText.richText = true;
+            bodyText.text = HtmlToTmpRichText.Convert(hint.body ?? "");
             bodyText.gameObject.SetActive(!string.IsNullOrEmpty(bodyText.text));
         }
 
