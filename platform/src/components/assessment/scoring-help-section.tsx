@@ -125,6 +125,29 @@ export function ScoringHelpSection({
           </>
         )}
 
+        {variant === "canvas" && (
+          <>
+            <p>
+              <strong className="text-slate-800">Canvas items</strong> assess pattern reasoning on the
+              white board + yellow strip — not robot movement.
+            </p>
+            <ul className="list-disc space-y-1 pl-4">
+              <li>
+                <strong>Count answer</strong> — student reports how many of a chosen arrow appear in
+                the pattern using +/−. Item outcome is 100% only when the number equals the expected
+                count.
+              </li>
+              <li>
+                <strong>Pattern / blanks / seed</strong> — the strip program must match an accepted
+                answer (Repeat nesting and the same expanded motions both count).
+              </li>
+            </ul>
+            <p>
+              The verdict banner and status badge use the same rematch logic so they stay consistent.
+            </p>
+          </>
+        )}
+
         {variant === "general" && (
           <p>
             <strong className="inline-flex items-center gap-1 text-slate-800">

@@ -7,6 +7,7 @@ import { LevelType } from "@prisma/client";
 import { CommandAction } from "@prisma/client";
 import { normalizeCommandToken, type CommandToken } from "@/lib/command-icons";
 import { expandRepeatTokens } from "@/lib/assessment/expand-repeats";
+import { parseCountAnswerToken } from "@/lib/level-config";
 
 function parseCommandStringKeepingRepeats(raw: string): string[] {
   return raw
@@ -47,17 +48,20 @@ export function expandGuidedActions(
 }
 
 /** Unity may send placeholder text when no RUN was captured. */
-function isRecordedProgramString(raw: string | null | undefined): boolean {
+export function isRecordedProgramString(raw: string | null | undefined): boolean {
   if (!raw?.trim()) return false;
   const lower = raw.trim().toLowerCase();
   if (
     lower === "level completed" ||
     lower === "level complete" ||
     lower === "completed" ||
+    lower === "run failed" ||
     lower === "n/a"
   ) {
     return false;
   }
+  const tokens = parseCommandStringKeepingRepeats(raw);
+  if (tokens.some((t) => parseCountAnswerToken(t) != null)) return true;
   return parseCommandString(raw).length > 0;
 }
 

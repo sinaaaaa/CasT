@@ -1547,8 +1547,15 @@ public class CharacterMove : MonoBehaviour
 
     private void RecordTelemetryBeforeRun()
     {
-        if (actionQueue.Count == 0) return;
+        // Always prefer yellow-strip UI tokens (COUNT_ANSWER has no motion actionQueue).
         string[] cmds = SnapshotQueueCommandLabels();
+        if (cmds == null || cmds.Length == 0)
+        {
+            if (actionQueue == null || actionQueue.Count == 0) return;
+            cmds = actionQueue.Select(a => a == null ? "blank" : GetActionLogString(a)).ToArray();
+        }
+        if (cmds.Length == 0) return;
+
         var snap = new RunSnapshotTelemetry
         {
             label = $"RUN {_telemetryRunSnapshots.Count + 1}",
@@ -5102,7 +5109,17 @@ public class CharacterMove : MonoBehaviour
 
         string finalCmd = BuildCommandsString(_telemetryFinalCommands);
         if (string.IsNullOrEmpty(finalCmd))
-            finalCmd = passed ? "Level Completed" : "Run failed";
+        {
+            // Last-chance: read the yellow strip (COUNT_ANSWER / blanks) before placeholders.
+            var uiTokens = CollectProgramTokensFromUI();
+            if (uiTokens != null && uiTokens.Count > 0)
+            {
+                finalCmd = string.Join("; ", uiTokens);
+                _telemetryFinalCommands = uiTokens.ToArray();
+            }
+            else
+                finalCmd = passed ? "Level Completed" : "Run failed";
+        }
 
         int score = ComputeLevelEndScore(levelData, passed);
         float duration = levelStartTime > 0f

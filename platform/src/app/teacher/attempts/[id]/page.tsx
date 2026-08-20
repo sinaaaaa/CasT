@@ -149,6 +149,7 @@ export default async function AttemptDetailPage({
     canvasPatternMatch = buildCanvasPatternMatch({
       studentTokens,
       acceptedPrograms: accepted,
+      levelConfig: parsedLevelConfig.data,
     });
   }
 

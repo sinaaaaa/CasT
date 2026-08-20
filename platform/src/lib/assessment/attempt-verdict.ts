@@ -39,11 +39,16 @@ export type AttemptVerdictInput = {
   debugging: DebuggingAnalysisResult | null | undefined;
   pathBuilding: PathBuildingAnalysisResult | null | undefined;
   numberLine: NumberLineEvidence | null | undefined;
-  /** Canvas / pattern items with correctPrograms. */
+  /** Canvas / pattern / count items. */
   canvasPattern?: {
     matched: boolean;
     acceptedCount: number;
     matchedProgramIndex: number | null;
+    stripKind?: "pattern" | "count" | "blanks" | "seed" | "empty";
+    studentCount?: number | null;
+    expectedCount?: number | null;
+    answerMissing?: boolean;
+    explanation?: string;
   } | null;
   /** Fallback when no rich analysis is available. */
   fallback: { passed: boolean; status: string; score: number | null };
@@ -431,13 +436,51 @@ function fallbackVerdict(
 }
 
 function canvasPatternVerdict(r: NonNullable<AttemptVerdictInput["canvasPattern"]>): AttemptVerdict {
+  if (r.stripKind === "count") {
+    if (r.answerMissing) {
+      return {
+        headline: "Grade incomplete — the count answer was not recorded.",
+        detail:
+          r.explanation ||
+          "The attempt finished without a count:N token in the log, so we cannot show a reliable match in this panel. Use the stored Incorrect status.",
+        fix: "Have the student retry after the WebGL build that records the yellow-strip counter.",
+        tone: "warning",
+        confidence: {
+          level: "low",
+          note: "Missing telemetry means the green/red match UI must not override the database grade.",
+        },
+      };
+    }
+    if (r.matched) {
+      return {
+        headline: `Correct — counted ${r.studentCount} (expected ${r.expectedCount}).`,
+        detail:
+          r.explanation ||
+          "The student used the +/− counter to report how many pattern elements they saw.",
+        fix: null,
+        tone: "success",
+        confidence: null,
+      };
+    }
+    return {
+      headline: `Not yet — counted ${r.studentCount ?? "—"}, expected ${r.expectedCount ?? "—"}.`,
+      detail:
+        r.explanation ||
+        "Counting repeating units in a pattern supports early abstraction and cardinality reasoning.",
+      fix: "Ask the student to point to each matching arrow in the pattern, then recount with the counter.",
+      tone: "danger",
+      confidence: null,
+    };
+  }
+
   if (r.matched) {
     return {
       headline: "Correct — the program matches an accepted answer.",
       detail:
-        r.matchedProgramIndex != null
+        r.explanation ||
+        (r.matchedProgramIndex != null
           ? `Matched accepted program ${r.matchedProgramIndex + 1} of ${r.acceptedCount} (exact Repeat form or same expanded motions).`
-          : "The student’s strip matches a teacher-accepted program.",
+          : "The student’s strip matches a teacher-accepted program."),
       fix: null,
       tone: "success",
       confidence: null,
@@ -447,9 +490,10 @@ function canvasPatternVerdict(r: NonNullable<AttemptVerdictInput["canvasPattern"
   return {
     headline: "Not yet — the program doesn’t match an accepted answer.",
     detail:
-      r.acceptedCount > 1
+      r.explanation ||
+      (r.acceptedCount > 1
         ? `Compared against ${r.acceptedCount} accepted programs (including Repeat vs expanded equivalents).`
-        : "The student’s commands don’t match the accepted pattern.",
+        : "The student’s commands don’t match the accepted pattern."),
     fix:
       r.acceptedCount > 1
         ? "Try another valid approach — more than one program can be correct."

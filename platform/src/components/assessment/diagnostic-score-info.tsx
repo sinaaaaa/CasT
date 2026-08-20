@@ -10,6 +10,7 @@ export type DiagnosticScoreVariant =
   | "numberLine"
   | "choice"
   | "route"
+  | "canvas"
   | "general";
 
 const VARIANT_KEYS: Record<DiagnosticScoreVariant, GlossaryKey> = {
@@ -20,6 +21,7 @@ const VARIANT_KEYS: Record<DiagnosticScoreVariant, GlossaryKey> = {
   numberLine: "diagnosticScoreNumberLine",
   choice: "diagnosticScoreChoice",
   route: "diagnosticScoreRoute",
+  canvas: "diagnosticScore",
 };
 
 export function DiagnosticScoreInfo({ variant = "general" }: { variant?: DiagnosticScoreVariant }) {

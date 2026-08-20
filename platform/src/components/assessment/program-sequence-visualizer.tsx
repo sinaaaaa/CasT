@@ -21,10 +21,20 @@ type Segment =
   | { kind: "motion"; token: CommandToken; raw: string }
   | { kind: "repeat-start"; count: number; raw: string }
   | { kind: "repeat-end"; raw: string }
+  | { kind: "count"; value: number; raw: string }
   | { kind: "other"; raw: string };
+
+function parseCountToken(raw: string): number | null {
+  const t = raw.trim().toLowerCase();
+  if (!t.startsWith("count:")) return null;
+  const n = Number(t.slice(6));
+  return Number.isFinite(n) ? Math.max(0, Math.min(99, Math.round(n))) : null;
+}
 
 function parseSegments(tokens: string[]): Segment[] {
   return tokens.map((raw) => {
+    const countVal = parseCountToken(raw);
+    if (countVal != null) return { kind: "count" as const, value: countVal, raw };
     const count = parseRepeatStart(raw);
     if (count != null) return { kind: "repeat-start" as const, count, raw };
     if (isRepeatEnd(raw)) return { kind: "repeat-end" as const, raw };
@@ -228,6 +238,26 @@ function TokenBlock({
         <span className="absolute bottom-1.5 left-1/2 z-[1] flex -translate-x-1/2 items-center gap-0.5 rounded-full bg-amber-100/95 px-1 py-0.5 text-[9px] font-bold text-amber-900 shadow-sm ring-1 ring-amber-300/80">
           ×{n}
         </span>
+      </span>
+    );
+  }
+
+  if (seg.kind === "count") {
+    return (
+      <span
+        className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-white px-2.5 py-1.5 shadow-sm"
+        title={`Count answer: ${seg.value}`}
+      >
+        <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-sm font-bold text-slate-600">
+          −
+        </span>
+        <span className="min-w-[1.75rem] text-center text-lg font-bold tabular-nums text-slate-900">
+          {seg.value}
+        </span>
+        <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-sm font-bold text-slate-600">
+          +
+        </span>
+        <span className="sr-only">Count {seg.value}</span>
       </span>
     );
   }

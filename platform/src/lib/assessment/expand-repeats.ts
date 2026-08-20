@@ -77,6 +77,13 @@ export function expandRepeatTokens(tokens: string[]): string[] {
 export function programsExpandedEqual(a: string[], b: string[]): boolean {
   const ea = expandRepeatTokens(a);
   const eb = expandRepeatTokens(b);
+  // Both expand to nothing: only treat as equal when both inputs were truly empty.
+  // Prevents false matches like count:3 vs "Level Completed" (both expand to []).
+  if (ea.length === 0 && eb.length === 0) {
+    const aHas = (a ?? []).some((t) => Boolean(t?.trim()));
+    const bHas = (b ?? []).some((t) => Boolean(t?.trim()));
+    return !aHas && !bHas;
+  }
   if (ea.length !== eb.length) return false;
   for (let i = 0; i < ea.length; i++) {
     if (ea[i] !== eb[i]) return false;

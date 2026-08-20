@@ -103,10 +103,15 @@ export type AttemptDetailPayload = {
   /** Canvas layout pattern assessment. */
   isCanvasLevel?: boolean;
   canvasPatternMatch?: {
+    stripKind: "pattern" | "count" | "blanks" | "seed" | "empty";
     studentTokens: string[];
     acceptedPrograms: string[][];
     matched: boolean;
     matchedProgramIndex: number | null;
+    studentCount: number | null;
+    expectedCount: number | null;
+    answerMissing: boolean;
+    explanation: string;
   } | null;
   mapAnchors?: {
     routeStartPosition: { x: number; y: number };
@@ -171,9 +176,11 @@ export function AttemptAssessmentView({ attempt }: { attempt: AttemptDetailPaylo
           ? "numberLine"
           : isChoiceAssessment
             ? "choice"
-            : attempt.liveRoute.routeComparison
-              ? "route"
-              : "general";
+            : isCanvasAssessment
+              ? "canvas"
+              : attempt.liveRoute.routeComparison
+                ? "route"
+                : "general";
 
   const numberLineScore =
     numberLineResult != null ? numberLineDiagnosticScore(numberLineResult) : null;
@@ -200,6 +207,11 @@ export function AttemptAssessmentView({ attempt }: { attempt: AttemptDetailPaylo
           matched: attempt.canvasPatternMatch.matched,
           acceptedCount: attempt.canvasPatternMatch.acceptedPrograms.length,
           matchedProgramIndex: attempt.canvasPatternMatch.matchedProgramIndex,
+          stripKind: attempt.canvasPatternMatch.stripKind,
+          studentCount: attempt.canvasPatternMatch.studentCount,
+          expectedCount: attempt.canvasPatternMatch.expectedCount,
+          answerMissing: attempt.canvasPatternMatch.answerMissing,
+          explanation: attempt.canvasPatternMatch.explanation,
         }
       : null,
     fallback: {
@@ -259,6 +271,21 @@ export function AttemptAssessmentView({ attempt }: { attempt: AttemptDetailPaylo
           <StatusBadge
             status={numberLineResult.passed ? AttemptStatus.CORRECT : AttemptStatus.INCORRECT}
             passed={numberLineResult.passed}
+          />
+        ) : isCanvasAssessment && attempt.canvasPatternMatch ? (
+          <StatusBadge
+            status={
+              (attempt.canvasPatternMatch.answerMissing
+                ? attempt.passed
+                : attempt.canvasPatternMatch.matched)
+                ? AttemptStatus.CORRECT
+                : AttemptStatus.INCORRECT
+            }
+            passed={
+              attempt.canvasPatternMatch.answerMissing
+                ? attempt.passed
+                : attempt.canvasPatternMatch.matched
+            }
           />
         ) : (
           <StatusBadge status={attempt.status} passed={attempt.passed} />
