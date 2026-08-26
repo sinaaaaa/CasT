@@ -651,8 +651,8 @@ public class CanvasLessonPanel : MonoBehaviour
         lessonImage.preserveAspect = true;
         lessonImage.raycastTarget = false;
         var imgLe = imgGo.GetComponent<LayoutElement>();
-        imgLe.preferredWidth = 420f;
-        imgLe.preferredHeight = 200f;
+        imgLe.preferredWidth = 820f;
+        imgLe.preferredHeight = 400f;
         imgGo.SetActive(false);
 
         var listenGo = new GameObject("PlayAudio", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
@@ -1514,6 +1514,8 @@ public class CanvasLessonPanel : MonoBehaviour
             _imageLoadRoutine = null;
         }
 
+        ApplyImageSize(lesson);
+
         if (string.IsNullOrEmpty(lesson.imageUrl))
         {
             lessonImage.gameObject.SetActive(false);
@@ -1530,6 +1532,49 @@ public class CanvasLessonPanel : MonoBehaviour
 
         _loadingImageUrl = url;
         _imageLoadRoutine = StartCoroutine(LoadImageFromUrl(url));
+    }
+
+    private void ApplyImageSize(CanvasLessonData lesson)
+    {
+        if (lessonImage == null) return;
+        var le = lessonImage.GetComponent<LayoutElement>();
+        if (le == null) return;
+        ResolveImageSizePx(lesson != null ? lesson.imageSize : null, out float w, out float h);
+        le.preferredWidth = w;
+        le.preferredHeight = h;
+        // Cap width to the white board so XL still fits with padding.
+        float cardW = ResolveLessonCardWidth();
+        float maxW = Mathf.Max(420f, cardW - 96f);
+        if (le.preferredWidth > maxW)
+        {
+            float scale = maxW / le.preferredWidth;
+            le.preferredWidth = maxW;
+            le.preferredHeight = Mathf.Round(le.preferredHeight * scale);
+        }
+    }
+
+    private static void ResolveImageSizePx(string size, out float width, out float height)
+    {
+        switch ((size ?? "lg").Trim().ToLowerInvariant())
+        {
+            case "sm":
+                width = 480f;
+                height = 240f;
+                break;
+            case "md":
+                width = 640f;
+                height = 320f;
+                break;
+            case "xl":
+                width = 980f;
+                height = 480f;
+                break;
+            case "lg":
+            default:
+                width = 820f;
+                height = 400f;
+                break;
+        }
     }
 
     private IEnumerator LoadImageFromUrl(string url)

@@ -111,6 +111,7 @@ public class CanvasLessonDto
     public string stripMode = "EMPTY";
     public string prompt;
     public string imageUrl;
+    public string imageSize = "lg";
     public string audioUrl;
     public bool playAudioAutomatically = true;
     public string[] patternPreview;
@@ -325,6 +326,9 @@ public static class LevelConfigMapper
                     : dto.canvasLesson.stripMode,
                 prompt = dto.canvasLesson.prompt,
                 imageUrl = dto.canvasLesson.imageUrl,
+                imageSize = string.IsNullOrEmpty(dto.canvasLesson.imageSize)
+                    ? "lg"
+                    : dto.canvasLesson.imageSize,
                 audioUrl = dto.canvasLesson.audioUrl,
                 playAudioAutomatically = dto.canvasLesson.playAudioAutomatically,
                 blankSlotCount = dto.canvasLesson.blankSlotCount,

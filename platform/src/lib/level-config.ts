@@ -77,6 +77,11 @@ export const canvasLessonSchema = z.object({
   /** Primary instruction shown on the Unity white canvas. */
   prompt: z.string().optional(),
   imageUrl: z.string().optional(),
+  /**
+   * Board image display size in Unity (and teacher preview).
+   * sm ≈ old default; lg is the new default (larger teaching diagrams).
+   */
+  imageSize: z.enum(["sm", "md", "lg", "xl"]).optional(),
   audioUrl: z.string().optional(),
   playAudioAutomatically: z.boolean().optional(),
   /** Visual pattern row on canvas (not scored by itself). */
@@ -108,10 +113,29 @@ export const canvasLessonSchema = z.object({
 });
 
 export type CanvasLessonConfig = z.infer<typeof canvasLessonSchema>;
+export type CanvasLessonImageSize = NonNullable<CanvasLessonConfig["imageSize"]>;
+
+/** Unity LayoutElement preferred size for the board image. */
+export function resolveCanvasLessonImagePx(
+  size: CanvasLessonImageSize | string | null | undefined
+): { width: number; height: number } {
+  switch ((size ?? "lg").toLowerCase()) {
+    case "sm":
+      return { width: 480, height: 240 };
+    case "md":
+      return { width: 640, height: 320 };
+    case "xl":
+      return { width: 980, height: 480 };
+    case "lg":
+    default:
+      return { width: 820, height: 400 };
+  }
+}
 
 export const DEFAULT_CANVAS_LESSON: CanvasLessonConfig = {
   stripMode: "EMPTY",
   prompt: "Build a program that matches the pattern.",
+  imageSize: "lg",
   playAudioAutomatically: true,
   blankSlotCount: 4,
   chunkLabel: "CHUNK",

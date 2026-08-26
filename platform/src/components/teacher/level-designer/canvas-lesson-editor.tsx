@@ -10,6 +10,7 @@ import {
   countActionInPattern,
   defaultCountPrompt,
   formatCountAnswerToken,
+  resolveCanvasLessonImagePx,
   resolveCanvasPatternTokenPx,
   resolveCanvasSectionLabel,
   resolveEmphasisHighlightChunk,
@@ -17,6 +18,7 @@ import {
   resolveHighlightedPatternIndices,
   type CanvasCountAction,
   type CanvasLessonConfig,
+  type CanvasLessonImageSize,
   type CanvasPatternEmphasis,
   type LevelGameplayConfig,
   type RobotActionButton,
@@ -1015,14 +1017,23 @@ function StudentCanvasPreview({
           </AnimatePresence>
 
           {lesson.imageUrl ? (
-            <div className="relative h-28 w-full max-w-xs overflow-hidden rounded-lg border border-slate-100 bg-slate-50">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={lesson.imageUrl}
-                alt=""
-                className="h-full w-full object-contain"
-              />
-            </div>
+            (() => {
+              const px = resolveCanvasLessonImagePx(lesson.imageSize);
+              const previewH = Math.min(220, Math.round(px.height * 0.35));
+              return (
+                <div
+                  className="relative w-full max-w-2xl overflow-hidden rounded-lg border border-slate-100 bg-slate-50"
+                  style={{ height: previewH }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={lesson.imageUrl}
+                    alt=""
+                    className="h-full w-full object-contain"
+                  />
+                </div>
+              );
+            })()
           ) : (
             <div className="flex h-16 w-full max-w-xs items-center justify-center gap-2 rounded-lg border border-dashed border-slate-200 bg-slate-50/50 text-xs text-slate-400">
               <ImageIcon className="h-4 w-4" />
@@ -1377,11 +1388,57 @@ export function CanvasLessonEditor({ config, onChange }: Props) {
             </summary>
             <div className="space-y-4 border-t border-slate-100 px-3 py-3">
               <div className="grid gap-3 sm:grid-cols-2">
-                <HintImageUpload
-                  imageUrl={lesson.imageUrl}
-                  onChange={(url) => patch({ imageUrl: url })}
-                  label="Board image"
-                />
+                <div className="space-y-2">
+                  <HintImageUpload
+                    imageUrl={lesson.imageUrl}
+                    onChange={(url) => patch({ imageUrl: url })}
+                    label="Board image"
+                  />
+                  {lesson.imageUrl ? (
+                    <div className="space-y-1.5">
+                      <span className="text-xs font-medium text-slate-600">Image size in game</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(
+                          [
+                            ["sm", "S"],
+                            ["md", "M"],
+                            ["lg", "L"],
+                            ["xl", "XL"],
+                          ] as const satisfies ReadonlyArray<readonly [CanvasLessonImageSize, string]>
+                        ).map(([value, label]) => {
+                          const active = (lesson.imageSize ?? "lg") === value;
+                          return (
+                            <button
+                              key={value}
+                              type="button"
+                              onClick={() => patch({ imageSize: value })}
+                              className={cn(
+                                "rounded-lg border px-2.5 py-1 text-xs font-semibold transition-colors",
+                                active
+                                  ? "border-[#4F46E5] bg-[#4F46E5]/10 text-[#4F46E5]"
+                                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                              )}
+                              title={
+                                value === "sm"
+                                  ? "Small"
+                                  : value === "md"
+                                    ? "Medium"
+                                    : value === "lg"
+                                      ? "Large (default)"
+                                      : "Extra large"
+                              }
+                            >
+                              {label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <p className="text-[11px] text-slate-400">
+                        Default is Large. Change size without re-uploading the image.
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
                 <HintAudioUpload
                   audioUrl={lesson.audioUrl}
                   playAutomatically={lesson.playAudioAutomatically !== false}

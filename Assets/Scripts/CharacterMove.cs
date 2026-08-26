@@ -286,6 +286,8 @@ public class CanvasLessonData
     [TextArea(2, 5)]
     public string prompt;
     public string imageUrl;
+    /// <summary>sm | md | lg | xl — board image size (default lg).</summary>
+    public string imageSize = "lg";
     public string audioUrl;
     public bool playAudioAutomatically = true;
     public List<string> patternPreview = new List<string>();
