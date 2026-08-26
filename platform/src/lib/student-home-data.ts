@@ -10,8 +10,8 @@ import {
   resolveLevelTaskLabel,
   resolvePlayStatus,
 } from "@/lib/student-ui";
-import { buildPlayableLevelProgress } from "@/lib/game-resume-level";
-import { pickNextPlayableLevel } from "@/lib/resolve-next-playable-level";
+import { resolveGameResumeLevel } from "@/lib/game-resume-level";
+import { getStudentReplayLevelIds } from "@/lib/level-student-replay";
 import type { LevelType } from "@prisma/client";
 
 function computeStreak(attemptDates: Date[]): number {
@@ -62,11 +62,14 @@ export async function getStudentHomeData(studentProfileId: string, studentCode: 
 
   const progressByLevelId = new Map(progress.levels.map((l) => [l.levelId, l]));
 
-  const playableProgress = await buildPlayableLevelProgress(
-    studentProfileId,
-    playableLevels.map((level) => ({ id: level.id, levelKey: level.levelKey }))
-  );
-  const nextPlayable = pickNextPlayableLevel(playableProgress);
+  const playableRefs = playableLevels.map((level) => ({
+    id: level.id,
+    levelKey: level.levelKey,
+  }));
+  const [resume, replayLevelIds] = await Promise.all([
+    resolveGameResumeLevel(studentProfileId, playableRefs),
+    getStudentReplayLevelIds(studentProfileId),
+  ]);
 
   const levels = playableLevels.map((level, index) => {
     const cfg = levelGameplayConfigSchema.safeParse(level.config);
@@ -76,6 +79,7 @@ export async function getStudentHomeData(studentProfileId: string, studentCode: 
     const prog = progressByLevelId.get(level.id);
     const attempts = prog?.attempts ?? 0;
     const passed = prog?.passed ?? false;
+    const queuedForReplay = replayLevelIds.has(level.id);
 
     return {
       id: level.id,
@@ -87,10 +91,11 @@ export async function getStudentHomeData(studentProfileId: string, studentCode: 
       difficultyLabel: difficultyLabel(level.difficulty),
       levelType: level.levelType as LevelType,
       taskLabel: resolveLevelTaskLabel(level.levelType as LevelType, layoutMode),
-      status: resolvePlayStatus(attempts, passed),
+      status: resolvePlayStatus(attempts, passed && !queuedForReplay),
       attempts,
       score: prog?.score ?? null,
       passed,
+      queuedForReplay,
     };
   });
 
@@ -114,8 +119,8 @@ export async function getStudentHomeData(studentProfileId: string, studentCode: 
   }));
 
   const nextLevel =
-    nextPlayable != null
-      ? levels.find((level) => level.id === nextPlayable.id) ?? null
+    resume != null
+      ? levels.find((level) => level.levelKey === resume.resumeLevelKey) ?? null
       : null;
 
   return {

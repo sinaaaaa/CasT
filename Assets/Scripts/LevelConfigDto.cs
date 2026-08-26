@@ -218,9 +218,9 @@ public static class LevelConfigMapper
             commandHistoryScale = dto.commandHistoryScale > 0 ? dto.commandHistoryScale : 0.45f,
             showStudentResetButton = dto.showStudentResetButton,
             runRobotOnSubmit = dto.runRobotOnSubmit,
-            attemptSuccessMessage = HtmlToTmpRichText.Convert(dto.attemptSuccessMessage),
-            attemptFailureMessage = HtmlToTmpRichText.Convert(dto.attemptFailureMessage),
-            maxAttemptsMessage = HtmlToTmpRichText.Convert(dto.maxAttemptsMessage),
+            attemptSuccessMessage = dto.attemptSuccessMessage,
+            attemptFailureMessage = dto.attemptFailureMessage,
+            maxAttemptsMessage = dto.maxAttemptsMessage,
         };
 
         if (dto.numberLine != null)
@@ -323,7 +323,7 @@ public static class LevelConfigMapper
                 stripMode = string.IsNullOrEmpty(dto.canvasLesson.stripMode)
                     ? "EMPTY"
                     : dto.canvasLesson.stripMode,
-                prompt = HtmlToTmpRichText.Convert(dto.canvasLesson.prompt),
+                prompt = dto.canvasLesson.prompt,
                 imageUrl = dto.canvasLesson.imageUrl,
                 audioUrl = dto.canvasLesson.audioUrl,
                 playAudioAutomatically = dto.canvasLesson.playAudioAutomatically,
@@ -353,7 +353,7 @@ public static class LevelConfigMapper
                 introId = dto.actionBlockIntro.introId,
                 showOnlyOnce = dto.actionBlockIntro.showOnlyOnce,
                 allowSkip = dto.actionBlockIntro.allowSkip,
-                completeMessage = HtmlToTmpRichText.Convert(dto.actionBlockIntro.completeMessage),
+                completeMessage = dto.actionBlockIntro.completeMessage,
                 steps = new List<ActionBlockIntroStepData>(),
             };
             if (dto.actionBlockIntro.steps != null)
@@ -516,7 +516,7 @@ public static class LevelConfigMapper
         {
             enabled = dto.enabled,
             title = dto.title,
-            body = HtmlToTmpRichText.Convert(dto.body),
+            body = dto.body,
             imageUrl = dto.imageUrl,
             audioUrl = dto.audioUrl,
             playAudioAutomatically = dto.playAudioAutomatically,

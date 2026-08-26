@@ -115,6 +115,8 @@ public class CanvasLessonPanel : MonoBehaviour
 
         if (promptText != null)
         {
+            // Let TipTap → TMP tags control weight/color (don't force Bold on the whole field).
+            promptText.fontStyle = FontStyles.Normal;
             promptText.richText = true;
             promptText.text = HtmlToTmpRichText.Convert(lesson.prompt ?? "");
             promptText.gameObject.SetActive(!string.IsNullOrWhiteSpace(lesson.prompt));
@@ -636,7 +638,8 @@ public class CanvasLessonPanel : MonoBehaviour
         panelLe.minWidth = 1120f;
         panelLe.preferredWidth = 1120f;
 
-        promptText = CreateTmp("Prompt", panelRoot, 42, FontStyles.Bold, new Color(0.12f, 0.14f, 0.22f));
+        promptText = CreateTmp("Prompt", panelRoot, 42, FontStyles.Normal, new Color(0.12f, 0.14f, 0.22f));
+        promptText.richText = true;
         promptText.alignment = TextAlignmentOptions.Center;
         promptText.lineSpacing = -6f;
         var promptLe = promptText.GetComponent<LayoutElement>();

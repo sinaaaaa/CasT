@@ -11,6 +11,7 @@ import {
   History,
   Layers,
   Mail,
+  RefreshCw,
   Search,
   Target,
   Trophy,
@@ -41,6 +42,7 @@ export type StudentProfileLevelRow = {
   totalTimeSeconds: number | null;
   finalCommand: string | null;
   lastAttemptAt: string | null;
+  queuedForReplay?: boolean;
 };
 
 export type StudentProfileAttemptRow = {
@@ -108,6 +110,11 @@ export function StudentProfileView({
   const [progressFilter, setProgressFilter] = useState<ProgressFilter>("all");
   const [progressQuery, setProgressQuery] = useState("");
   const [historyQuery, setHistoryQuery] = useState("");
+  const [queuedReplayIds, setQueuedReplayIds] = useState<Set<string>>(
+    () => new Set(levels.filter((l) => l.queuedForReplay).map((l) => l.levelId))
+  );
+  const [reassigningId, setReassigningId] = useState<string | null>(null);
+  const [reassignError, setReassignError] = useState<string | null>(null);
 
   const filteredLevels = useMemo(() => {
     const q = progressQuery.trim().toLowerCase();
@@ -131,6 +138,31 @@ export function StudentProfileView({
   }, [attempts, historyQuery]);
 
   const assignedCount = levels.filter((l) => l.attempts > 0 || l.passed).length;
+
+  async function reassignLevel(levelId: string) {
+    setReassigningId(levelId);
+    setReassignError(null);
+    try {
+      const res = await fetch(`/api/teacher/students/${student.id}/level-assignments`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reassign", levelId }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        pendingReplayLevelIds?: string[];
+      };
+      if (!res.ok) {
+        setReassignError(data.error ?? "Could not reassign item");
+        return;
+      }
+      setQueuedReplayIds(new Set(data.pendingReplayLevelIds ?? [levelId]));
+    } catch {
+      setReassignError("Could not reassign item");
+    } finally {
+      setReassigningId(null);
+    }
+  }
 
   return (
     <div className="space-y-8">
@@ -264,7 +296,8 @@ export function StudentProfileView({
                 <div>
                   <CardTitle className="text-lg">Item progress</CardTitle>
                   <CardDescription>
-                    Best result per item · {assignedCount} item{assignedCount === 1 ? "" : "s"} with activity
+                    Best result per item · {assignedCount} item{assignedCount === 1 ? "" : "s"} with
+                    activity. Reassign a completed item to send it back for practice (history is kept).
                   </CardDescription>
                 </div>
                 <div className="relative w-full sm:max-w-xs">
@@ -303,6 +336,11 @@ export function StudentProfileView({
               </div>
             </CardHeader>
             <CardContent className="space-y-2">
+              {reassignError && (
+                <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {reassignError}
+                </p>
+              )}
               {filteredLevels.length === 0 ? (
                 <EmptyState
                   icon={Layers}
@@ -310,7 +348,10 @@ export function StudentProfileView({
                   description="Try a different filter or search term."
                 />
               ) : (
-                filteredLevels.map((level) => (
+                filteredLevels.map((level) => {
+                  const queued = queuedReplayIds.has(level.levelId);
+                  const canReassign = level.passed || level.attempts > 0;
+                  return (
                   <div
                     key={level.levelId}
                     className="flex flex-col gap-3 rounded-xl border border-slate-200/80 bg-white p-4 transition-colors hover:border-slate-300 sm:flex-row sm:items-center sm:justify-between"
@@ -324,6 +365,11 @@ export function StudentProfileView({
                           {level.name}
                         </Link>
                         <StatusBadge status={level.status} passed={level.passed} />
+                        {queued && (
+                          <Badge variant="secondary" className="bg-amber-50 text-amber-800">
+                            Queued for practice
+                          </Badge>
+                        )}
                       </div>
                       <p className="text-xs text-muted-foreground">
                         {level.attempts === 0
@@ -341,6 +387,24 @@ export function StudentProfileView({
                           {level.finalCommand}
                         </span>
                       )}
+                      {canReassign && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="shrink-0"
+                          disabled={reassigningId === level.levelId}
+                          onClick={() => void reassignLevel(level.levelId)}
+                          title="Send this item back so the student plays it again"
+                        >
+                          <RefreshCw
+                            className={cn(
+                              "mr-1.5 h-3.5 w-3.5",
+                              reassigningId === level.levelId && "animate-spin"
+                            )}
+                          />
+                          {queued ? "Reassign again" : "Reassign"}
+                        </Button>
+                      )}
                       <Button variant="ghost" size="sm" asChild className="shrink-0">
                         <Link href={`/teacher/levels/${level.levelId}`}>
                           Open item
@@ -349,7 +413,8 @@ export function StudentProfileView({
                       </Button>
                     </div>
                   </div>
-                ))
+                  );
+                })
               )}
             </CardContent>
           </Card>

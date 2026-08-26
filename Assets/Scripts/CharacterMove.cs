@@ -5067,7 +5067,7 @@ public class CharacterMove : MonoBehaviour
 
         if (successPopup != null && successPopupText != null)
         {
-            successPopupText.text = message;
+            SetRichPopupText(successPopupText, message);
             if (!successPopup.activeSelf)
                 successPopup.SetActive(true);
             BringUiPopupToFront(successPopup);
@@ -5075,6 +5075,7 @@ public class CharacterMove : MonoBehaviour
         }
         else if (chatGPTResponseText != null)
         {
+            chatGPTResponseText.richText = true;
             chatGPTResponseText.text = message;
         }
 
@@ -6762,11 +6763,19 @@ public class CharacterMove : MonoBehaviour
             .Replace("{reason}", failureReason ?? "");
     }
 
-    /// <summary>Dashboard popup text: empty string when unset; no built-in fallback text.</summary>
+    /// <summary>Dashboard popup text: empty string when unset; converts TipTap HTML → TMP rich text.</summary>
     private string GetConfiguredPopupText(string template, LevelData levelData, string failureReason = null)
     {
         if (template == null) return "";
-        return ResolvePopupMessage(template, levelData, failureReason) ?? "";
+        string resolved = ResolvePopupMessage(template, levelData, failureReason) ?? "";
+        return HtmlToTmpRichText.Convert(resolved);
+    }
+
+    private static void SetRichPopupText(TextMeshProUGUI tmp, string message)
+    {
+        if (tmp == null) return;
+        tmp.richText = true;
+        tmp.text = message ?? "";
     }
 
     private void ApplyStudentResetButton(LevelData levelData)
@@ -6862,7 +6871,7 @@ public class CharacterMove : MonoBehaviour
             _skipNextPlatformReport = true;
             if (successPopup != null && successPopupText != null)
             {
-                successPopupText.text = GetConfiguredPopupText(levelData.maxAttemptsMessage, levelData, failureReason);
+                SetRichPopupText(successPopupText, GetConfiguredPopupText(levelData.maxAttemptsMessage, levelData, failureReason));
                 successPopup.SetActive(true);
                 BringUiPopupToFront(successPopup);
                 GameInteractionSounds.PlayFailPopup();
@@ -6883,7 +6892,7 @@ public class CharacterMove : MonoBehaviour
             GameInteractionSounds.PlayFailPopup();
             var popupText = wrongAnswerPopup.GetComponentInChildren<TextMeshProUGUI>();
             if (popupText != null)
-                popupText.text = GetConfiguredPopupText(levelData.attemptFailureMessage, levelData, failureReason);
+                SetRichPopupText(popupText, GetConfiguredPopupText(levelData.attemptFailureMessage, levelData, failureReason));
         }
         if (runButton != null) runButton.interactable = false;
         RefreshStudentResetButtonState();
@@ -8235,7 +8244,7 @@ public class CharacterMove : MonoBehaviour
         }
         else if (successPopup != null && successPopupText != null)
         {
-            successPopupText.text = GetConfiguredPopupText(completedLevel?.attemptSuccessMessage, completedLevel);
+            SetRichPopupText(successPopupText, GetConfiguredPopupText(completedLevel?.attemptSuccessMessage, completedLevel));
             successPopup.SetActive(true);
             BringUiPopupToFront(successPopup);
             GameInteractionSounds.PlaySuccessPopup();

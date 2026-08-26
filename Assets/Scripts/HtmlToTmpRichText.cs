@@ -6,7 +6,7 @@ using UnityEngine;
 
 /// <summary>
 /// Converts TipTap/HTML rich text from the platform editor into TextMeshPro tags.
-/// Plain strings (legacy levels) pass through unchanged.
+/// Plain strings and already-converted TMP markup pass through unchanged.
 /// </summary>
 public static class HtmlToTmpRichText
 {
@@ -18,15 +18,43 @@ public static class HtmlToTmpRichText
         @"</?[a-z][\s\S]*>",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    // TipTap / HTML tags we translate. Everything else that looks like TMP is preserved.
+    static readonly HashSet<string> HtmlTags = new HashSet<string>
+    {
+        "p", "div", "br", "strong", "b", "em", "i", "u", "s", "strike", "del", "mark", "span"
+    };
+
+    static readonly HashSet<string> TmpTags = new HashSet<string>
+    {
+        "b", "i", "u", "s", "color", "size", "mark", "font", "align", "sprite", "style", "nobr"
+    };
+
     public static bool LooksLikeHtml(string value)
     {
         return !string.IsNullOrWhiteSpace(value) && HasHtmlRe.IsMatch(value);
+    }
+
+    /// <summary>
+    /// True when the string already contains TMP markup (and not TipTap HTML wrappers).
+    /// </summary>
+    public static bool LooksLikeTmp(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return false;
+        // TipTap always wraps in <p> / <span style=...> — treat those as HTML to convert.
+        if (Regex.IsMatch(value, @"</?(?:p|div|span|strong|em)\b", RegexOptions.IgnoreCase))
+            return false;
+        return Regex.IsMatch(
+            value,
+            @"</?(?:color|size|mark|font|b|i|u|s)\b",
+            RegexOptions.IgnoreCase);
     }
 
     public static string Convert(string html)
     {
         if (string.IsNullOrEmpty(html)) return "";
         if (!LooksLikeHtml(html)) return html;
+        // Already TMP (e.g. converted upstream) — do not strip color/size tags.
+        if (LooksLikeTmp(html)) return html;
 
         var stack = new List<string>(); // "span" sentinel or mark tag name
         var sb = new StringBuilder(html.Length);
@@ -43,6 +71,7 @@ public static class HtmlToTmpRichText
             bool closing = m.Groups[2].Value == "/";
             string name = m.Groups[3].Value.ToLowerInvariant();
             string attrs = m.Groups[4].Value;
+            string rawTag = m.Value;
 
             if (name == "br")
             {
@@ -109,7 +138,30 @@ public static class HtmlToTmpRichText
                         if (!string.IsNullOrEmpty(family))
                             OpenMark(stack, sb, "font", family);
                     }
+                    if (style.TryGetValue("font-weight", out string weight))
+                    {
+                        string w = weight.ToLowerInvariant();
+                        if (w == "bold" || w == "700" || w == "800" || w == "900")
+                            OpenMark(stack, sb, "b");
+                    }
+                    if (style.TryGetValue("font-style", out string fs) &&
+                        fs.Trim().ToLowerInvariant() == "italic")
+                        OpenMark(stack, sb, "i");
+                    if (style.TryGetValue("text-decoration", out string td))
+                    {
+                        string tdl = td.ToLowerInvariant();
+                        if (tdl.Contains("underline")) OpenMark(stack, sb, "u");
+                        if (tdl.Contains("line-through")) OpenMark(stack, sb, "s");
+                    }
                 }
+                continue;
+            }
+
+            // Preserve TMP / unknown tags so a second Convert pass cannot strip them.
+            if (TmpTags.Contains(name) || !HtmlTags.Contains(name))
+            {
+                sb.Append(rawTag);
+                continue;
             }
         }
 

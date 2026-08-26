@@ -806,8 +806,9 @@ public class ActionBlockIntroManager : MonoBehaviour
 
         if (characterMove != null && characterMove.chatGPTResponseText != null)
         {
+            characterMove.chatGPTResponseText.richText = true;
             if (_config != null && !string.IsNullOrEmpty(_config.completeMessage))
-                characterMove.chatGPTResponseText.text = _config.completeMessage;
+                characterMove.chatGPTResponseText.text = HtmlToTmpRichText.Convert(_config.completeMessage);
             else
                 characterMove.chatGPTResponseText.text = "Introduction complete — starting Item 1…";
         }

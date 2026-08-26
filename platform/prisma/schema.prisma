@@ -90,6 +90,7 @@ model StudentProfile {
   classMemberships    ClassStudent[]
   levelAttempts       LevelAttempt[]
   assignedLevels      LevelStudentAssignment[]
+  replayRequests      LevelStudentReplayRequest[]
   sessions            StudentSession[]
 }
 
@@ -114,6 +115,7 @@ model TeacherProfile {
   createdAt   DateTime @default(now())
 
   studentLevelAssignments LevelStudentAssignment[] @relation("AssignedByTeacher")
+  studentReplayRequests   LevelStudentReplayRequest[] @relation("ReplayRequestedByTeacher")
   classMemberships        ClassTeacher[]
   ownedLevels             Level[]                    @relation("LevelOwner")
 }
@@ -177,6 +179,7 @@ model Level {
   attempts            LevelAttempt[]
   studentAssignments  LevelStudentAssignment[]
   classAssignments    LevelClassAssignment[]
+  replayRequests      LevelStudentReplayRequest[]
   constructMappings   LevelCTConstruct[]
 
   @@index([ownerTeacherId])
@@ -200,6 +203,22 @@ model LevelStudentAssignment {
   @@unique([levelId, studentId])
   @@index([studentId])
   @@index([studentId, isActive])
+}
+
+/// Teacher asked the student to practice an item again (even if already passed).
+/// Cleared when the student passes that item after requestedAt. Does not erase attempt history.
+model LevelStudentReplayRequest {
+  id                   String          @id @default(cuid())
+  levelId              String
+  level                Level           @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  studentId            String
+  student              StudentProfile  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  requestedByTeacherId String?
+  requestedByTeacher   TeacherProfile? @relation("ReplayRequestedByTeacher", fields: [requestedByTeacherId], references: [id], onDelete: SetNull)
+  requestedAt          DateTime        @default(now())
+
+  @@unique([levelId, studentId])
+  @@index([studentId])
 }
 
 /// Levels assigned to a whole class — all enrolled students receive these levels.

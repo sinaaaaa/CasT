@@ -10,6 +10,7 @@ import { resolveAttemptDurationSeconds } from "@/lib/game/resolve-attempt-durati
 import { analyzeAttemptConstructs } from "@/lib/ct/scoring";
 import { parsePlaySlot } from "@/lib/attempt-mistakes";
 import { AttemptStatus, Prisma } from "@prisma/client";
+import { clearStudentLevelReplay } from "@/lib/level-student-replay";
 
 export async function POST(request: NextRequest) {
   if (!verifyGameApiKey(request)) return gameApiUnauthorized();
@@ -227,6 +228,10 @@ export async function POST(request: NextRequest) {
     await analyzeAttemptConstructs(attemptId);
   } catch (e) {
     console.warn("[level-end] CT construct analysis failed:", e);
+  }
+
+  if (resolvedPassed) {
+    await clearStudentLevelReplay(attempt.studentId, attempt.levelId);
   }
 
   return Response.json({ success: true, attempt: updated });

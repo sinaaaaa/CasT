@@ -5,6 +5,7 @@ import { assertStudentAccess, resolveTeacherScope } from "@/lib/class-access";
 import { getStudentProgress } from "@/lib/analytics";
 import { formatStudentAttemptItemLabelFromAttempt } from "@/lib/student-item-label";
 import { getPlayableLevelsForStudent } from "@/lib/level-assignments";
+import { getStudentReplayLevelIds } from "@/lib/level-student-replay";
 import { parseAttemptRunMeta, formatAttemptRunLabel, filterSupersededIncompleteAttempts } from "@/lib/attempt-mistakes";
 import { prisma } from "@/lib/prisma";
 import { TeacherShell } from "@/components/teacher/teacher-shell";
@@ -37,12 +38,15 @@ export default async function StudentProfilePage({
     levelType: l.levelType,
   }));
 
-  const recentAttempts = await prisma.levelAttempt.findMany({
-    where: { studentId: student.id },
-    include: { level: true },
-    orderBy: { startedAt: "desc" },
-    take: 50,
-  });
+  const [recentAttempts, replayLevelIds] = await Promise.all([
+    prisma.levelAttempt.findMany({
+      where: { studentId: student.id },
+      include: { level: true },
+      orderBy: { startedAt: "desc" },
+      take: 50,
+    }),
+    getStudentReplayLevelIds(student.id),
+  ]);
 
   return (
     <TeacherShell title={student.displayName} userName={session?.user.name}>
@@ -65,6 +69,7 @@ export default async function StudentProfilePage({
           totalTimeSeconds: l.totalTimeSeconds,
           finalCommand: l.finalCommand,
           lastAttemptAt: l.lastAttemptAt?.toISOString() ?? null,
+          queuedForReplay: replayLevelIds.has(l.levelId),
         }))}
         attempts={filterSupersededIncompleteAttempts(recentAttempts).map((a) => {
           const runMeta = parseAttemptRunMeta(a.mistakes);
