@@ -70,6 +70,15 @@ export function isPathBuildingLevel(
   return levelType === LevelType.DRAG_ACTIONS;
 }
 
+/** Geometry Path — edge-trace coding+geometry tasks (same attempt/stealth pipeline). */
+export function isGeometryPathLevel(
+  config: LevelGameplayConfig,
+  levelType?: LevelType
+): boolean {
+  if (levelType === LevelType.GEOMETRY_PATH) return true;
+  return !!(config.geometryPath?.enabled && (config.geometryPath.segments?.length ?? 0) > 0);
+}
+
 /**
  * @deprecated Use isEditStarterProgramLevel / isDebuggingLevel. Kept for imports;
  * never overlaps path-building (DRAG_ACTIONS).

@@ -92,6 +92,12 @@ public class MultiTargetCamera : MonoBehaviour
     [Tooltip("Shifts the framing toward the character. 0 = center on whole bounds. 0.25 = slight emphasis on the character WHILE keeping the entire grid + every object visible.")]
     [Range(0f, 1f)] public float characterFocus = 0f;
 
+    [Header("UI reserved regions (Command Bags)")]
+    [Tooltip("When Command Bags are visible, nudge framing so the blue panel covers less of the grid. Keep OFF for classic centered grid.")]
+    public bool respectCommandBagLeftInset = false;
+    [Tooltip("Extra screen-fraction gap beyond the bag panel right edge (only when inset is ON).")]
+    [Range(0f, 0.05f)] public float commandBagInsetPadding = 0f;
+
     [Tooltip("Lerp time for position / zoom. 0.10 snappy, 0.25 smooth.")]
     [Min(0.0001f)] public float smoothTime = 0.18f;
 
@@ -330,17 +336,21 @@ public class MultiTargetCamera : MonoBehaviour
         bool ortho = _cam != null && _cam.orthographic;
 
         float aspect = (_cam != null && _cam.aspect > 0f) ? _cam.aspect : 1.6f;
+        float leftInset = GetCommandBagLeftInset();
+        // Fit the board into the usable viewport to the RIGHT of the blue panel.
+        float usableAspect = aspect * Mathf.Max(0.4f, 1f - leftInset);
+
         float distance;
         if (ortho)
         {
             distance = Mathf.Max(depth + 10f, minOrthoSize);
-            targetOrthoSize = Mathf.Max(halfH, halfW / aspect, 1f);
+            targetOrthoSize = Mathf.Max(halfH, halfW / usableAspect, 1f);
         }
         else
         {
             float vFov = perspectiveFOV * Mathf.Deg2Rad;
             float distV = halfH / Mathf.Tan(vFov * 0.5f);
-            float distH = halfW / (Mathf.Tan(vFov * 0.5f) * aspect);
+            float distH = halfW / (Mathf.Tan(vFov * 0.5f) * usableAspect);
             distance = Mathf.Max(distV, distH, 5f) * GetPerspectiveDistanceScale();
             targetFOV = perspectiveFOV;
         }
@@ -349,10 +359,39 @@ public class MultiTargetCamera : MonoBehaviour
         distance += extraViewDistance;
         targetPos = focus - forward * distance;
         targetPos += cameraPositionOffset;
+
+        // Shift camera so the framed board sits in the center of the remaining (non-bag) region.
+        // Use a mild factor — full 0.5*inset left a large empty green gap between bags and grid.
+        if (leftInset > 0.001f)
+        {
+            Vector3 camRight = targetRot * Vector3.right;
+            float worldWidth = 2f * (ortho ? targetOrthoSize * aspect : halfW);
+            targetPos -= camRight * (leftInset * 0.35f * worldWidth);
+        }
+
         if (useManualCameraHeight)
             targetPos.y = manualCameraHeight;
         if (lockWorldZ)
             targetPos.z = lockedWorldZ;
+    }
+
+    /// <summary>
+    /// Screen fraction occupied by the Command Bag column (+ gap). 0 when bags are hidden.
+    /// Ensures bluePanel.rightEdge + gap stays left of the framed grid.
+    /// </summary>
+    float GetCommandBagLeftInset()
+    {
+        if (!respectCommandBagLeftInset) return 0f;
+        if (characterMove == null) return 0f;
+
+        var palette = characterMove.GetComponentInChildren<CommandBagPaletteController>(true);
+        if (palette == null)
+            palette = Object.FindObjectOfType<CommandBagPaletteController>();
+        if (palette == null || !palette.IsPanelVisible) return 0f;
+
+        float reserved = palette.ReservedLeftScreenFraction + Mathf.Clamp(commandBagInsetPadding, 0f, 0.05f);
+        // Cap so a wide bag panel cannot shove the board off to the far right.
+        return Mathf.Clamp(reserved, 0f, 0.22f);
     }
 
     private float ApplyOrthographicTuning(float computedOrtho)

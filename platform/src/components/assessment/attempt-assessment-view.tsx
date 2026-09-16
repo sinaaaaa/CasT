@@ -38,6 +38,7 @@ import { PredictionAnalysisPanel } from "@/components/assessment/prediction-anal
 import { ChoiceActionAnalysisPanel } from "@/components/assessment/choice-action-analysis-panel";
 import { DebuggingAnalysisPanel } from "@/components/assessment/debugging-analysis-panel";
 import { PathBuildingAnalysisPanel } from "@/components/assessment/path-building-analysis-panel";
+import { GeometryPathAnalysisPanel } from "@/components/assessment/geometry-path-analysis-panel";
 import { AttemptVerdictBanner } from "@/components/assessment/attempt-verdict-banner";
 import { buildAttemptVerdict } from "@/lib/assessment/attempt-verdict";
 import {
@@ -78,6 +79,9 @@ export type AttemptDetailPayload = {
   isEditStarterLevel?: boolean;
   /** Drag action blocks — path-building from scratch. */
   isPathBuildingLevel?: boolean;
+  /** Geometry Path — edge-trace coding + geometry. */
+  isGeometryPathLevel?: boolean;
+  geometryPathAnalysis?: import("@/lib/assessment/geometryPathAnalysis").GeometryPathAnalysisResult | null;
   isDebuggingLevel?: boolean;
   starterProgram?: CommandToken[];
   studentProgram?: CommandToken[];
@@ -160,6 +164,10 @@ export function AttemptAssessmentView({ attempt }: { attempt: AttemptDetailPaylo
     Boolean(attempt.isPathBuildingLevel) &&
     Boolean(pathResult?.available) &&
     !isNumberLineAssessment;
+  const isGeometryPathAssessment = Boolean(
+    attempt.isGeometryPathLevel && attempt.geometryPathAnalysis?.available
+  );
+  const geometryResult = attempt.geometryPathAnalysis;
   const isDebuggingAssessment =
     Boolean(attempt.isDebuggingLevel) && Boolean(debugResult?.available);
   const isChoiceAssessment = Boolean(attempt.liveRoute.choiceActionResult?.available);
@@ -201,6 +209,7 @@ export function AttemptAssessmentView({ attempt }: { attempt: AttemptDetailPaylo
     choice: attempt.liveRoute.choiceActionResult,
     debugging: isDebuggingAssessment ? debugResult : null,
     pathBuilding: isPathBuildingAssessment ? pathResult : null,
+    geometryPath: isGeometryPathAssessment ? geometryResult : null,
     numberLine: isNumberLineAssessment ? numberLineResult : null,
     canvasPattern: isCanvasAssessment && attempt.canvasPatternMatch
       ? {
@@ -324,6 +333,15 @@ export function AttemptAssessmentView({ attempt }: { attempt: AttemptDetailPaylo
         />
       ) : isPathBuildingAssessment && pathResult ? (
         <PathBuildingAnalysisPanel result={pathResult} />
+      ) : isGeometryPathAssessment && geometryResult ? (
+        <GeometryPathAnalysisPanel
+          result={geometryResult}
+          studentProgram={
+            attempt.finalCommand
+              ? attempt.finalCommand.split(/[;,]/).map((s) => s.trim()).filter(Boolean)
+              : attempt.studentProgram
+          }
+        />
       ) : isDebuggingAssessment && debugResult ? (
         <DebuggingAnalysisPanel result={debugResult} />
       ) : (

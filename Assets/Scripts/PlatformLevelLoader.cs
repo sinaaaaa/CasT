@@ -109,6 +109,10 @@ public class PlatformLevelLoader : MonoBehaviour
                         dto.layoutMode = layoutFromJson;
                     if (configToken["numberLine"] != null && dto.numberLine == null)
                         dto.numberLine = configToken["numberLine"].ToObject<NumberLineConfigDto>();
+                    // Always re-read geometryPath from JSON so teacher color fields are not dropped
+                    // by a partial LevelConfigDto deserialize.
+                    if (configToken["geometryPath"] != null)
+                        dto.geometryPath = configToken["geometryPath"].ToObject<GeometryPathConfigDto>();
 
                     LevelData ld = LevelConfigMapper.ToLevelData(dto, levelType);
                     if (ld == null) continue;
@@ -152,6 +156,12 @@ public class PlatformLevelLoader : MonoBehaviour
                               $"ticks={ld.numberLine?.tickCount ?? 0} orderIndex={ld.orderIndex} " +
                               $"maxAttempts={ld.maxAttempts} commandHistory={ld.showCommandHistory} " +
                               $"animateRobot={ld.runRobotOnSubmit} program=[{program}] blanks={ld.blanks?.Count ?? 0}");
+                    if (ld.geometryPath != null)
+                    {
+                        Debug.Log(
+                            $"[PlatformLevelLoader] {levelKey} geometryPath colors target={ld.geometryPath.targetColor} " +
+                            $"trail={ld.geometryPath.trailColor} segments={ld.geometryPath.segments?.Count ?? 0}");
+                    }
                     result.Add(ld);
                 }
 

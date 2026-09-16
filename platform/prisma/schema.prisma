@@ -49,6 +49,8 @@ enum LevelType {
   CHOOSE_BUTTONS
   /// Pre-filled program; students drag blocks to add, remove, or reorder before RUN.
   DRAG_EDIT_PROGRAM
+  /// Trace a geometric edge-path on the grid while programming the robot.
+  GEOMETRY_PATH
 }
 
 model User {

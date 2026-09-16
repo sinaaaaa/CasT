@@ -49,6 +49,7 @@ public static class UiDragState
             if (go == null) continue;
             if (go.GetComponentInParent<DraggableActionBlock>() != null) return true;
             if (go.GetComponentInParent<DraggableQueuedBlock>() != null) return true;
+            if (go.GetComponentInParent<DraggableCommandBagBlock>() != null) return true;
             if (go.GetComponentInParent<ActionQueueDropZone>() != null) return true;
         }
 

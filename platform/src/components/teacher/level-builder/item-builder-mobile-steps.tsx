@@ -25,8 +25,14 @@ export function ItemBuilderMobileSteps({ currentStep, completedSteps, onStepClic
             <button
               key={step.id}
               type="button"
-              disabled={!reachable}
-              onClick={() => reachable && onStepClick(step.id)}
+              // Avoid the HTML `disabled` attribute — React SSR omits `disabled={false}` as
+              // null while the client may serialize `true`, which causes hydration mismatches.
+              aria-disabled={!reachable}
+              tabIndex={reachable ? 0 : -1}
+              onClick={() => {
+                if (!reachable) return;
+                onStepClick(step.id);
+              }}
               className={cn(
                 "shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition",
                 active && "border-[#4F46E5] bg-[#4F46E5] text-white",

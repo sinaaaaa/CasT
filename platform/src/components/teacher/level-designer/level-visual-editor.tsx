@@ -12,14 +12,19 @@ import { isNumberLineLayout } from "@/lib/level-config";
 import { RobotSettingsEditor } from "./robot-settings-editor";
 import { CornerHintEditor } from "./corner-hint-editor";
 import { GuidedProgramEditor } from "./guided-program-editor";
+import { CommandBagsEditor } from "./command-bags-editor";
 import { FlagSettingsEditor } from "./flag-settings-editor";
 import { CopyLevelLayout } from "./copy-level-layout";
+import { GeometryPathEditor } from "./geometry-path-editor";
+import { GeometryPathToolsEditor } from "./geometry-path-tools-editor";
+import { Briefcase } from "lucide-react";
 
 const PLAYABLE_TYPES = [
   LevelType.DRAG_ACTIONS,
   LevelType.DRAG_EDIT_PROGRAM,
   LevelType.FLAG_PLACEMENT,
   LevelType.CHOOSE_BUTTONS,
+  LevelType.GEOMETRY_PATH,
 ] as const;
 
 type Props = {
@@ -67,6 +72,18 @@ export function LevelVisualEditor({ levelType, config, onChange, levelName, curr
             <span className="hidden sm:inline">Program</span>
           </TabsTrigger>
         )}
+        {levelType === LevelType.DRAG_ACTIONS && (
+          <TabsTrigger value="bags" className="gap-2 data-[state=active]:bg-white">
+            <Briefcase className="h-4 w-4" />
+            <span className="hidden sm:inline">Bags</span>
+          </TabsTrigger>
+        )}
+        {levelType === LevelType.GEOMETRY_PATH && (
+          <TabsTrigger value="bags" className="gap-2 data-[state=active]:bg-white">
+            <Briefcase className="h-4 w-4" />
+            <span className="hidden sm:inline">Bags</span>
+          </TabsTrigger>
+        )}
         {levelType === LevelType.FLAG_PLACEMENT && (
           <TabsTrigger value="flag" className="gap-2 data-[state=active]:bg-white">
             <Flag className="h-4 w-4" />
@@ -87,8 +104,22 @@ export function LevelVisualEditor({ levelType, config, onChange, levelName, curr
             onApply={handleChange}
           />
         )}
-        <LayoutModePicker config={config} onChange={handleChange} />
-        {isNumberLineLayout(config) ? (
+        {levelType !== LevelType.GEOMETRY_PATH && (
+          <LayoutModePicker config={config} onChange={handleChange} />
+        )}
+        {levelType === LevelType.GEOMETRY_PATH ? (
+          <>
+            <GeometryPathEditor config={config} onChange={handleChange} />
+            <details className="rounded-2xl border border-slate-200 bg-white">
+              <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-800">
+                Advanced board objects
+              </summary>
+              <div className="border-t border-slate-100 p-4">
+                <GridDesigner config={config} onChange={handleChange} />
+              </div>
+            </details>
+          </>
+        ) : isNumberLineLayout(config) ? (
           <NumberLineDesigner config={config} onChange={handleChange} />
         ) : (
           <GridDesigner config={config} onChange={handleChange} />
@@ -118,6 +149,19 @@ export function LevelVisualEditor({ levelType, config, onChange, levelName, curr
       {levelType === LevelType.DRAG_EDIT_PROGRAM && (
         <TabsContent value="program" className="mt-0">
           <GuidedProgramEditor config={config} onChange={handleChange} showBlanks={false} />
+        </TabsContent>
+      )}
+      {levelType === LevelType.DRAG_ACTIONS && (
+        <TabsContent value="bags" className="mt-0">
+          <CommandBagsEditor config={config} onChange={handleChange} />
+        </TabsContent>
+      )}
+      {levelType === LevelType.GEOMETRY_PATH && (
+        <TabsContent value="bags" className="mt-0 space-y-4">
+          <GeometryPathToolsEditor config={config} onChange={handleChange} />
+          {(config.geometryPath?.tools?.actionChunks || config.geometryPath?.tools?.commandBags) && (
+            <CommandBagsEditor config={config} onChange={handleChange} />
+          )}
         </TabsContent>
       )}
     </Tabs>

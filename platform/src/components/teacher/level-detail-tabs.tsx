@@ -42,6 +42,15 @@ export type LevelDetailPayload = {
   };
   chartData: { name: string; value: number }[];
   attempts: LevelAttemptRow[];
+  /** Present only for Geometry Path items. */
+  geometryMetrics?: {
+    avgCompletionPct: number | null;
+    avgAccuracyPct: number | null;
+    attemptsWithTelemetry: number;
+    pctUsingRepeat: number | null;
+    pctUsingChunks: number | null;
+    pctUsingBags: number | null;
+  } | null;
 };
 
 const TAB_KEYS = ["overview", "attempts", "assessment", "design"] as const;
@@ -156,6 +165,61 @@ export function LevelDetailTabs({ level }: { level: LevelDetailPayload }) {
               icon={Users}
             />
           </div>
+
+          {level.geometryMetrics && (
+            <Card className="shadow-sm border-violet-100">
+              <CardHeader>
+                <CardTitle className="text-base">Geometry Path metrics</CardTitle>
+                <CardDescription>
+                  From attempts with edge telemetry ({level.geometryMetrics.attemptsWithTelemetry} runs)
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  <MetricTile
+                    label="Avg path completion"
+                    value={
+                      level.geometryMetrics.avgCompletionPct != null
+                        ? `${level.geometryMetrics.avgCompletionPct}%`
+                        : "—"
+                    }
+                  />
+                  <MetricTile
+                    label="Avg path accuracy"
+                    value={
+                      level.geometryMetrics.avgAccuracyPct != null
+                        ? `${level.geometryMetrics.avgAccuracyPct}%`
+                        : "—"
+                    }
+                  />
+                  <MetricTile
+                    label="Used Repeat"
+                    value={
+                      level.geometryMetrics.pctUsingRepeat != null
+                        ? `${level.geometryMetrics.pctUsingRepeat}%`
+                        : "—"
+                    }
+                  />
+                  <MetricTile
+                    label="Used Chunks"
+                    value={
+                      level.geometryMetrics.pctUsingChunks != null
+                        ? `${level.geometryMetrics.pctUsingChunks}%`
+                        : "—"
+                    }
+                  />
+                  <MetricTile
+                    label="Used Bags"
+                    value={
+                      level.geometryMetrics.pctUsingBags != null
+                        ? `${level.geometryMetrics.pctUsingBags}%`
+                        : "—"
+                    }
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           <div className="grid gap-6 lg:grid-cols-2">
             <Card className="shadow-sm">

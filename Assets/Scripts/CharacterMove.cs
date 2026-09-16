@@ -175,7 +175,7 @@ public class LevelData
     public string levelKey;
     /// <summary>Dashboard order index (0 = intro, 1 = level 1, 2 = level 2, â€¦).</summary>
     public int orderIndex;
-    /// <summary>INTRO | DRAG_ACTIONS | FLAG_PLACEMENT | CHOOSE_BUTTONS | DRAG_EDIT_PROGRAM â€” from teacher dashboard.</summary>
+    /// <summary>INTRO | DRAG_ACTIONS | FLAG_PLACEMENT | CHOOSE_BUTTONS | DRAG_EDIT_PROGRAM | GEOMETRY_PATH — from teacher dashboard.</summary>
     public string levelType;
     public string levelName;
     /// <summary>GRID (default), NUMBER_LINE, or CANVAS (no playfield — pattern / strip only).</summary>
@@ -207,6 +207,11 @@ public class LevelData
     public List<string> blankEnabledArrows = null; // Which arrows to enable at blank
     /// <summary>Action palette visible to students (forward, backward, turn left, turn right). Null/empty = layout defaults.</summary>
     public List<string> enabledActionButtons = null;
+    /// <summary>BAG | CHUNK | MIXED. Null/empty = classic palette only (no bags).</summary>
+    public string commandBagMode;
+    public List<CommandBagData> commandBags = null;
+    /// <summary>GEOMETRY_PATH: edge-based target route the robot should trace.</summary>
+    public GeometryPathData geometryPath;
     public List<BlankData> blanks = null; // Add the missing blanks property
     public bool allowGridObjectDrag = false; // If true, grid objects can be dragged
 
@@ -275,6 +280,26 @@ public class LevelData
     [Header("Action block introduction (optional)")]
     [Tooltip("Teach palette blocks one at a time before regular level play. Configure steps like level data.")]
     public ActionBlockIntroConfig actionBlockIntro;
+}
+
+[System.Serializable]
+public class CommandChunkData
+{
+    public string id;
+    public string name;
+    /// <summary>Optional platform hex color (e.g. #9E66EB). Drives puzzle identity when set.</summary>
+    public string color;
+    public List<string> tokens = new List<string>();
+}
+
+[System.Serializable]
+public class CommandBagData
+{
+    public string id;
+    public string name;
+    public string color;
+    public string icon;
+    public List<CommandChunkData> chunks = new List<CommandChunkData>();
 }
 
 /// <summary>Canvas strip-only lesson content (white board + strip mode).</summary>
@@ -404,6 +429,77 @@ public class CharacterMove : MonoBehaviour
     public Button runButton;
     [Tooltip("Optional palette button for Repeat (auto-wired when present).")]
     public Button repeatButton;
+
+    [Header("Command Bags (optional)")]
+    [Tooltip("Optional. Assign your blue sidebar Canvas (e.g. Canvas-CommandBag). Leave empty to auto-create one.")]
+    public Canvas commandBagCanvas;
+    [Tooltip("Blue left panel RectTransform under that canvas (background + bag list). Leave empty to auto-create CommandBagPanel.")]
+    public RectTransform commandBagPanel;
+    [Tooltip("ON = resize the blue panel with the sliders below (live in Play Mode). OFF = keep the panel's RectTransform as you set it in the Scene.")]
+    public bool autoLayoutCommandBagPanel = true;
+
+    [Header("Command Bag panel size (when Auto Layout is ON — tweak live in Play Mode)")]
+    [Tooltip("Left edge of the blue panel (0 = screen left).")]
+    [Range(0f, 0.2f)] public float commandBagPanelLeft = 0.01f;
+    [Tooltip("Right edge — raise this to make the Command Bag panel wider.")]
+    [Range(0.15f, 0.4f)] public float commandBagPanelRight = 0.265f;
+    [Tooltip("Lowest the panel bottom can go (above yellow strip). With few bags the panel shrinks upward; with many bags it fills down to this edge and scrolls. Also auto-lifts above the measured yellow strip.")]
+    [Range(0.05f, 0.4f)] public float commandBagPanelBottom = 0.16f;
+    [Tooltip("Top edge.")]
+    [Range(0.5f, 1f)] public float commandBagPanelTop = 0.96f;
+
+    [Tooltip("Default backpack / bag icon on CommandBagCard (BagIcon Image). Per-bag icon URL can still override via bag.icon.")]
+    public Sprite commandBagIconSprite;
+    [Tooltip("Built-in chunk puzzle silhouette (white). Auto-tinted from each card/chip color. Optional override — defaults to Resources/UI/chunk-puzzle-icon.")]
+    public Sprite commandChunkIconSprite;
+    [Tooltip("Drag-handle grip art on the right of each CommandBagCard. Assign your uploaded sprite here.")]
+    public Sprite commandBagDragHandleSprite;
+    [Tooltip("Icon on a yellow-strip chunk chip meaning “tap to expand / peek”. Optional — falls back to ▲.")]
+    public Sprite chunkExpandIconSprite;
+    [Tooltip("Icon on a yellow-strip chunk chip while peek panel is open (“collapse”). Optional — falls back to ▼.")]
+    public Sprite chunkCollapseIconSprite;
+
+    [Header("Chunk icon size (chunks only — icon only, does not grow rectangles)")]
+    [Tooltip("CHUNK ONLY — icon size in BLUE bar. Does not change card rectangle size.")]
+    [Range(16f, 280f)] public float chunkIconSizeBluePanel = 36f;
+    [Tooltip("CHUNK ONLY — icon size in YELLOW strip. Does not change chip rectangle size.")]
+    [Range(16f, 280f)] public float chunkIconSizeYellowStrip = 40f;
+    [Tooltip("CHUNK ONLY — icon size in peek panel. Does not change peek rectangle size.")]
+    [Range(16f, 280f)] public float chunkIconSizePeekPanel = 32f;
+
+    [Header("Chunk rectangle size — yellow strip (independent of icon)")]
+    [Tooltip("CHUNK ONLY — yellow chip width. Raise this if you want room for a bigger icon.")]
+    [Range(48f, 320f)] public float chunkRectWidthYellowStrip = 72f;
+    [Tooltip("CHUNK ONLY — yellow chip height. Raise this if you want room for a bigger icon.")]
+    [Range(48f, 280f)] public float chunkRectHeightYellowStrip = 64f;
+
+    [Header("Chunk rectangle size — blue bar (independent of icon)")]
+    [Tooltip("CHUNK ONLY — Action Chunk card height in the blue sidebar.")]
+    [Range(72f, 320f)] public float chunkRectHeightBluePanel = 120f;
+    [Tooltip("CHUNK ONLY — Action Chunk card minimum width in the blue sidebar.")]
+    [Range(120f, 520f)] public float chunkRectMinWidthBluePanel = 260f;
+
+    [Header("Chunk peek panel size (independent of icon)")]
+    [Tooltip("CHUNK ONLY — peek panel width.")]
+    [Range(160f, 900f)] public float chunkPeekPanelMinWidth = 320f;
+    [Tooltip("CHUNK ONLY — peek panel height.")]
+    [Range(56f, 280f)] public float chunkPeekPanelMinHeight = 96f;
+
+    [Header("Command Bag Repeat size (tweak live in Play Mode)")]
+    [Tooltip("Scale of Repeat START vs motion arrows inside Command Bags (library + yellow strip). 1 = same as arrows; try 1.5–2.")]
+    [Range(0.4f, 3f)] public float bagRepeatStartScale = 1.65f;
+    [Tooltip("Scale of Repeat END vs motion arrows inside Command Bags. 1 = same as arrows; try 1.5–2.")]
+    [Range(0.4f, 3f)] public float bagRepeatEndScale = 1.65f;
+
+    [Header("Command Bag Repeat counter (overlay on End — tweak in Play Mode)")]
+    [Tooltip("Size of the count badge overlaid on Repeat End inside Command Bags (same idea as canvas pattern counter).")]
+    [Range(0.2f, 1.5f)] public float bagRepeatCounterScale = 0.45f;
+    [Tooltip("Vertical anchor on the End icon (0 = bottom, 1 = top). ~0.22 sits on the lower tray like canvas.")]
+    [Range(0.05f, 0.9f)] public float bagRepeatCounterAnchorY = 0.22f;
+    [Tooltip("Shift the count badge on X (pixels). Positive = right.")]
+    [Range(-80f, 80f)] public float bagRepeatCounterXOffset = 0f;
+    [Tooltip("Shift the count badge on Y (pixels). Positive = up.")]
+    [Range(-80f, 80f)] public float bagRepeatCounterYOffset = 0f;
 
     [Header("Repeat block art (assign your icons here)")]
     [Tooltip("Blue-strip Repeat palette icon (full tile art). Falls back to procedural purple tile if empty.")]
@@ -549,8 +645,8 @@ public class CharacterMove : MonoBehaviour
     public bool dragOutQueuedToDelete = true;
     [Tooltip("If true, the action block currently being executed by the robot is tinted with executingBlockHighlightColor while it runs. Helps kids see exactly which block is firing.")]
     public bool highlightExecutingBlock = true;
-    [Tooltip("Tint applied to the currently-executing block's Image while its action is running.")]
-    public Color executingBlockHighlightColor = new Color(1f, 0.92f, 0.4f, 1f);
+    [Tooltip("Tint applied to the currently-executing block. For chunks, a brighter version of the chunk’s own color is preferred.")]
+    public Color executingBlockHighlightColor = new Color(1f, 0.95f, 0.55f, 1f);
     [Tooltip("If true, a block that lands in the queue (insert OR reorder drop) plays a tiny scale-pop animation to acknowledge the drop.")]
     public bool enableDropBounce = true;
     [Tooltip("Peak extra scale during the drop bounce. 0.15 = 115% at peak.")]
@@ -1537,30 +1633,91 @@ public class CharacterMove : MonoBehaviour
         return actionQueue.Select(a => a == null ? "blank" : GetActionLogString(a)).ToArray();
     }
 
-    /// <summary>Nested program tokens from the yellow strip (includes repeat:N / repeat-end).</summary>
+    /// <summary>
+    /// Resolve every visible yellow-strip item in sibling order. Simple arrows and
+    /// Command Bags use the same <see cref="QueuedActionRef.GetExecutableTokens"/> contract.
+    /// Multiple bags concatenate: bag1 tokens + bag2 tokens + … (left → right).
+    /// </summary>
     public List<string> CollectProgramTokensFromUI()
     {
         var tokens = new List<string>();
-        if (actionQueueTransform == null) return tokens;
+        LevelData level = GetCurrentLevelData();
+        var items = CollectProgramItemsInStripOrder();
+        for (int i = 0; i < items.Count; i++)
+        {
+            var item = items[i];
+            List<string> itemTokens = item.GetExecutableTokens(level);
+            if (itemTokens != null && itemTokens.Count > 0)
+                tokens.AddRange(itemTokens);
+            else if (item.action != null)
+                tokens.Add(GetActionLogString(item.action));
+        }
+        return tokens;
+    }
+
+    /// <summary>
+    /// Yellow-strip program cards in left→right sibling order (skips placeholders / sleeve art).
+    /// Also reparents any stray ProgramBagInstance under the drop zone into the queue.
+    /// </summary>
+    private List<QueuedActionRef> CollectProgramItemsInStripOrder()
+    {
+        var items = new List<QueuedActionRef>();
+        if (actionQueueTransform == null) return items;
+
+        // Rescue bags that landed under the strip/scroll but outside the content transform.
+        if (dropZonePanel != null)
+        {
+            var strays = dropZonePanel.GetComponentsInChildren<QueuedActionRef>(true);
+            for (int i = 0; i < strays.Length; i++)
+            {
+                var r = strays[i];
+                if (r == null || !r.IsCommandMacro) continue;
+                if (r.transform.parent == actionQueueTransform) continue;
+                if (r.transform.IsChildOf(actionQueueTransform)) continue;
+                r.transform.SetParent(actionQueueTransform, false);
+                Debug.LogWarning($"[CharacterMove] Reparented stray program item '{r.name}' into action queue.");
+            }
+        }
+
         for (int i = 0; i < actionQueueTransform.childCount; i++)
         {
             var child = actionQueueTransform.GetChild(i);
             if (child.GetComponent<QueueInsertionPlaceholder>() != null) continue;
             if (child.name != null && child.name.StartsWith("_RepeatBodyBg")) continue;
-            var r = child.GetComponent<QueuedActionRef>();
-            if (r == null) continue;
-            if (r.isRepeatStart)
-                tokens.Add(ProgramSequenceUtil.FormatRepeatStart(r.repeatCount));
-            else if (r.isRepeatEnd)
-                tokens.Add("repeat-end");
-            else if (r.isCountAnswer)
-                tokens.Add(ProgramSequenceUtil.FormatCountToken(r.countValue));
-            else if (!string.IsNullOrEmpty(r.actionLabel))
-                tokens.Add(r.actionLabel);
-            else if (r.action != null)
-                tokens.Add(GetActionLogString(r.action));
+
+            var item = child.GetComponent<QueuedActionRef>();
+            if (item != null)
+                items.Add(item);
         }
-        return tokens;
+        return items;
+    }
+
+    private bool QueueAlreadyHasCommandMacro()
+    {
+        var items = CollectProgramItemsInStripOrder();
+        for (int i = 0; i < items.Count; i++)
+        {
+            if (items[i] != null && items[i].IsCommandMacro) return true;
+        }
+        return false;
+    }
+
+    public bool ProgramStripHasRepeat() => QueueAlreadyHasRepeat();
+
+    public bool ProgramStripHasCommandBag()
+    {
+        var items = CollectProgramItemsInStripOrder();
+        for (int i = 0; i < items.Count; i++)
+            if (items[i] != null && items[i].isCommandBag) return true;
+        return false;
+    }
+
+    public bool ProgramStripHasActionChunk()
+    {
+        var items = CollectProgramItemsInStripOrder();
+        for (int i = 0; i < items.Count; i++)
+            if (items[i] != null && items[i].isCommandChunk) return true;
+        return false;
     }
 
     private void RecordTelemetryBeforeRun()
@@ -1627,13 +1784,31 @@ public class CharacterMove : MonoBehaviour
 
     private void ApplyActionButtonVisibility(LevelData levelData)
     {
+        bool geometryAllowsBlueBar = true;
+        if (IsGeometryPathLevel(levelData) && levelData.geometryPath?.tools != null)
+        {
+            var tools = levelData.geometryPath.tools;
+            geometryAllowsBlueBar = tools.actionChunks || tools.commandBags;
+        }
+
+        bool hasBags =
+            geometryAllowsBlueBar &&
+            levelData?.commandBags != null &&
+            levelData.commandBags.Count > 0;
+        string bagMode = hasBags
+            ? (levelData.commandBagMode ?? "BAG").Trim().ToUpperInvariant()
+            : "";
+
+        // BAG / CHUNK: hide atomic arrows (students use bags/chunks). MIXED keeps arrows.
+        bool hideAtomic = hasBags && (bagMode == "BAG" || bagMode == "CHUNK");
+
         var allowed = new HashSet<string>(
             ResolveEnabledActionButtons(levelData).Select(s => s.Trim().ToLowerInvariant()));
 
         void SetButton(Button btn, string key)
         {
             if (btn == null) return;
-            bool visible = allowed.Contains(key);
+            bool visible = !hideAtomic && allowed.Contains(key);
             btn.gameObject.SetActive(visible);
             if (visible) btn.interactable = true;
         }
@@ -1643,6 +1818,208 @@ public class CharacterMove : MonoBehaviour
         SetButton(rotateLeftButton, "turn left");
         SetButton(rotateRightButton, "turn right");
         SetButton(repeatButton, "repeat");
+
+        RebuildCommandBagPalette(levelData);
+    }
+
+    private CommandBagPaletteController _commandBagPalette;
+
+    private void RebuildCommandBagPalette(LevelData levelData)
+    {
+        // Geometry Path: blue bar only when teacher enabled Chunks and/or Bags.
+        // Arrows + Repeat alone must not show leftover bag/chunk UI.
+        bool geometryToolsHideBlueBar = false;
+        if (IsGeometryPathLevel(levelData) && levelData.geometryPath?.tools != null)
+        {
+            var tools = levelData.geometryPath.tools;
+            geometryToolsHideBlueBar = !tools.actionChunks && !tools.commandBags;
+        }
+
+        bool hasBags =
+            !geometryToolsHideBlueBar &&
+            levelData?.commandBags != null &&
+            levelData.commandBags.Count > 0;
+
+        if (!hasBags)
+        {
+            if (_commandBagPalette != null)
+                _commandBagPalette.Clear();
+            // Ensure assigned canvas/panel stays hidden when tools are arrows/repeat only.
+            if (commandBagPanel != null)
+                commandBagPanel.gameObject.SetActive(false);
+            if (commandBagCanvas != null)
+                commandBagCanvas.gameObject.SetActive(false);
+            return;
+        }
+
+        if (_commandBagPalette == null)
+        {
+            // Prefer a controller already on the dedicated Command Bag panel.
+            CommandBagPaletteController existing = null;
+            if (commandBagPanel != null)
+                existing = commandBagPanel.GetComponentInChildren<CommandBagPaletteController>(true);
+            if (existing == null)
+                existing = FindObjectOfType<CommandBagPaletteController>();
+
+            if (existing != null)
+            {
+                _commandBagPalette = existing;
+            }
+            else
+            {
+                // Tiny host on this GameObject — the controller builds its own left panel on the canvas.
+                var hostGo = new GameObject(
+                    "CommandBagPaletteHost",
+                    typeof(RectTransform),
+                    typeof(CommandBagPaletteController));
+                hostGo.transform.SetParent(transform, false);
+                var hostRt = hostGo.GetComponent<RectTransform>();
+                hostRt.anchorMin = Vector2.zero;
+                hostRt.anchorMax = Vector2.zero;
+                hostRt.sizeDelta = Vector2.zero;
+                _commandBagPalette = hostGo.GetComponent<CommandBagPaletteController>();
+            }
+        }
+
+        if (_commandBagPalette == null) return;
+        _commandBagPalette.characterMove = this;
+        _commandBagPalette.SyncPanelSizeFromCharacterMove();
+        // Prefer the Inspector-assigned panel; otherwise the controller builds Canvas-CommandBag.
+        _commandBagPalette.paletteParent = null;
+        if (commandBagPanel != null)
+        {
+            var hostCanvas = commandBagPanel.GetComponentInParent<Canvas>();
+            bool underYellow = hostCanvas != null &&
+                (hostCanvas.name ?? "").IndexOf("Yellow", System.StringComparison.OrdinalIgnoreCase) >= 0;
+            if (!underYellow)
+                _commandBagPalette.paletteParent = commandBagPanel;
+            else
+            {
+                Debug.LogWarning("[CharacterMove] commandBagPanel is under the Yellow Strip canvas — ignoring. Assign a panel on Canvas-CommandBag (or leave empty to auto-create).");
+                commandBagPanel = null;
+            }
+        }
+        _commandBagPalette.Rebuild(levelData);
+        EnsureActionQueueLeftAligned();
+        EnsureProgramQueueSpacing();
+        if (IsBagOnlyProgramMode(levelData))
+            PurgeLooseMotionTilesFromProgramStrip();
+    }
+
+    /// <summary>
+    /// Rebuild preview chips inside already-dropped ProgramBagInstance cards
+    /// (used when bag Repeat scale / counter knobs change in Play Mode).
+    /// </summary>
+    public void RefreshDroppedCommandBagPreviews()
+    {
+        RefreshDroppedMacroPreviews(bags: true, chunks: true);
+    }
+
+    /// <summary>Yellow-strip chunk chips only — Command Bags unchanged.</summary>
+    public void RefreshDroppedChunkPreviewsOnly()
+    {
+        RefreshDroppedMacroPreviews(bags: false, chunks: true);
+    }
+
+    void RefreshDroppedMacroPreviews(bool bags, bool chunks)
+    {
+        if (actionQueueTransform == null) return;
+        for (int i = 0; i < actionQueueTransform.childCount; i++)
+        {
+            var child = actionQueueTransform.GetChild(i);
+            if (child == null) continue;
+            var refComp = child.GetComponent<QueuedActionRef>();
+            if (refComp == null) continue;
+            if (refComp.isCommandChunk && !chunks) continue;
+            if (refComp.isCommandBag && !bags) continue;
+            if (!refComp.isCommandBag && !refComp.isCommandChunk) continue;
+            if (refComp.macroTokens == null) continue;
+
+            for (int c = child.childCount - 1; c >= 0; c--)
+            {
+                var kid = child.GetChild(c);
+                if (kid == null) continue;
+                if (kid.name == "CloseButton") continue;
+                DestroyImmediate(kid.gameObject);
+            }
+
+            Color accent = Color.white;
+            var img = child.GetComponent<Image>();
+            if (img != null) accent = img.color;
+
+            if (refComp.isCommandChunk)
+            {
+                LevelData level = GetCurrentLevelData();
+                int num = ResolveChunkDisplayIndex(level, refComp.commandChunkId);
+                var chunkData = CommandBagUtil.FindChunk(level, refComp.commandChunkId);
+                Color identity = CommandBagUiHelper.ResolveChunkIdentityColor(chunkData, num);
+                Color chipFill = Color.Lerp(identity, Color.white, 0.72f);
+                chipFill.a = 0.92f;
+                if (img != null) img.color = chipFill;
+                var chipOutline = child.GetComponent<Outline>();
+                if (chipOutline != null)
+                {
+                    chipOutline.enabled = true;
+                    var b = CommandBagUiHelper.PuzzleBorderFromCard(identity);
+                    chipOutline.effectColor = new Color(b.r, b.g, b.b, 0.55f);
+                    chipOutline.effectDistance = new Vector2(1.25f, -1.25f);
+                }
+                bool peekOpen = _chunkPeekAnchor == child.gameObject
+                    && _chunkPeekPanel != null
+                    && _chunkPeekPanel.activeSelf;
+                Sprite chipIcon = CommandBagUiHelper.ResolveChunkIconSprite(this);
+                CommandBagUiHelper.PopulateProgramChunkChip(child, this, num, identity, peekOpen, chipIcon);
+                float cw = CommandBagUiHelper.PreferredProgramChunkChipWidth(this);
+                float ch = CommandBagUiHelper.ProgramChunkChipHeight(this);
+                var le = child.GetComponent<LayoutElement>();
+                if (le != null)
+                {
+                    le.preferredWidth = cw;
+                    le.minWidth = cw;
+                    le.preferredHeight = ch;
+                    le.minHeight = ch;
+                }
+                var rt = child as RectTransform;
+                if (rt != null)
+                    rt.sizeDelta = new Vector2(cw, ch);
+                EnsureBagCloseRaycastPriority(child.gameObject);
+            }
+            else if (refComp.isCommandBag)
+            {
+                CommandBagUiHelper.PopulateProgramInstanceContent(
+                    child, this, refComp.displayTitle, accent, refComp.macroTokens, null);
+
+                float width = CommandBagUiHelper.PreferredProgramInstanceWidth(refComp.macroTokens, this);
+                var le = child.GetComponent<LayoutElement>();
+                if (le != null)
+                {
+                    le.preferredWidth = width;
+                    le.minWidth = width;
+                }
+                var rt = child as RectTransform;
+                if (rt != null)
+                    rt.sizeDelta = new Vector2(width, CommandBagUiHelper.ProgramCardHeight);
+                EnsureBagCloseRaycastPriority(child.gameObject);
+            }
+        }
+
+        LayoutRebuilder.ForceRebuildLayoutImmediate(actionQueueTransform as RectTransform);
+    }
+
+    /// <summary>Re-apply peek contents when only the peek icon size knob changed.</summary>
+    public void RefreshOpenChunkPeekPanel()
+    {
+        if (_chunkPeekAnchor == null || _chunkPeekPanel == null || !_chunkPeekPanel.activeSelf)
+            return;
+        var refComp = _chunkPeekAnchor.GetComponent<QueuedActionRef>();
+        if (refComp == null || !refComp.isCommandChunk) return;
+        ShowChunkPeekPanel(_chunkPeekAnchor, refComp, animate: false);
+    }
+
+    public void ToggleCommandBagOpen(string bagId)
+    {
+        if (_commandBagPalette == null) return;
+        _commandBagPalette.ToggleBagOpen(bagId);
     }
 
     /// <summary>Number-line robots only face left or right along the axis.</summary>
@@ -2393,6 +2770,10 @@ public class CharacterMove : MonoBehaviour
             hiddenMatrix[from.x, from.y] = new HiddenCell { kind = HiddenCellKind.Empty };
         if (IsInsideMatrix(to))
             hiddenMatrix[to.x, to.y] = new HiddenCell { kind = HiddenCellKind.Robot, objectType = "robot", instance = gameObject };
+
+        // Geometry Path observes real cell changes (skip no-ops / teleport-to-same).
+        if (from != to)
+            GeometryPathController.Instance?.NotifyRobotMoved(from, to);
     }
 
     /// <summary>Move a grid object marker inside the matrix from <paramref name="from"/> to <paramref name="to"/>.</summary>
@@ -2929,6 +3310,42 @@ public class CharacterMove : MonoBehaviour
         attemptStartFacing = facingDirection;
         hasAssessedLevel = false;
         visitedEndObjectThisLevel = false;
+        // Always re-draw the target shape after wrong-answer / Try Again / Reset.
+        RestoreGeometryPathForNewAttempt(levelData);
+    }
+
+    void BindGeometryPathOverlay(LevelData levelData)
+    {
+        var geo = GeometryPathController.Instance;
+        if (geo == null)
+        {
+            geo = GetComponent<GeometryPathController>();
+            if (geo == null)
+                geo = gameObject.AddComponent<GeometryPathController>();
+        }
+        geo.BindLevel(levelData);
+    }
+
+    void RestoreGeometryPathForNewAttempt(LevelData levelData)
+    {
+        var geo = GeometryPathController.Instance;
+        if (geo == null)
+        {
+            geo = GetComponent<GeometryPathController>();
+            if (geo == null)
+                geo = gameObject.AddComponent<GeometryPathController>();
+        }
+        geo.RestoreForNewAttempt(levelData);
+    }
+
+    static bool IsGeometryPathLevel(LevelData ld)
+    {
+        if (ld == null) return false;
+        if (ld.geometryPath != null && ld.geometryPath.enabled &&
+            ld.geometryPath.segments != null && ld.geometryPath.segments.Count > 0)
+            return true;
+        return !string.IsNullOrEmpty(ld.levelType) &&
+               ld.levelType.Equals("GEOMETRY_PATH", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>Convert a screen-space position (mouse / touch) to a grid cell. Returns false if no valid cell hit.</summary>
@@ -3146,6 +3563,7 @@ public class CharacterMove : MonoBehaviour
         BuildHiddenMatrix(ld);
         RefreshCellBlinkHighlights(ld);
         SetupRobotDrag(ld);
+        BindGeometryPathOverlay(ld);
         Debug.Log($"[CharacterMove] Virtual matrix applied. {gridCols}x{gridRows}, robot at {robotGridPosition}.");
     }
 
@@ -3733,6 +4151,7 @@ public class CharacterMove : MonoBehaviour
         ApplyPlayfieldVisualLayout(levelData);
         RefreshCellBlinkHighlights(levelData);
         SetupRobotDrag(levelData);
+        BindGeometryPathOverlay(levelData);
 
         // If flag-placement mode is active, the player taps the goal cell (isEndObject) to show the flag.
         if (levelData.useFlagPlacement)
@@ -3783,6 +4202,8 @@ public class CharacterMove : MonoBehaviour
 
                 // Reset the current level without changing scene
                 ResetCurrentLevel();
+                // Belt-and-suspenders: always re-show geometry after Try Again.
+                RestoreGeometryPathForNewAttempt(GetCurrentLevelData());
                 RefreshStudentResetButtonState();
             });
         }
@@ -4060,6 +4481,16 @@ public class CharacterMove : MonoBehaviour
     private void SeedGuidedProgramQueue(LevelData levelData)
     {
         if (levelData?.guidedActions == null || levelData.guidedActions.Count == 0) return;
+
+        // Command Bag modes: yellow strip starts empty — students drop whole bags.
+        // Do NOT seed loose arrow tiles (that looks like exploded bags).
+        if (IsBagOnlyProgramMode(levelData))
+        {
+            ClearActionQueueVisual();
+            EnsureProgramQueueSpacing();
+            Debug.Log("[CharacterMove] Bag mode: skipped seeding loose guidedActions into yellow strip.");
+            return;
+        }
 
         ClearActionQueueVisual();
         waitingForGuidedInput = false;
@@ -4665,7 +5096,7 @@ public class CharacterMove : MonoBehaviour
         }
 
         if (useLevelTransitionFades && levelTransition != null)
-            levelTransition.SetStatus("SPARC", "Loading your items…");
+            levelTransition.SetStatus("SPARC", "Fetching your items…");
 
         float bootStarted = Time.unscaledTime;
 
@@ -4677,7 +5108,7 @@ public class CharacterMove : MonoBehaviour
             allLevelsData = remote;
             Debug.Log($"[CharacterMove] Using {remote.Count} level(s) from teacher dashboard.");
             if (levelTransition != null)
-                levelTransition.SetStatus("SPARC", $"Loaded {remote.Count} item{(remote.Count == 1 ? "" : "s")}");
+                levelTransition.SetStatus("Ready", $"{remote.Count} item{(remote.Count == 1 ? "" : "s")} loaded");
         }
         else if (loader != null && loader.usePlatformLevels)
         {
@@ -5246,6 +5677,26 @@ public class CharacterMove : MonoBehaviour
             }
         }
 
+        if (IsGeometryPathLevel(levelData))
+        {
+            var geo = GeometryPathController.Instance;
+            if (geo != null)
+            {
+                geo.CaptureRobotPose(robotGridPosition, facingDirection);
+                geo.SnapshotRunTelemetry(robotGridPosition, facingDirection);
+                extras.geometryTraveledKeys = geo.GetLastTraveledKeys();
+                extras.geometryCompletedKeys = geo.GetLastCompletedKeys();
+                extras.geometryTravelOrder = geo.GetLastTravelOrder();
+                var cell = geo.GetLastRobotCell();
+                var face = geo.GetLastRobotFacing();
+                extras.geometryFinalCellX = cell.x;
+                extras.geometryFinalCellY = cell.y;
+                extras.geometryFinalFacingX = face.x;
+                extras.geometryFinalFacingY = face.y;
+                extras.geometryHasTelemetry = true;
+            }
+        }
+
         return extras;
     }
 
@@ -5542,19 +5993,24 @@ public class CharacterMove : MonoBehaviour
     {
         if (actionQueueTransform == null) return;
 
+        // Bag / chunk program mode: horizontal scroll host + fixed-size chips (no overlap).
+        if (IsBagOnlyProgramMode())
+        {
+            EnsureProgramQueueSpacing();
+            return;
+        }
+
         var hlg = actionQueueTransform.GetComponent<HorizontalLayoutGroup>();
         if (hlg != null)
         {
             hlg.childAlignment = TextAnchor.MiddleCenter;
             hlg.childForceExpandWidth = false;
             hlg.childForceExpandHeight = false;
+            hlg.childControlWidth = false;
+            hlg.childControlHeight = false;
             hlg.reverseArrangement = false;
-            // Keep a little inset so blocks sit inside the strip edges.
-            hlg.padding = new RectOffset(
-                Mathf.Max(hlg.padding.left, 16),
-                Mathf.Max(hlg.padding.right, 16),
-                Mathf.Max(hlg.padding.top, 6),
-                Mathf.Max(hlg.padding.bottom, 6));
+            hlg.padding = new RectOffset(0, 8, 2, 2);
+            hlg.spacing = Mathf.Max(hlg.spacing, 8f);
         }
 
         var rt = actionQueueTransform as RectTransform;
@@ -5564,6 +6020,11 @@ public class CharacterMove : MonoBehaviour
         RectTransform strip = dropZonePanel;
         if (strip != null)
         {
+            // Don't rip the queue out of ProgramBagScroll if it exists.
+            var scroll = rt.GetComponentInParent<ScrollRect>();
+            if (scroll != null && scroll.name == "ProgramBagScroll")
+                return;
+
             if (rt.parent != strip)
                 rt.SetParent(strip, worldPositionStays: false);
 
@@ -5572,8 +6033,8 @@ public class CharacterMove : MonoBehaviour
             rt.anchorMin = Vector2.zero;
             rt.anchorMax = Vector2.one;
             rt.pivot = new Vector2(0.5f, 0.5f);
-            rt.offsetMin = new Vector2(20f, 10f);
-            rt.offsetMax = new Vector2(-20f, -10f);
+            rt.offsetMin = new Vector2(0f, 8f);
+            rt.offsetMax = new Vector2(-12f, -8f);
             rt.anchoredPosition = Vector2.zero;
             return;
         }
@@ -5664,6 +6125,13 @@ public class CharacterMove : MonoBehaviour
     {
         if (!CanDragPaletteBlockToQueue(kind)) return;
 
+        // Bag/Chunk modes: yellow strip only accepts ProgramBagInstance / ProgramChunkInstance.
+        if (IsBagOnlyProgramMode())
+        {
+            Debug.Log("[CharacterMove] Loose arrow drops disabled in Command Bag mode — drag a bag card instead.");
+            return;
+        }
+
         if (kind == DraggableActionBlock.ActionKind.Repeat)
         {
             InsertRepeatPairAt(uiIndex);
@@ -5735,6 +6203,1133 @@ public class CharacterMove : MonoBehaviour
 
         if (actionBlockIntro != null && actionBlockIntro.IsActive)
             actionBlockIntro.OnBlockInserted(kind);
+    }
+
+    /// <summary>
+    /// Insert a grouped ProgramBagInstance into the yellow strip.
+    /// Source card in the blue panel is never moved — this always creates a NEW GameObject.
+    /// Commands stay visually inside ONE rectangle until RUN expands them for execution.
+    /// </summary>
+    public void InsertCommandBagMacroFromDrag(DraggableCommandBagBlock source, int uiIndex)
+    {
+        if (source == null || actionQueueTransform == null) return;
+        if (IsActionQueueLocked()) return;
+        LevelData level = GetCurrentLevelData();
+        string token = source.ResolveDropToken();
+        if (string.IsNullOrEmpty(token))
+        {
+            Debug.LogWarning("[CharacterMove] Bag drop ignored — empty token.");
+            return;
+        }
+
+        bool isBag = source.dragKind == DraggableCommandBagBlock.DragKind.Bag;
+        string bagId = source.bagId;
+        string chunkId = source.chunkId;
+        string title = source.displayName;
+        Color accent = source.accentColor;
+        List<string> previewTokens = new List<string>();
+
+        if (isBag)
+        {
+            var bag = CommandBagUtil.FindBag(level, bagId);
+            if (bag != null)
+            {
+                title = string.IsNullOrWhiteSpace(bag.name) ? title : bag.name;
+                if (string.IsNullOrWhiteSpace(title)) title = "Command Bag";
+                int bagIndex = level.commandBags != null ? level.commandBags.IndexOf(bag) : 0;
+                accent = CommandBagUiHelper.SoftPastel(bag.color, Mathf.Max(0, bagIndex));
+                previewTokens = CommandBagUiHelper.FlattenBagTokens(bag);
+            }
+            else
+            {
+                Debug.LogWarning($"[CharacterMove] Bag id '{bagId}' not found — creating instance from drag source only.");
+                if (string.IsNullOrWhiteSpace(title)) title = "Command Bag";
+            }
+        }
+        else
+        {
+            var chunk = CommandBagUtil.FindChunk(level, chunkId);
+            if (chunk == null)
+            {
+                Debug.LogWarning($"[CharacterMove] Chunk id '{chunkId}' not found — drop ignored.");
+                return;
+            }
+            title = string.IsNullOrWhiteSpace(chunk.name) ? "Chunk" : chunk.name;
+            // Prefer platform bag color; fall back to drag accent / puzzle palette.
+            accent = ResolveChunkAccentColor(level, bagId, chunkId, source.accentColor);
+            previewTokens = chunk.tokens != null ? new List<string>(chunk.tokens) : new List<string>();
+        }
+
+        Sprite dropIcon = null;
+        string dropIconUrl = null;
+        if (!isBag)
+        {
+            // Chunks always use the built-in auto-tinted puzzle — never platform bag uploads.
+            dropIcon = CommandBagUiHelper.ResolveChunkIconSprite(this);
+            dropIconUrl = null;
+        }
+
+        // Remove leftover loose tiles if somehow present in bag-only mode.
+        if (IsBagOnlyProgramMode(level))
+            PurgeLooseMotionTilesFromProgramStrip();
+
+        EnsureActionQueueLeftAligned();
+        EnsureProgramQueueSpacing();
+
+        // NEW instance — never reparent the blue-panel source card.
+        GameObject blockGo = new GameObject(
+            isBag ? "ProgramBagInstance" : "ProgramChunkInstance",
+            typeof(RectTransform),
+            typeof(Image),
+            typeof(LayoutElement),
+            typeof(Outline),
+            typeof(CanvasGroup),
+            typeof(QueuedActionRef));
+        blockGo.transform.SetParent(actionQueueTransform, false);
+
+        var img = blockGo.GetComponent<Image>();
+        img.color = accent;
+        img.raycastTarget = true;
+
+        var outline = blockGo.GetComponent<Outline>();
+        outline.effectColor = CommandBagUiHelper.BorderFromPastel(accent);
+        outline.effectDistance = new Vector2(3f, -3f);
+
+        float width;
+        float height;
+        if (isBag)
+        {
+            width = CommandBagUiHelper.PreferredProgramInstanceWidth(previewTokens, this);
+            height = CommandBagUiHelper.ProgramCardHeight;
+        }
+        else
+        {
+            width = CommandBagUiHelper.PreferredProgramChunkChipWidth(this);
+            height = CommandBagUiHelper.ProgramChunkChipHeight(this);
+        }
+
+        var le = blockGo.GetComponent<LayoutElement>();
+        le.preferredWidth = width;
+        le.preferredHeight = height;
+        le.minWidth = width;
+        le.minHeight = height;
+        le.flexibleWidth = 0f;
+        le.flexibleHeight = 0f;
+
+        var blockRt = blockGo.GetComponent<RectTransform>();
+        blockRt.anchorMin = new Vector2(0f, 0.5f);
+        blockRt.anchorMax = new Vector2(0f, 0.5f);
+        blockRt.pivot = new Vector2(0f, 0.5f);
+        blockRt.sizeDelta = new Vector2(width, height);
+        blockRt.localScale = Vector3.one;
+
+        var cg = blockGo.GetComponent<CanvasGroup>();
+        cg.alpha = 1f;
+        cg.blocksRaycasts = true;
+        cg.interactable = true;
+        cg.ignoreParentGroups = false;
+
+        int clampedIndex = Mathf.Clamp(uiIndex, 0, Mathf.Max(0, actionQueueTransform.childCount - 1));
+        if (actionQueueTransform.childCount > 0)
+            blockGo.transform.SetSiblingIndex(clampedIndex);
+
+        int chunkNumber = 1;
+        if (isBag)
+        {
+            // Bags: full command sequence visible in the yellow strip.
+            CommandBagUiHelper.PopulateProgramInstanceContent(
+                blockGo.transform, this, title, accent, previewTokens, null);
+        }
+        else
+        {
+            // Chunks (mockup): compact icon chip — tap to peek inside.
+            chunkNumber = ResolveChunkDisplayIndex(level, chunkId);
+            var chunkData = CommandBagUtil.FindChunk(level, chunkId);
+            Color identity = CommandBagUiHelper.ResolveChunkIdentityColor(chunkData, chunkNumber);
+            accent = identity;
+            // Soft tinted chip — puzzle carries the color; avoid heavy nested boxes.
+            Color chipFill = Color.Lerp(identity, Color.white, 0.72f);
+            chipFill.a = 0.92f;
+            img.color = chipFill;
+            outline.enabled = true;
+            outline.effectColor = new Color(
+                CommandBagUiHelper.PuzzleBorderFromCard(identity).r,
+                CommandBagUiHelper.PuzzleBorderFromCard(identity).g,
+                CommandBagUiHelper.PuzzleBorderFromCard(identity).b,
+                0.55f);
+            outline.effectDistance = new Vector2(1.25f, -1.25f);
+            CommandBagUiHelper.PopulateProgramChunkChip(
+                blockGo.transform, this, chunkNumber, identity, peekOpen: false, iconSprite: dropIcon);
+        }
+
+        var refComp = blockGo.GetComponent<QueuedActionRef>();
+        refComp.deletable = true;
+        refComp.actionLabel = token;
+        refComp.isCommandBag = isBag;
+        refComp.isCommandChunk = !isBag;
+        refComp.commandBagId = bagId;
+        refComp.commandChunkId = chunkId;
+        refComp.displayTitle = title;
+        refComp.instanceId = System.Guid.NewGuid().ToString("N");
+        refComp.action = null; // expanded only on RUN
+        refComp.macroTokens = previewTokens != null
+            ? new List<string>(previewTokens)
+            : new List<string>();
+        if (!isBag)
+        {
+            refComp.macroIconSprite = dropIcon;
+            refComp.macroIconUrl = dropIconUrl;
+        }
+
+        // Same close + reorder path as arrow tiles (X removes whole bag/chunk).
+        AttachCloseButton(blockGo, isBag ? 26f : 22f);
+        AttachQueuedBlockDragBehaviour(blockGo);
+        if (!isBag)
+        {
+            var tap = blockGo.GetComponent<QueuedChunkTapExpand>();
+            if (tap == null) tap = blockGo.AddComponent<QueuedChunkTapExpand>();
+            tap.characterMove = this;
+            // Re-bind expand icon now that tap handler exists.
+            CommandBagUiHelper.AttachChunkExpandIcon(blockGo.transform, this, peekOpen: false);
+        }
+        // Ensure only the root + close/expand receive clicks (icons never steal X).
+        EnsureBagCloseRaycastPriority(blockGo);
+        // After scroll wrap, keep DropAreaHitTarget behind bags so reorder can start.
+        EnsureDropHitTargetBehindProgramContent();
+
+        LayoutRebuilder.ForceRebuildLayoutImmediate(actionQueueTransform as RectTransform);
+        PlayBlockDropBounce(blockGo.transform);
+        RebuildActionQueueFromUI();
+        playerActions.Add(token);
+        currentAttemptActionLog.Add(new PlayerActionLogEntry { action = token, timestamp = Time.time });
+        actionQueueTransform.gameObject.SetActive(true);
+
+        Debug.Log($"[CharacterMove] Dropped {(isBag ? "Bag" : "Chunk")} '{title}' cmds=[{string.Join(", ", refComp.macroTokens)}] index={clampedIndex}");
+    }
+
+    /// <summary>
+    /// Keep Command Bag icons non-raycast so the shared top-right X always receives clicks.
+    /// </summary>
+    private static void EnsureBagCloseRaycastPriority(GameObject blockGo)
+    {
+        if (blockGo == null) return;
+        var images = blockGo.GetComponentsInChildren<Image>(true);
+        for (int i = 0; i < images.Length; i++)
+        {
+            var img = images[i];
+            if (img == null) continue;
+            if (img.gameObject == blockGo) continue; // root still receives drag / tap
+            string n = img.transform.name ?? "";
+            if (n == "CloseButton" || n == "ExpandIcon")
+            {
+                img.raycastTarget = true;
+                continue;
+            }
+            img.raycastTarget = false;
+        }
+        var expand = CommandBagUiHelper.FindChunkExpandIcon(blockGo.transform);
+        if (expand != null)
+            expand.SetAsLastSibling();
+        var close = blockGo.transform.Find("CloseButton");
+        if (close != null)
+            close.SetAsLastSibling();
+    }
+
+    /// <summary>
+    /// Removes individual motion tiles from the yellow strip (keeps ProgramBagInstance / macros / repeats).
+    /// Used so bag-mode programs never look like exploded bags.
+    /// </summary>
+    private void PurgeLooseMotionTilesFromProgramStrip()
+    {
+        if (actionQueueTransform == null) return;
+        for (int i = actionQueueTransform.childCount - 1; i >= 0; i--)
+        {
+            var child = actionQueueTransform.GetChild(i);
+            if (child == null) continue;
+            if (child.GetComponent<QueueInsertionPlaceholder>() != null) continue;
+            var r = child.GetComponent<QueuedActionRef>();
+            if (r == null)
+            {
+                // Stray UI under the strip (e.g. old source cards).
+                string n = child.name ?? "";
+                if (n.StartsWith("Bag_") || n.StartsWith("Chunk_") || n == "CommandBagList" || n == "BagHeader")
+                    DestroyImmediate(child.gameObject);
+                continue;
+            }
+            if (r.isCommandBag || r.isCommandChunk) continue;
+            if (r.isRepeatStart || r.isRepeatEnd) continue;
+            if (r.isCountAnswer) continue;
+            // Loose forward/left/etc. tiles — remove in bag-only mode.
+            DestroyImmediate(child.gameObject);
+        }
+        RebuildActionQueueFromUI();
+    }
+
+    /// <summary>Spacing between ProgramBagInstance cards in the yellow strip + horizontal scroll.</summary>
+    private void EnsureProgramQueueSpacing()
+    {
+        if (actionQueueTransform == null) return;
+
+        EnsureProgramQueueScrollHost();
+
+        var hlg = actionQueueTransform.GetComponent<HorizontalLayoutGroup>();
+        if (hlg == null)
+            hlg = actionQueueTransform.gameObject.AddComponent<HorizontalLayoutGroup>();
+        hlg.spacing = CommandBagUiHelper.ProgramCardGap;
+        hlg.childAlignment = TextAnchor.MiddleLeft;
+        hlg.childForceExpandWidth = false;
+        hlg.childForceExpandHeight = false;
+        hlg.childControlWidth = true;   // honor LayoutElement preferredWidth — prevents overlap
+        hlg.childControlHeight = true;
+        // Zero left inset — first chip flush to the yellow-strip edge.
+        hlg.padding = new RectOffset(0, 8, 2, 2);
+
+        var fitter = actionQueueTransform.GetComponent<ContentSizeFitter>();
+        if (fitter == null)
+            fitter = actionQueueTransform.gameObject.AddComponent<ContentSizeFitter>();
+        fitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+        fitter.verticalFit = ContentSizeFitter.FitMode.Unconstrained;
+
+        var rt = actionQueueTransform as RectTransform;
+        if (rt != null)
+        {
+            rt.anchorMin = new Vector2(0f, 0f);
+            rt.anchorMax = new Vector2(0f, 1f);
+            rt.pivot = new Vector2(0f, 0.5f);
+            rt.offsetMin = new Vector2(0f, 0f);
+            rt.offsetMax = new Vector2(0f, 0f);
+            // Height fills scroll viewport; width from ContentSizeFitter.
+            float h = rt.rect.height > 1f ? rt.rect.height : CommandBagUiHelper.ProgramCardHeight + 16f;
+            rt.sizeDelta = new Vector2(rt.sizeDelta.x, 0f);
+        }
+
+        LayoutRebuilder.ForceRebuildLayoutImmediate(rt);
+    }
+
+    /// <summary>
+    /// Wraps the action queue in a horizontal ScrollRect under the yellow strip so
+    /// multiple ProgramBagInstances never overlap — they scroll instead.
+    /// </summary>
+    private void EnsureProgramQueueScrollHost()
+    {
+        if (actionQueueTransform == null) return;
+
+        // Already inside our scroll viewport?
+        var existingScroll = actionQueueTransform.GetComponentInParent<ScrollRect>();
+        if (existingScroll != null && existingScroll.name == "ProgramBagScroll")
+        {
+            existingScroll.horizontal = true;
+            existingScroll.vertical = false;
+            existingScroll.content = actionQueueTransform as RectTransform;
+            CommandBagUiHelper.MakeTransparent(existingScroll.GetComponent<Image>(), keepRaycast: true);
+            if (existingScroll.viewport != null)
+                CommandBagUiHelper.MakeTransparent(existingScroll.viewport.GetComponent<Image>(), keepRaycast: true);
+            var existingScrollRt = existingScroll.transform as RectTransform;
+            if (existingScrollRt != null)
+            {
+                existingScrollRt.offsetMin = new Vector2(0f, 2f);
+                existingScrollRt.offsetMax = new Vector2(-6f, -2f);
+            }
+            // Keep drop-hit overlay behind bags so reorder drags reach ProgramBagInstance.
+            EnsureDropHitTargetBehindProgramContent();
+            return;
+        }
+
+        RectTransform strip = dropZonePanel;
+        if (strip == null)
+            strip = actionQueueTransform.parent as RectTransform;
+        if (strip == null) return;
+
+        // Ensure queue is under the yellow strip before wrapping.
+        if (actionQueueTransform.parent != strip &&
+            (existingScroll == null || existingScroll.name != "ProgramBagScroll"))
+        {
+            // If parent is some other canvas child, move under strip first.
+            if (actionQueueTransform.GetComponentInParent<ScrollRect>() == null)
+                actionQueueTransform.SetParent(strip, false);
+        }
+
+        if (actionQueueTransform.parent != strip) return;
+
+        var scrollGo = new GameObject(
+            "ProgramBagScroll",
+            typeof(RectTransform),
+            typeof(Image),
+            typeof(ScrollRect),
+            typeof(RectMask2D));
+        scrollGo.transform.SetParent(strip, false);
+        scrollGo.transform.SetAsFirstSibling();
+        var scrollRt = scrollGo.GetComponent<RectTransform>();
+        scrollRt.anchorMin = Vector2.zero;
+        scrollRt.anchorMax = Vector2.one;
+        scrollRt.offsetMin = new Vector2(0f, 2f);
+        scrollRt.offsetMax = new Vector2(-6f, -2f);
+        scrollRt.localScale = Vector3.one;
+
+        var scrollImg = scrollGo.GetComponent<Image>();
+        // Transparent — yellow strip must stay visible around dropped bags.
+        CommandBagUiHelper.MakeTransparent(scrollImg, keepRaycast: true);
+
+        var viewportGo = new GameObject("Viewport", typeof(RectTransform), typeof(RectMask2D), typeof(Image));
+        viewportGo.transform.SetParent(scrollGo.transform, false);
+        var vpRt = viewportGo.GetComponent<RectTransform>();
+        vpRt.anchorMin = Vector2.zero;
+        vpRt.anchorMax = Vector2.one;
+        vpRt.offsetMin = Vector2.zero;
+        vpRt.offsetMax = Vector2.zero;
+        var vpImg = viewportGo.GetComponent<Image>();
+        CommandBagUiHelper.MakeTransparent(vpImg, keepRaycast: true);
+
+        actionQueueTransform.SetParent(viewportGo.transform, false);
+        var queueRt = actionQueueTransform as RectTransform;
+        queueRt.localScale = Vector3.one;
+        queueRt.localRotation = Quaternion.identity;
+        queueRt.anchorMin = new Vector2(0f, 0f);
+        queueRt.anchorMax = new Vector2(0f, 1f);
+        queueRt.pivot = new Vector2(0f, 0.5f);
+        queueRt.anchoredPosition = Vector2.zero;
+        queueRt.sizeDelta = new Vector2(0f, 0f);
+        queueRt.offsetMin = new Vector2(0f, 0f);
+        queueRt.offsetMax = new Vector2(0f, 0f);
+
+        var scroll = scrollGo.GetComponent<ScrollRect>();
+        scroll.viewport = vpRt;
+        scroll.content = queueRt;
+        scroll.horizontal = true;
+        scroll.vertical = false;
+        scroll.movementType = ScrollRect.MovementType.Clamped;
+        scroll.scrollSensitivity = 40f;
+        scroll.inertia = true;
+
+        // ProgramBagScroll.SetAsFirstSibling() can push DropAreaHitTarget on top of bags.
+        // Reassert hit target as backmost so bag bodies receive reorder drags.
+        EnsureDropHitTargetBehindProgramContent();
+    }
+
+    /// <summary>
+    /// DropAreaHitTarget must stay behind ProgramBagScroll / queue content.
+    /// When the scroll host exists, disable its raycasts so bag bodies receive reorder drags.
+    /// Geometric ContainsScreenPoint still works for drop-zone hit testing.
+    /// </summary>
+    private void EnsureDropHitTargetBehindProgramContent()
+    {
+        RectTransform strip = dropZonePanel;
+        if (strip == null && actionQueueTransform != null)
+            strip = actionQueueTransform.GetComponentInParent<ActionQueueDropZone>()?.transform as RectTransform;
+        if (strip == null) return;
+
+        var zone = strip.GetComponent<ActionQueueDropZone>();
+        if (zone != null)
+            zone.EnsureFullPanelHitArea();
+
+        Transform hit = strip.Find("DropAreaHitTarget");
+        if (hit != null)
+            hit.SetAsFirstSibling();
+
+        Transform scroll = strip.Find("ProgramBagScroll");
+        if (scroll != null)
+            scroll.SetSiblingIndex(1);
+
+        // Scroll/viewport already catch empty-strip raycasts; the overlay must not cover bags.
+        var hitImg = hit != null ? hit.GetComponent<Image>() : null;
+        if (hitImg != null)
+            hitImg.raycastTarget = (scroll == null);
+    }
+
+    private static int ResolveChunkDisplayIndex(LevelData level, string chunkId)
+    {
+        if (level?.commandBags == null) return 1;
+        int n = 0;
+        for (int b = 0; b < level.commandBags.Count; b++)
+        {
+            var bag = level.commandBags[b];
+            if (bag?.chunks == null) continue;
+            for (int c = 0; c < bag.chunks.Count; c++)
+            {
+                n++;
+                if (bag.chunks[c] != null && bag.chunks[c].id == chunkId)
+                    return n;
+            }
+        }
+        return Mathf.Max(1, n);
+    }
+
+    /// <summary>
+    /// Platform-assigned chunk color (preferred), else bag SoftPastel / palette fallback.
+    /// </summary>
+    private static Color ResolveChunkAccentColor(
+        LevelData level, string bagId, string chunkId, Color fallback)
+    {
+        CommandChunkData chunk = null;
+        CommandBagData bag = null;
+        int bagIndex = 0;
+        int chunkIndex = 0;
+        if (level?.commandBags != null)
+        {
+            for (int i = 0; i < level.commandBags.Count; i++)
+            {
+                var b = level.commandBags[i];
+                if (b == null) continue;
+                bool bagMatch = !string.IsNullOrEmpty(bagId) && b.id == bagId;
+                if (b.chunks == null) continue;
+                for (int c = 0; c < b.chunks.Count; c++)
+                {
+                    chunkIndex++;
+                    var ch = b.chunks[c];
+                    if (ch == null) continue;
+                    if (!string.IsNullOrEmpty(chunkId) && ch.id == chunkId)
+                    {
+                        chunk = ch;
+                        bag = b;
+                        bagIndex = i;
+                        break;
+                    }
+                    if (bagMatch && chunk == null && string.IsNullOrEmpty(chunkId))
+                    {
+                        // bag-only context — keep searching for chunkId
+                    }
+                }
+                if (chunk != null) break;
+                if (bagMatch) { bag = b; bagIndex = i; }
+            }
+        }
+
+        if (chunk != null)
+            return CommandBagUiHelper.ResolveChunkIdentityColor(chunk, Mathf.Max(1, chunkIndex));
+
+        if (bag != null && !string.IsNullOrWhiteSpace(bag.color))
+            return CommandBagUiHelper.SoftPastel(bag.color, bagIndex);
+
+        if (fallback.a > 0.05f && (fallback.r + fallback.g + fallback.b) > 0.05f)
+            return fallback;
+
+        return CommandBagUiHelper.PuzzleColor(Mathf.Max(0, chunkIndex - 1));
+    }
+
+    private void AttachExpandButton(GameObject blockGo)
+    {
+        // Legacy — chunks use tap-to-peek (QueuedChunkTapExpand) instead of a ▾ button.
+        if (blockGo == null) return;
+    }
+
+    GameObject _chunkPeekPanel;
+    GameObject _chunkPeekAnchor; // which ProgramChunkInstance is open
+    Canvas _chunkPeekCanvas;
+    Coroutine _chunkPeekAnim;
+    bool _chunkPeekClosing;
+    Transform _peekPulseChip;
+    Vector3 _peekPulseChipBaseScale = Vector3.one;
+    readonly Dictionary<string, Sprite> _platformIconCache = new Dictionary<string, Sprite>();
+
+    const float PeekOpenDuration = 0.22f;
+    const float PeekCloseDuration = 0.18f;
+
+    public void CachePlatformIconSprite(string url, Sprite sprite)
+    {
+        if (string.IsNullOrEmpty(url) || sprite == null) return;
+        _platformIconCache[url] = sprite;
+    }
+
+    public Sprite GetCachedPlatformIconSprite(string url)
+    {
+        if (string.IsNullOrEmpty(url)) return null;
+        return _platformIconCache.TryGetValue(url, out var spr) ? spr : null;
+    }
+
+    /// <summary>
+    /// Mockup: tap a compact chunk chip in the yellow strip to peek at its commands
+    /// in a panel above the strip. Tap again / Collapse / tap another closes it.
+    /// Bags are unchanged (always show full sequence).
+    /// </summary>
+    public void ToggleChunkPeekPanel(GameObject chunkBlock)
+    {
+        if (chunkBlock == null)
+        {
+            Debug.LogWarning("[CharacterMove] ToggleChunkPeekPanel: chunkBlock null");
+            return;
+        }
+        var refComp = chunkBlock.GetComponent<QueuedActionRef>();
+        if (refComp == null || !refComp.isCommandChunk)
+        {
+            Debug.LogWarning("[CharacterMove] ToggleChunkPeekPanel: not a chunk macro");
+            return;
+        }
+
+        if (_chunkPeekAnchor == chunkBlock && _chunkPeekPanel != null && _chunkPeekPanel.activeSelf && !_chunkPeekClosing)
+        {
+            HideChunkPeekPanel();
+            return;
+        }
+
+        // Switching chips: snap previous closed so the new open clearly comes from THIS tap.
+        if (_chunkPeekAnchor != null && _chunkPeekAnchor != chunkBlock)
+            HideChunkPeekPanelImmediate();
+
+        ShowChunkPeekPanel(chunkBlock, refComp, animate: true);
+    }
+
+    public void HideChunkPeekPanel()
+    {
+        if (_chunkPeekPanel == null || !_chunkPeekPanel.activeSelf || _chunkPeekClosing)
+        {
+            HideChunkPeekPanelImmediate();
+            return;
+        }
+
+        StopChunkPeekAnim();
+        _chunkPeekClosing = true;
+        _chunkPeekAnim = StartCoroutine(AnimateChunkPeekClose());
+    }
+
+    void HideChunkPeekPanelImmediate()
+    {
+        StopChunkPeekAnim();
+        RestorePeekPulseChip();
+        _chunkPeekClosing = false;
+
+        GameObject was = _chunkPeekAnchor;
+        if (_chunkPeekPanel != null)
+        {
+            var rt = _chunkPeekPanel.GetComponent<RectTransform>();
+            if (rt != null) rt.localScale = Vector3.one;
+            var cg = _chunkPeekPanel.GetComponent<CanvasGroup>();
+            if (cg != null) cg.alpha = 1f;
+            _chunkPeekPanel.SetActive(false);
+        }
+        if (_chunkPeekCanvas != null)
+            _chunkPeekCanvas.gameObject.SetActive(false);
+        _chunkPeekAnchor = null;
+        if (was != null)
+            CommandBagUiHelper.SetChunkExpandIconState(was.transform, this, peekOpen: false);
+    }
+
+    void ShowChunkPeekPanel(GameObject chunkBlock, QueuedActionRef refComp, bool animate = true)
+    {
+        EnsureChunkPeekPanelHost();
+        if (_chunkPeekPanel == null || _chunkPeekCanvas == null)
+        {
+            Debug.LogError("[CharacterMove] Chunk peek panel failed to create.");
+            return;
+        }
+
+        StopChunkPeekAnim();
+        _chunkPeekClosing = false;
+        RestorePeekPulseChip();
+
+        _chunkPeekAnchor = chunkBlock;
+        _chunkPeekCanvas.gameObject.SetActive(true);
+        _chunkPeekPanel.SetActive(true);
+        _chunkPeekPanel.transform.SetAsLastSibling();
+
+        var panelRt = _chunkPeekPanel.GetComponent<RectTransform>();
+        var cg = _chunkPeekPanel.GetComponent<CanvasGroup>();
+        // Hide before layout so kids never see a full-size flash, then pop from the chip.
+        if (animate && panelRt != null && cg != null)
+        {
+            cg.alpha = 0f;
+            panelRt.localScale = new Vector3(0.42f, 0.28f, 1f);
+        }
+        else if (panelRt != null && cg != null)
+        {
+            cg.alpha = 1f;
+            panelRt.localScale = Vector3.one;
+        }
+
+        LevelData level = GetCurrentLevelData();
+        int num = ResolveChunkDisplayIndex(level, refComp.commandChunkId);
+        var chunkData = CommandBagUtil.FindChunk(level, refComp.commandChunkId);
+        Color accent = CommandBagUiHelper.ResolveChunkIdentityColor(chunkData, num);
+        var tokens = refComp.macroTokens ?? new List<string>();
+        Sprite peekIcon = CommandBagUiHelper.ResolveChunkIconSprite(this);
+
+        CommandBagUiHelper.PopulateChunkPeekPanel(
+            _chunkPeekPanel.transform,
+            this,
+            refComp.displayTitle,
+            num,
+            accent,
+            tokens,
+            HideChunkPeekPanel,
+            peekIcon);
+
+        Canvas.ForceUpdateCanvases();
+        var peekRow = _chunkPeekPanel.transform.Find("PeekRow") as RectTransform;
+        if (peekRow != null && panelRt != null)
+        {
+            LayoutRebuilder.ForceRebuildLayoutImmediate(peekRow);
+            // Fit content so collapse is never clipped; knobs are the minimum only.
+            float minW = CommandBagUiHelper.ChunkPeekMinWidth(this);
+            float minH = CommandBagUiHelper.ChunkPeekMinHeight(this);
+            float contentW = Mathf.Max(peekRow.rect.width, peekRow.sizeDelta.x);
+            float contentH = Mathf.Max(peekRow.rect.height, peekRow.sizeDelta.y);
+            float w = Mathf.Clamp(Mathf.Max(minW, contentW + 8f), 160f, 720f);
+            float h = Mathf.Clamp(Mathf.Max(minH, contentH + 6f), 64f, 280f);
+            panelRt.sizeDelta = new Vector2(w, h);
+        }
+
+        // Caret after populate (populate clears children) — match soft card fill.
+        EnsureChunkPeekCaret();
+        var caretTr = _chunkPeekPanel.transform.Find("Caret");
+        if (caretTr != null)
+        {
+            var caretImg = caretTr.GetComponent<Image>();
+            var panelImg = _chunkPeekPanel.GetComponent<Image>();
+            if (caretImg != null && panelImg != null)
+                caretImg.color = panelImg.color;
+        }
+
+        PositionChunkPeekPanel(chunkBlock);
+        CommandBagUiHelper.SetChunkExpandIconState(chunkBlock.transform, this, peekOpen: true);
+        EnsureBagCloseRaycastPriority(chunkBlock);
+        GameInteractionSounds.PlayActionTap();
+        Debug.Log($"[CharacterMove] Chunk peek open '{refComp.displayTitle}' tokens={tokens.Count}");
+
+        if (animate)
+            _chunkPeekAnim = StartCoroutine(AnimateChunkPeekOpen(chunkBlock));
+    }
+
+    void StopChunkPeekAnim()
+    {
+        if (_chunkPeekAnim == null) return;
+        StopCoroutine(_chunkPeekAnim);
+        _chunkPeekAnim = null;
+    }
+
+    void RestorePeekPulseChip()
+    {
+        if (_peekPulseChip != null)
+        {
+            _peekPulseChip.localScale = _peekPulseChipBaseScale;
+            var puzzle = _peekPulseChip.Find("Body/Puzzle") ?? _peekPulseChip.Find("Puzzle");
+            if (puzzle != null)
+            {
+                var chipImg = _peekPulseChip.GetComponent<Image>();
+                if (chipImg != null)
+                    CommandBagUiHelper.ApplyPuzzleBadgeTint(puzzle, chipImg.color);
+            }
+        }
+        _peekPulseChip = null;
+    }
+
+    static float EaseOutBack(float t)
+    {
+        const float c1 = 1.70158f;
+        const float c3 = c1 + 1f;
+        float x = Mathf.Clamp01(t);
+        return 1f + c3 * Mathf.Pow(x - 1f, 3f) + c1 * Mathf.Pow(x - 1f, 2f);
+    }
+
+    static float EaseInCubic(float t)
+    {
+        float x = Mathf.Clamp01(t);
+        return x * x * x;
+    }
+
+    /// <summary>
+    /// Kid-readable open: panel grows upward from the tapped chip (bottom pivot),
+    /// fades in, and the chip gives a short pulse so origin is obvious.
+    /// </summary>
+    IEnumerator AnimateChunkPeekOpen(GameObject chunkBlock)
+    {
+        if (_chunkPeekPanel == null) yield break;
+        var panelRt = _chunkPeekPanel.GetComponent<RectTransform>();
+        var cg = _chunkPeekPanel.GetComponent<CanvasGroup>();
+        if (panelRt == null || cg == null) yield break;
+
+        Vector2 endPos = panelRt.anchoredPosition;
+        Vector2 startPos = endPos + new Vector2(0f, -22f);
+        Vector3 startScale = new Vector3(0.42f, 0.28f, 1f);
+        Vector3 endScale = Vector3.one;
+
+        panelRt.anchoredPosition = startPos;
+        panelRt.localScale = startScale;
+        cg.alpha = 0f;
+
+        if (chunkBlock != null)
+        {
+            _peekPulseChip = chunkBlock.transform;
+            _peekPulseChipBaseScale = _peekPulseChip.localScale;
+        }
+
+        float elapsed = 0f;
+        while (elapsed < PeekOpenDuration)
+        {
+            if (_chunkPeekPanel == null) yield break;
+            elapsed += Time.unscaledDeltaTime;
+            float u = Mathf.Clamp01(elapsed / PeekOpenDuration);
+            float pop = EaseOutBack(u);
+            float fade = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(u * 1.35f));
+
+            panelRt.localScale = Vector3.LerpUnclamped(startScale, endScale, pop);
+            panelRt.anchoredPosition = Vector2.LerpUnclamped(startPos, endPos, Mathf.Clamp01(pop));
+            cg.alpha = fade;
+
+            // Chip + puzzle pulse — kids feel the piece “open” into the peek.
+            if (_peekPulseChip != null)
+            {
+                float bump = Mathf.Sin(u * Mathf.PI) * 0.14f;
+                _peekPulseChip.localScale = _peekPulseChipBaseScale * (1f + bump);
+
+                var puzzle = _peekPulseChip.Find("Body/Puzzle") ?? _peekPulseChip.Find("Puzzle");
+                if (puzzle != null)
+                {
+                    var fillTr = puzzle.Find("Fill");
+                    var fillImg = fillTr != null ? fillTr.GetComponent<Image>() : null;
+                    if (fillImg != null)
+                    {
+                        Color baseFill = CommandBagUiHelper.PuzzleFillFromCard(
+                            _peekPulseChip.GetComponent<Image>() != null
+                                ? _peekPulseChip.GetComponent<Image>().color
+                                : fillImg.color);
+                        fillImg.color = Color.Lerp(baseFill, Color.white, bump * 1.6f);
+                    }
+                }
+            }
+
+            yield return null;
+        }
+
+        if (panelRt != null)
+        {
+            panelRt.localScale = endScale;
+            panelRt.anchoredPosition = endPos;
+        }
+        if (cg != null) cg.alpha = 1f;
+        RestorePeekPulseChip();
+        _chunkPeekAnim = null;
+    }
+
+    IEnumerator AnimateChunkPeekClose()
+    {
+        GameObject was = _chunkPeekAnchor;
+        if (_chunkPeekPanel == null)
+        {
+            HideChunkPeekPanelImmediate();
+            yield break;
+        }
+
+        var panelRt = _chunkPeekPanel.GetComponent<RectTransform>();
+        var cg = _chunkPeekPanel.GetComponent<CanvasGroup>();
+        if (panelRt == null || cg == null)
+        {
+            HideChunkPeekPanelImmediate();
+            yield break;
+        }
+
+        Vector2 startPos = panelRt.anchoredPosition;
+        Vector2 endPos = startPos + new Vector2(0f, -16f);
+        Vector3 startScale = panelRt.localScale;
+        Vector3 endScale = new Vector3(0.48f, 0.32f, 1f);
+        float startAlpha = cg.alpha;
+
+        if (was != null)
+        {
+            _peekPulseChip = was.transform;
+            _peekPulseChipBaseScale = _peekPulseChip.localScale;
+        }
+
+        float elapsed = 0f;
+        while (elapsed < PeekCloseDuration)
+        {
+            if (_chunkPeekPanel == null) yield break;
+            elapsed += Time.unscaledDeltaTime;
+            float u = EaseInCubic(elapsed / PeekCloseDuration);
+
+            panelRt.localScale = Vector3.LerpUnclamped(startScale, endScale, u);
+            panelRt.anchoredPosition = Vector2.LerpUnclamped(startPos, endPos, u);
+            cg.alpha = Mathf.Lerp(startAlpha, 0f, u);
+
+            if (_peekPulseChip != null)
+            {
+                float bump = Mathf.Sin(u * Mathf.PI) * 0.08f;
+                _peekPulseChip.localScale = _peekPulseChipBaseScale * (1f + bump);
+            }
+
+            yield return null;
+        }
+
+        HideChunkPeekPanelImmediate();
+    }
+
+    void EnsureChunkPeekCaret()
+    {
+        if (_chunkPeekPanel == null) return;
+        if (_chunkPeekPanel.transform.Find("Caret") != null) return;
+
+        Color caretColor = CommandBagUiHelper.PeekPanelFill;
+        var panelImg = _chunkPeekPanel.GetComponent<Image>();
+        if (panelImg != null) caretColor = panelImg.color;
+
+        var caret = new GameObject("Caret", typeof(RectTransform), typeof(Image));
+        caret.transform.SetParent(_chunkPeekPanel.transform, false);
+        caret.transform.SetAsFirstSibling();
+        var crt = caret.GetComponent<RectTransform>();
+        crt.anchorMin = new Vector2(0.5f, 0f);
+        crt.anchorMax = new Vector2(0.5f, 0f);
+        crt.pivot = new Vector2(0.5f, 1f);
+        crt.sizeDelta = new Vector2(22f, 12f);
+        crt.anchoredPosition = new Vector2(0f, 2f);
+        var cimg = caret.GetComponent<Image>();
+        cimg.color = caretColor;
+        cimg.raycastTarget = false;
+        caret.transform.localRotation = Quaternion.Euler(0f, 0f, 180f);
+        caret.transform.SetAsFirstSibling();
+    }
+
+    void EnsureChunkPeekPanelHost()
+    {
+        if (_chunkPeekPanel != null && _chunkPeekCanvas != null) return;
+
+        // Stale refs after domain reload / destroy.
+        _chunkPeekPanel = null;
+        _chunkPeekCanvas = null;
+
+        // Dedicated overlay canvas so the peek is NEVER clipped by ProgramBagScroll / RectMask2D.
+        var canvasGo = new GameObject(
+            "Canvas-ChunkPeek",
+            typeof(RectTransform),
+            typeof(Canvas),
+            typeof(CanvasScaler),
+            typeof(GraphicRaycaster));
+
+        _chunkPeekCanvas = canvasGo.GetComponent<Canvas>();
+        _chunkPeekCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        _chunkPeekCanvas.sortingOrder = 250; // above yellow strip, bags, dialogue
+
+        var scaler = canvasGo.GetComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1920f, 1080f);
+        scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+        scaler.matchWidthOrHeight = 0.5f;
+
+        var canvasRt = canvasGo.GetComponent<RectTransform>();
+        canvasRt.anchorMin = Vector2.zero;
+        canvasRt.anchorMax = Vector2.one;
+        canvasRt.offsetMin = Vector2.zero;
+        canvasRt.offsetMax = Vector2.zero;
+
+        var go = new GameObject(
+            "ChunkPeekPanel",
+            typeof(RectTransform),
+            typeof(Image),
+            typeof(Outline),
+            typeof(CanvasGroup));
+        go.transform.SetParent(canvasGo.transform, false);
+
+        var rt = go.GetComponent<RectTransform>();
+        // Center anchors + bottom pivot: ScreenPointToLocal maps cleanly; panel grows upward.
+        rt.anchorMin = new Vector2(0.5f, 0.5f);
+        rt.anchorMax = new Vector2(0.5f, 0.5f);
+        rt.pivot = new Vector2(0.5f, 0f);
+        rt.sizeDelta = new Vector2(420f, 100f);
+
+        var img = go.GetComponent<Image>();
+        img.color = CommandBagUiHelper.PeekPanelFill;
+        img.raycastTarget = true;
+
+        var outline = go.GetComponent<Outline>();
+        outline.effectColor = CommandBagUiHelper.PeekPanelBorder;
+        outline.effectDistance = new Vector2(3f, -3f);
+
+        var drop = go.AddComponent<Shadow>();
+        drop.effectColor = new Color(0.05f, 0.08f, 0.14f, 0.28f);
+        drop.effectDistance = new Vector2(0f, -6f);
+        drop.useGraphicAlpha = true;
+
+        var cg = go.GetComponent<CanvasGroup>();
+        cg.blocksRaycasts = true;
+        cg.interactable = true;
+        cg.alpha = 1f;
+
+        var caret = new GameObject("Caret", typeof(RectTransform), typeof(Image));
+        caret.transform.SetParent(go.transform, false);
+        var crt = caret.GetComponent<RectTransform>();
+        crt.anchorMin = new Vector2(0.5f, 0f);
+        crt.anchorMax = new Vector2(0.5f, 0f);
+        crt.pivot = new Vector2(0.5f, 1f);
+        crt.sizeDelta = new Vector2(22f, 12f);
+        crt.anchoredPosition = new Vector2(0f, 2f);
+        var cimg = caret.GetComponent<Image>();
+        cimg.color = CommandBagUiHelper.PeekPanelFill;
+        cimg.raycastTarget = false;
+        caret.transform.localRotation = Quaternion.Euler(0f, 0f, 180f);
+
+        _chunkPeekPanel = go;
+        _chunkPeekCanvas.gameObject.SetActive(false);
+        _chunkPeekPanel.SetActive(false);
+    }
+
+    void PositionChunkPeekPanel(GameObject chunkBlock)
+    {
+        if (_chunkPeekPanel == null || chunkBlock == null || _chunkPeekCanvas == null) return;
+        var panelRt = _chunkPeekPanel.GetComponent<RectTransform>();
+        var chunkRt = chunkBlock.transform as RectTransform;
+        var canvasRt = _chunkPeekCanvas.transform as RectTransform;
+        if (panelRt == null || chunkRt == null || canvasRt == null) return;
+
+        panelRt.SetParent(canvasRt, false);
+        panelRt.anchorMin = new Vector2(0.5f, 0.5f);
+        panelRt.anchorMax = new Vector2(0.5f, 0.5f);
+        panelRt.pivot = new Vector2(0.5f, 0f);
+
+        Vector3[] corners = new Vector3[4];
+        chunkRt.GetWorldCorners(corners);
+        Vector3 worldCenter = (corners[0] + corners[2]) * 0.5f;
+        Vector3 worldTop = (corners[1] + corners[2]) * 0.5f;
+
+        Camera eventCam = null;
+        var srcCanvas = chunkBlock.GetComponentInParent<Canvas>();
+        if (srcCanvas != null && srcCanvas.renderMode != RenderMode.ScreenSpaceOverlay)
+            eventCam = srcCanvas.worldCamera != null ? srcCanvas.worldCamera : Camera.main;
+
+        Vector2 screen = RectTransformUtility.WorldToScreenPoint(eventCam, worldTop);
+
+        // Prefer just above the yellow strip top edge when available.
+        RectTransform strip = dropZonePanel;
+        if (strip == null && actionQueueTransform != null)
+            strip = actionQueueTransform.GetComponentInParent<ActionQueueDropZone>()?.transform as RectTransform
+                 ?? actionQueueTransform.parent as RectTransform;
+        if (strip != null)
+        {
+            Vector3[] sc = new Vector3[4];
+            strip.GetWorldCorners(sc);
+            Vector3 stripTop = (sc[1] + sc[2]) * 0.5f;
+            Vector2 stripScreen = RectTransformUtility.WorldToScreenPoint(eventCam, stripTop);
+            screen.x = RectTransformUtility.WorldToScreenPoint(eventCam, worldCenter).x;
+            screen.y = Mathf.Max(screen.y, stripScreen.y) + 10f;
+        }
+        else
+        {
+            screen.y += 14f;
+        }
+
+        // Overlay canvas → null camera for ScreenPointToLocal.
+        if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                canvasRt, screen, null, out Vector2 local))
+        {
+            float halfW = panelRt.sizeDelta.x * 0.5f;
+            float canvasW = Mathf.Max(1f, canvasRt.rect.width);
+            float canvasH = Mathf.Max(1f, canvasRt.rect.height);
+            float desiredX = local.x;
+            local.x = Mathf.Clamp(local.x, -canvasW * 0.5f + halfW + 12f, canvasW * 0.5f - halfW - 12f);
+            float panelH = panelRt.sizeDelta.y;
+            local.y = Mathf.Clamp(local.y, -canvasH * 0.5f + 8f, canvasH * 0.5f - panelH - 8f);
+            panelRt.anchoredPosition = local;
+
+            // Keep the caret aimed at the chip even when the panel is edge-clamped.
+            var caret = _chunkPeekPanel.transform.Find("Caret") as RectTransform;
+            if (caret != null)
+            {
+                float caretX = Mathf.Clamp(desiredX - local.x, -halfW + 18f, halfW - 18f);
+                caret.anchoredPosition = new Vector2(caretX, 1f);
+            }
+        }
+        else
+        {
+            panelRt.anchoredPosition = new Vector2(0f, -220f);
+        }
+
+        _chunkPeekPanel.transform.SetAsLastSibling();
+    }
+
+    /// <summary>Bags stay grouped; chunks use <see cref="ToggleChunkPeekPanel"/> instead.</summary>
+    public void ExpandCommandMacroBlock(GameObject blockGo)
+    {
+        if (blockGo == null) return;
+        var r = blockGo.GetComponent<QueuedActionRef>();
+        if (r != null && r.isCommandChunk)
+            ToggleChunkPeekPanel(blockGo);
+    }
+
+    private void InsertTokenLabelBlockAt(string token, int uiIndex)
+    {
+        if (string.IsNullOrEmpty(token) || actionQueueTransform == null) return;
+
+        if (ProgramSequenceUtil.IsRepeatStartToken(token, out int count))
+        {
+            if (actionImagePrefab == null) return;
+            GameObject startGo = Instantiate(actionImagePrefab, actionQueueTransform);
+            int clamped = Mathf.Clamp(uiIndex, 0, actionQueueTransform.childCount - 1);
+            startGo.transform.SetSiblingIndex(clamped);
+            var img = startGo.GetComponent<Image>();
+            if (img != null && repeatSprite != null) img.sprite = repeatSprite;
+            var r = startGo.AddComponent<QueuedActionRef>();
+            r.isRepeatStart = true;
+            r.repeatCount = count;
+            r.deletable = true;
+            r.actionLabel = ProgramSequenceUtil.FormatRepeatStart(count);
+            if (addCloseButtonsToQueuedBlocks) AttachCloseButton(startGo);
+            AttachQueuedBlockDragBehaviour(startGo);
+            return;
+        }
+        if (ProgramSequenceUtil.IsRepeatEndToken(token))
+        {
+            if (actionImagePrefab == null) return;
+            GameObject endGo = Instantiate(actionImagePrefab, actionQueueTransform);
+            int clamped = Mathf.Clamp(uiIndex, 0, actionQueueTransform.childCount - 1);
+            endGo.transform.SetSiblingIndex(clamped);
+            var img = endGo.GetComponent<Image>();
+            if (img != null)
+            {
+                if (repeatEndSprite != null) img.sprite = repeatEndSprite;
+                else if (repeatSprite != null) img.sprite = repeatSprite;
+            }
+            var r = endGo.AddComponent<QueuedActionRef>();
+            r.isRepeatEnd = true;
+            r.deletable = true;
+            r.actionLabel = "repeat-end";
+            if (addCloseButtonsToQueuedBlocks) AttachCloseButton(endGo);
+            AttachQueuedBlockDragBehaviour(endGo);
+            return;
+        }
+
+        if (!TryBuildActionFromLabel(token, out CharacterAction action, out Sprite sprite, out string label))
+            return;
+        if (actionImagePrefab == null) return;
+
+        GameObject blockGo = Instantiate(actionImagePrefab, actionQueueTransform);
+        var blockImg = blockGo.GetComponent<Image>();
+        if (blockImg != null) blockImg.sprite = sprite;
+        int idx = Mathf.Clamp(uiIndex, 0, actionQueueTransform.childCount - 1);
+        blockGo.transform.SetSiblingIndex(idx);
+        var refComp = blockGo.AddComponent<QueuedActionRef>();
+        refComp.action = action;
+        refComp.deletable = true;
+        refComp.actionLabel = label;
+        if (addCloseButtonsToQueuedBlocks) AttachCloseButton(blockGo);
+        AttachQueuedBlockDragBehaviour(blockGo);
+    }
+
+    private bool TryBuildActionFromLabel(string token, out CharacterAction action, out Sprite sprite, out string label)
+    {
+        action = null;
+        sprite = null;
+        label = token;
+        string n = ProgramSequenceUtil.NormalizeMotion(token);
+        switch (n)
+        {
+            case "forward":
+                action = new MoveAction(Vector3.forward);
+                sprite = forwardSprite;
+                label = "forward";
+                return true;
+            case "backward":
+                action = new MoveAction(-Vector3.forward);
+                sprite = backwardSprite;
+                label = "backward";
+                return true;
+            case "left":
+                action = new RotateAction(-rotationAngle);
+                sprite = rotateLeftSprite;
+                label = "turn left";
+                return true;
+            case "right":
+                action = new RotateAction(rotationAngle);
+                sprite = rotateRightSprite;
+                label = "turn right";
+                return true;
+        }
+        return false;
     }
 
     private void InsertRepeatPairAt(int uiIndex)
@@ -5853,6 +7448,20 @@ public class CharacterMove : MonoBehaviour
             if (r != null && (r.isRepeatStart || r.isRepeatEnd)) return true;
         }
         return false;
+    }
+
+    /// <summary>True when the level uses Command Bags and should not accept loose arrow tiles.</summary>
+    private bool IsBagOnlyProgramMode(LevelData level = null)
+    {
+        level = level ?? GetCurrentLevelData();
+        if (IsGeometryPathLevel(level) && level.geometryPath?.tools != null)
+        {
+            var tools = level.geometryPath.tools;
+            if (!tools.actionChunks && !tools.commandBags) return false;
+        }
+        if (level?.commandBags == null || level.commandBags.Count == 0) return false;
+        string mode = (level.commandBagMode ?? "BAG").Trim().ToUpperInvariant();
+        return mode == "BAG" || mode == "CHUNK";
     }
 
     /// <summary>True if uiIndex would land strictly between any existing Start and End pair.</summary>
@@ -5983,21 +7592,41 @@ public class CharacterMove : MonoBehaviour
 
     /// <summary>
     /// Called by the close button on a queued block. Removes the block from the
-    /// execution queue immediately (so a Run pressed during the animation runs the
-    /// correct shorter program) and animates the visual block shrinking + fading out
-    /// while neighbour blocks slide in to fill the gap.
+    /// yellow strip and from the student's program. For ProgramBagInstance this
+    /// removes the whole bag (all of its commands) in one step.
     /// </summary>
     public void RemoveQueuedBlock(GameObject blockGo)
     {
         if (blockGo == null) return;
-        if (isProcessing) return;
-        if (actionQueueTransform == null) return;
+        if (_chunkPeekAnchor == blockGo)
+            HideChunkPeekPanelImmediate();
+        if (actionQueueTransform == null)
+        {
+            Destroy(blockGo);
+            return;
+        }
 
         var refComp = blockGo.GetComponent<QueuedActionRef>();
-        string removedLabel = refComp != null ? refComp.actionLabel : "unknown";
 
         // Defensive: never remove a non-deletable block (guided pre-loaded actions).
         if (refComp != null && !refComp.deletable) return;
+
+        // If a run is active/stuck, cancel it so students can edit the program.
+        if (isProcessing)
+        {
+            if (currentMoveCoroutine != null)
+            {
+                StopCoroutine(currentMoveCoroutine);
+                currentMoveCoroutine = null;
+            }
+            isProcessing = false;
+            NotifyCameraRunPresentation(false);
+            Debug.Log("[CharacterMove] Cancelled active RUN so a program item can be removed.");
+        }
+
+        string removedLabel = refComp != null
+            ? (!string.IsNullOrEmpty(refComp.displayTitle) ? refComp.displayTitle : refComp.actionLabel)
+            : blockGo.name;
 
         bool restoreCanvasBlank = refComp != null && refComp.fillsCanvasBlankSlot;
         int restoreSiblingIndex = blockGo.transform.GetSiblingIndex();
@@ -6016,28 +7645,39 @@ public class CharacterMove : MonoBehaviour
         {
             var btn = closeBtnTf.GetComponent<Button>();
             if (btn != null) btn.interactable = false;
+            var close = closeBtnTf.GetComponent<QueuedBlockCloseButton>();
+            if (close != null) close.enabled = false;
         }
 
-        // Mark the block as a "placeholder" so it is skipped by RebuildActionQueueFromUI,
-        // ProcessActions and CleanupInsertionPlaceholders during the shrink animation.
+        // Mark the block as a "placeholder" so it is skipped by CollectProgramTokensFromUI /
+        // RebuildActionQueueFromUI during the shrink animation.
         if (blockGo.GetComponent<QueueInsertionPlaceholder>() == null)
-        {
             blockGo.AddComponent<QueueInsertionPlaceholder>();
-        }
 
-        // Drop the block from the underlying execution queue *now* so the logical
-        // state matches what the user sees (one fewer block in the program).
+        // Remove this item's executable payload immediately. The placeholder marker
+        // already excludes it from UI collection; clearing also prevents stale reuse.
+        if (refComp != null && refComp.macroTokens != null)
+            refComp.macroTokens.Clear();
+
         RebuildActionQueueFromUI();
 
-        string evt = "remove:" + removedLabel;
+        string evt = "remove:" + (removedLabel ?? "unknown");
         playerActions.Add(evt);
         currentAttemptActionLog.Add(new PlayerActionLogEntry { action = evt, timestamp = Time.time });
+
+        Debug.Log($"[CharacterMove] Removed program block '{removedLabel}' ({blockGo.name}).");
 
         StartCoroutine(ShrinkAndDestroyBlock(blockGo, 0.15f));
 
         // Keep the dash/line slot after closing a filled canvas blank.
         if (restoreCanvasBlank)
             RestoreCanvasBlankSlotAt(restoreSiblingIndex);
+
+        // Reflow yellow strip after removal.
+        if (IsBagOnlyProgramMode())
+            EnsureProgramQueueSpacing();
+        if (actionQueueTransform is RectTransform aqRt)
+            LayoutRebuilder.ForceRebuildLayoutImmediate(aqRt);
     }
 
     private GameObject FindPairedRepeatBlock(GameObject from, bool wantStart)
@@ -6087,12 +7727,38 @@ public class CharacterMove : MonoBehaviour
         if (endGo != null) StartCoroutine(ShrinkAndDestroyBlock(endGo, 0.15f));
     }
 
-    /// <summary>Build executable Move/Rotate actions by expanding repeats from the strip.</summary>
+    /// <summary>
+    /// Build executable Move/Rotate actions like arrow tiles do — but flatten EVERY
+    /// program item (arrows + bags) left→right into one combined queue first.
+    /// Yellow-strip sibling order is the source of truth.
+    /// </summary>
     public Queue<CharacterAction> BuildExpandedActionQueueFromUI()
     {
         var q = new Queue<CharacterAction>();
-        var tokens = CollectProgramTokensFromUI();
-        var expanded = ProgramSequenceUtil.Expand(tokens);
+        LevelData level = GetCurrentLevelData();
+        var items = CollectProgramItemsInStripOrder();
+        var concatenated = new List<string>();
+
+        for (int i = 0; i < items.Count; i++)
+        {
+            var item = items[i];
+            List<string> piece = item.GetExecutableTokens(level);
+            string label = !string.IsNullOrEmpty(item.displayTitle)
+                ? item.displayTitle
+                : (!string.IsNullOrEmpty(item.actionLabel) ? item.actionLabel : item.name);
+            Debug.Log($"[CharacterMove] RUN item[{i}/{items.Count}] '{label}' macro={item.IsCommandMacro} tokens=[{string.Join(", ", piece)}]");
+            if (piece != null && piece.Count > 0)
+                concatenated.AddRange(piece);
+            else if (item.action != null)
+                concatenated.Add(GetActionLogString(item.action));
+        }
+
+        // Motion tokens pass through; any leftover bag:/chunk: macros still expand.
+        var resolved = CommandBagUtil.ResolveProgramTokens(concatenated, level);
+        var expanded = ProgramSequenceUtil.Expand(resolved);
+
+        Debug.Log($"[CharacterMove] RUN program: items={items.Count} raw={concatenated.Count} expanded={expanded.Count} → [{string.Join(", ", expanded)}]");
+
         foreach (var tok in expanded)
         {
             switch (ProgramSequenceUtil.NormalizeMotion(tok))
@@ -6114,6 +7780,11 @@ public class CharacterMove : MonoBehaviour
         return q;
     }
 
+    private int CountVisibleProgramItems()
+    {
+        return CollectProgramItemsInStripOrder().Count;
+    }
+
     private bool StudentProgramMatchesCorrectPatterns(LevelData levelData)
     {
         var student = CollectProgramTokensFromUI();
@@ -6128,6 +7799,9 @@ public class CharacterMove : MonoBehaviour
 
         if (levelData?.correctPrograms != null && levelData.correctPrograms.Count > 0)
         {
+            var resolved = CommandBagUtil.ResolveProgramTokens(student, levelData);
+            if (ProgramSequenceUtil.MatchesAnyProgram(resolved, levelData.correctPrograms))
+                return true;
             if (ProgramSequenceUtil.MatchesAnyProgram(student, levelData.correctPrograms))
                 return true;
         }
@@ -6271,16 +7945,9 @@ public class CharacterMove : MonoBehaviour
 
         var refComp = blockGo.GetComponent<QueuedActionRef>();
         if (refComp != null && !refComp.deletable) return;
-        string label = refComp != null ? refComp.actionLabel : "unknown";
 
-        // The execution queue was already updated when the block was picked up
-        // (OnQueuedBlockPickedUp -> RebuildActionQueueFromUI without this block), so
-        // no further rebuild is needed. Just log + animate destroy.
-        string evt = "remove:" + label;
-        playerActions.Add(evt);
-        currentAttemptActionLog.Add(new PlayerActionLogEntry { action = evt, timestamp = Time.time });
-
-        StartCoroutine(FadeAndShrinkAwayBlock(blockGo, 0.18f));
+        // Same removal path as the shared close (X) button — clears macros, rebuilds, reflows.
+        RemoveQueuedBlock(blockGo);
     }
 
     private IEnumerator FadeAndShrinkAwayBlock(GameObject blockGo, float duration)
@@ -6393,6 +8060,10 @@ public class CharacterMove : MonoBehaviour
     private void RebuildActionQueueFromUI()
     {
         if (actionQueueTransform == null) return;
+        // Never wipe a live expanded RUN queue (macros are skipped below, which would
+        // truncate multi-bag programs down to empty / arrows-only mid-run).
+        if (isProcessing) return;
+
         actionQueue.Clear();
         for (int i = 0; i < actionQueueTransform.childCount; i++)
         {
@@ -6409,7 +8080,10 @@ public class CharacterMove : MonoBehaviour
             }
             if (refComp.isRepeatEnd && refComp.action is RepeatBoundaryAction endBa)
                 endBa.repeatCount = refComp.repeatCount;
-            actionQueue.Enqueue(refComp.action);
+            // Bag/chunk macros have no CharacterAction until RUN expands them.
+            if (refComp.isCommandBag || refComp.isCommandChunk) continue;
+            if (refComp.action != null)
+                actionQueue.Enqueue(refComp.action);
         }
     }
 
@@ -6454,7 +8128,7 @@ public class CharacterMove : MonoBehaviour
     /// <summary>
     /// Tints the first non-placeholder block in the queue with
     /// <see cref="executingBlockHighlightColor"/>. Used by <see cref="ProcessActions"/>
-    /// so the kid can see which block of the program is currently firing.
+    /// for simple arrow runs that destroy one UI card per action.
     /// </summary>
     private void HighlightFirstNonPlaceholderQueueChild()
     {
@@ -6468,6 +8142,150 @@ public class CharacterMove : MonoBehaviour
             if (img != null) img.color = executingBlockHighlightColor;
             return;
         }
+    }
+
+    /// <summary>
+    /// Maps each expanded RUN action index to the yellow-strip program item (arrow or bag)
+    /// that produced it — used to highlight the active bag while multi-command bags run.
+    /// </summary>
+    private List<GameObject> BuildExecutingHighlightTargets()
+    {
+        var map = new List<GameObject>();
+        LevelData level = GetCurrentLevelData();
+        var items = CollectProgramItemsInStripOrder();
+        for (int i = 0; i < items.Count; i++)
+        {
+            var item = items[i];
+            if (item == null) continue;
+            var tokens = item.GetExecutableTokens(level) ?? new List<string>();
+            var resolved = CommandBagUtil.ResolveProgramTokens(tokens, level);
+            var expanded = ProgramSequenceUtil.Expand(resolved);
+            int motionCount = 0;
+            for (int t = 0; t < expanded.Count; t++)
+            {
+                string n = ProgramSequenceUtil.NormalizeMotion(expanded[t]);
+                if (n == "forward" || n == "backward" || n == "left" || n == "right")
+                    motionCount++;
+            }
+            for (int m = 0; m < motionCount; m++)
+                map.Add(item.gameObject);
+        }
+        return map;
+    }
+
+    private readonly Dictionary<GameObject, Color> _programItemBaseColors = new Dictionary<GameObject, Color>();
+    private GameObject _highlightedProgramItem;
+    private Coroutine _activeChunkPulse;
+
+    private void HighlightExecutingProgramItem(GameObject itemGo)
+    {
+        if (!highlightExecutingBlock || itemGo == null) return;
+
+        if (_highlightedProgramItem != null && _highlightedProgramItem != itemGo)
+            RestoreProgramItemColor(_highlightedProgramItem);
+
+        var img = itemGo.GetComponent<Image>();
+        if (img == null) return;
+
+        if (!_programItemBaseColors.ContainsKey(itemGo))
+            _programItemBaseColors[itemGo] = img.color;
+
+        // Brighten this chunk’s own color — never force a yellow “debug” tint for chunks.
+        Color baseCol = _programItemBaseColors[itemGo];
+        var refComp = itemGo.GetComponent<QueuedActionRef>();
+        Color lit;
+        if (refComp != null && refComp.isCommandChunk)
+        {
+            Color identity = CommandBagUiHelper.PuzzleFillFromCard(baseCol);
+            lit = Color.Lerp(baseCol, identity, 0.55f);
+            lit = Color.Lerp(lit, Color.white, 0.12f);
+            var outline = itemGo.GetComponent<Outline>();
+            if (outline != null)
+            {
+                outline.enabled = true;
+                Color b = CommandBagUiHelper.PuzzleBorderFromCard(identity);
+                outline.effectColor = new Color(b.r, b.g, b.b, 0.85f);
+                outline.effectDistance = new Vector2(2.5f, -2.5f);
+            }
+        }
+        else
+        {
+            lit = Color.Lerp(baseCol, executingBlockHighlightColor, 0.55f);
+            lit = Color.Lerp(lit, Color.white, 0.08f);
+        }
+        img.color = lit;
+        _highlightedProgramItem = itemGo;
+
+        if (_activeChunkPulse != null) StopCoroutine(_activeChunkPulse);
+        _activeChunkPulse = StartCoroutine(PulseActiveChunkOnce(itemGo.transform));
+
+        // If this chunk’s peek is open, flash the next command cue via panel border.
+        if (_chunkPeekAnchor == itemGo && _chunkPeekPanel != null && _chunkPeekPanel.activeSelf)
+            PulsePeekPanelBorder();
+    }
+
+    IEnumerator PulseActiveChunkOnce(Transform chip)
+    {
+        if (chip == null) yield break;
+        Vector3 baseScale = chip.localScale;
+        float dur = 0.16f;
+        float elapsed = 0f;
+        while (elapsed < dur && chip != null)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            float u = Mathf.Clamp01(elapsed / dur);
+            float bump = Mathf.Sin(u * Mathf.PI) * 0.06f;
+            chip.localScale = baseScale * (1f + bump);
+            yield return null;
+        }
+        if (chip != null) chip.localScale = baseScale;
+        _activeChunkPulse = null;
+    }
+
+    void PulsePeekPanelBorder()
+    {
+        if (_chunkPeekPanel == null) return;
+        var outline = _chunkPeekPanel.GetComponent<Outline>();
+        if (outline == null) return;
+        Color c = outline.effectColor;
+        outline.effectDistance = new Vector2(4f, -4f);
+        outline.effectColor = Color.Lerp(c, Color.white, 0.35f);
+        StartCoroutine(RestorePeekBorder(outline, c));
+    }
+
+    IEnumerator RestorePeekBorder(Outline outline, Color original)
+    {
+        yield return new WaitForSecondsRealtime(0.14f);
+        if (outline != null)
+        {
+            outline.effectColor = original;
+            outline.effectDistance = new Vector2(2.5f, -2.5f);
+        }
+    }
+
+    private void RestoreProgramItemColor(GameObject itemGo)
+    {
+        if (itemGo == null) return;
+        var img = itemGo.GetComponent<Image>();
+        if (img != null && _programItemBaseColors.TryGetValue(itemGo, out Color baseColor))
+            img.color = baseColor;
+    }
+
+    private void ClearExecutingProgramHighlights()
+    {
+        if (_activeChunkPulse != null)
+        {
+            StopCoroutine(_activeChunkPulse);
+            _activeChunkPulse = null;
+        }
+        foreach (var kv in _programItemBaseColors)
+        {
+            if (kv.Key == null) continue;
+            var img = kv.Key.GetComponent<Image>();
+            if (img != null) img.color = kv.Value;
+        }
+        _programItemBaseColors.Clear();
+        _highlightedProgramItem = null;
     }
 
     private bool IsKindInteractable(DraggableActionBlock.ActionKind kind)
@@ -6528,25 +8346,33 @@ public class CharacterMove : MonoBehaviour
     /// prefab has its own LayoutGroup the close button keeps the size specified by
     /// closeButtonSize and never gets squashed.
     /// </summary>
-    private void AttachCloseButton(GameObject blockGo)
+    private void AttachCloseButton(GameObject blockGo) => AttachCloseButton(blockGo, -1f);
+
+    private void AttachCloseButton(GameObject blockGo, float sizeOverride)
     {
         if (blockGo == null) return;
+
         // Avoid duplicates if EnqueueAction is called twice on the same block.
         if (blockGo.transform.Find("CloseButton") != null) return;
 
-        var btnGo = new GameObject("CloseButton", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
+        var btnGo = new GameObject("CloseButton", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement), typeof(QueuedBlockCloseButton));
         btnGo.transform.SetParent(blockGo.transform, false);
         btnGo.transform.SetAsLastSibling(); // draw on top of the block icon
         var rt = (RectTransform)btnGo.transform;
         rt.anchorMin = new Vector2(1f, 1f);
         rt.anchorMax = new Vector2(1f, 1f);
         rt.pivot     = new Vector2(1f, 1f);
+        rt.localScale = Vector3.one;
+        rt.localRotation = Quaternion.identity;
 
         // Repeat blocks: use signed offset so we can pull the X left toward the art.
         var queued = blockGo.GetComponent<QueuedActionRef>();
         bool isRepeat = queued != null && (queued.isRepeatStart || queued.isRepeatEnd);
+        bool isCommandMacro = queued != null && queued.IsCommandMacro;
 
-        float btnSize = isRepeat ? repeatCloseButtonSize : closeButtonSize;
+        float btnSize = sizeOverride > 0f
+            ? sizeOverride
+            : (isRepeat ? repeatCloseButtonSize : closeButtonSize);
         rt.sizeDelta = new Vector2(btnSize, btnSize);
 
         if (isRepeat)
@@ -6567,15 +8393,23 @@ public class CharacterMove : MonoBehaviour
         }
         else
         {
-            Vector2 anchored = closeButtonOverhang
+            // Bag cards live inside a masked ScrollRect, so their X must stay inside.
+            bool overhang = closeButtonOverhang && !isCommandMacro;
+            Vector2 anchored = overhang
                 ? new Vector2(Mathf.Abs(closeButtonOffset.x), Mathf.Abs(closeButtonOffset.y))
-                : new Vector2(-Mathf.Abs(closeButtonOffset.x), -Mathf.Abs(closeButtonOffset.y));
+                : new Vector2(-2f, -2f);
             rt.anchoredPosition = anchored;
         }
 
         // Force the button's size regardless of any LayoutGroup the prefab might add.
         var le = btnGo.GetComponent<LayoutElement>();
         le.ignoreLayout = true;
+        le.minWidth = btnSize;
+        le.minHeight = btnSize;
+        le.preferredWidth = btnSize;
+        le.preferredHeight = btnSize;
+        le.flexibleWidth = 0f;
+        le.flexibleHeight = 0f;
 
         var bgImg = btnGo.GetComponent<Image>();
         bgImg.raycastTarget = true;
@@ -6598,8 +8432,21 @@ public class CharacterMove : MonoBehaviour
         }
 
         var button = btnGo.GetComponent<Button>();
-        var capturedBlock = blockGo;
-        button.onClick.AddListener(() => RemoveQueuedBlock(capturedBlock));
+        button.targetGraphic = bgImg;
+        button.interactable = true;
+        button.transition = Selectable.Transition.None;
+
+        // Do NOT add a nested Canvas here — override-sorting canvases inside ProgramBagScroll
+        // (RectMask2D) break close/reorder raycasts. EnsureBagCloseRaycastPriority +
+        // QueuedBlockCloseButton pointer-down remove are enough for bags and arrows.
+
+        // Pointer-down remove — parent DraggableQueuedBlock cannot steal the X as a drag.
+        var close = btnGo.GetComponent<QueuedBlockCloseButton>();
+        close.characterMove = this;
+        close.targetBlock = blockGo;
+
+        btnGo.transform.SetAsLastSibling();
+        Debug.Log($"[CharacterMove] CloseButton attached on '{blockGo.name}' size={btnSize}");
     }
 
     private void AddCloseGlyphLine(Transform parent, float zRotationDegrees, float buttonSize)
@@ -6660,6 +8507,13 @@ public class CharacterMove : MonoBehaviour
 
     private IEnumerator StartActionProcessingRoutine()
     {
+        // Prevent double-RUN from replacing actionQueue mid-execution.
+        if (isProcessing)
+        {
+            Debug.Log("[StartActionProcessing] Already processing — ignore duplicate RUN.");
+            yield break;
+        }
+
         LevelData runLevel = GetCurrentLevelData();
         if (IsRunBlockedByFlagRequirement())
         {
@@ -6680,6 +8534,13 @@ public class CharacterMove : MonoBehaviour
         var client = GameAssessmentClient.Instance;
         if (client != null)
             yield return client.WaitForPendingReports();
+
+        // Re-check after awaits — another RUN may have started.
+        if (isProcessing)
+        {
+            SetRunStartupUI(false);
+            yield break;
+        }
 
         StopFadingAndResetSpriteColor();
         CleanupInsertionPlaceholders();
@@ -6715,32 +8576,55 @@ public class CharacterMove : MonoBehaviour
         }
 
         ResetRobotToLevelStart();
+        GeometryPathController.Instance?.BeginRunTracking();
 
         attemptStartGridPos = robotGridPosition;
         attemptStartFacing = facingDirection;
         movesUsedInCurrentAttempt = 0;
         Debug.Log($"[StartActionProcessing] Recording attempt start: pos={attemptStartGridPos}, facing={attemptStartFacing}, movesUsed=0, currentAttempt={currentAttempt}");
 
-        // Expand repeats into a flat executable queue for grid / number-line runs.
+        // Expand ALL bags/chunks/repeats into one flat executable queue (left→right strip order).
         bool hasRepeat = QueueAlreadyHasRepeat();
+        bool hasMacro = QueueAlreadyHasCommandMacro();
         Queue<CharacterAction> expanded = BuildExpandedActionQueueFromUI();
-        if (expanded.Count > 0)
-            actionQueue = expanded;
+        // Always replace — never keep a stale single-bag actionQueue from RebuildActionQueueFromUI
+        // (that rebuild skips macros, so it cannot be the run source for Command Bags).
+        actionQueue = expanded ?? new Queue<CharacterAction>();
+
+        if (hasMacro && actionQueue.Count == 0)
+            Debug.LogWarning("[StartActionProcessing] Command bags present but expanded queue is empty — check bag tokens.");
+
+        Debug.Log($"[StartActionProcessing] Executable action count={actionQueue.Count} hasMacro={hasMacro} hasRepeat={hasRepeat} stripItems={CountVisibleProgramItems()}");
 
         if (!isProcessing && actionQueue.Count > 0)
         {
             isProcessing = true;
-            // Repeat expands to more actions than UI blocks — don't destroy strip 1:1.
-            if ((runLevel != null && !runLevel.runRobotOnSubmit) || hasRepeat)
+            var runSnapshot = new Queue<CharacterAction>(actionQueue);
+            bool answerOnly = runLevel != null && !runLevel.runRobotOnSubmit;
+            bool geometry = IsGeometryPathLevel(runLevel);
+            // Bags, repeats, and Geometry Path: keep yellow-strip UI and ANIMATE the
+            // expanded sequence so kids see the robot (and the geometry trail) move.
+            bool preserveUi = hasMacro || hasRepeat || geometry;
+
+            if (answerOnly && !geometry)
             {
-                if (chatGPTResponseText != null && runLevel != null && !runLevel.runRobotOnSubmit)
+                if (chatGPTResponseText != null)
                     chatGPTResponseText.text = "Checking your answer…";
                 currentMoveCoroutine = StartCoroutine(ProcessActionsWithoutRobotAnimation());
             }
             else
             {
-                currentMoveCoroutine = StartCoroutine(ProcessActions());
+                if (hasRepeat && chatGPTResponseText != null && geometry)
+                    chatGPTResponseText.text = "Watch the robot trace the path…";
+                currentMoveCoroutine = StartCoroutine(ProcessActions(
+                    preserveProgramUi: preserveUi,
+                    actionsOverride: runSnapshot));
             }
+        }
+        else if (!isProcessing && actionQueue.Count == 0)
+        {
+            Debug.LogWarning("[StartActionProcessing] Expanded action queue is empty — nothing to run (check Repeat body / tokens).");
+            GeometryPathController.Instance?.EndRunTracking();
         }
     }
 
@@ -6866,6 +8750,10 @@ public class CharacterMove : MonoBehaviour
         Debug.Log($"[CharacterMove] Run failed: attempt {currentAttempt} of {levelData.maxAttempts}");
 
         ReportCurrentRunToPlatform(false);
+
+        // Geometry Path: shape must stay visible on the wrong-answer screen.
+        if (IsGeometryPathLevel(levelData))
+            RestoreGeometryPathForNewAttempt(levelData);
 
         if (currentAttempt >= levelData.maxAttempts)
         {
@@ -7170,6 +9058,33 @@ public class CharacterMove : MonoBehaviour
                 yield break;
             }
 
+            if (IsGeometryPathLevel(levelData))
+            {
+                GeometryPathController.Instance?.EndRunTracking();
+                FinishInstantRunQueueUI(executedActions);
+                isProcessing = false;
+                bool geoOk = GeometryPathController.Instance != null &&
+                    GeometryPathController.Instance.ValidateAfterRun(
+                        levelData, robotGridPosition, facingDirection);
+                if (geoOk)
+                {
+                    hasReachedEndObject = true;
+                    pendingLevelPassed = true;
+                    ResetRobotToLevelStart();
+                    SnapRobotToLogicalGridCell();
+                    StartCoroutine(CompleteLevelSuccessfully());
+                    yield break;
+                }
+
+                HandleRunFailure(levelData, GeometryPathController.Instance != null
+                    ? GeometryPathController.Instance.GetFailureHint()
+                    : "Trace the glowing path with your program.");
+                ResetRobotToLevelStart();
+                SnapRobotToLogicalGridCell();
+                RestoreGeometryPathForNewAttempt(levelData);
+                yield break;
+            }
+
             FinishInstantRunQueueUI(executedActions);
             isProcessing = false;
 
@@ -7211,33 +9126,59 @@ public class CharacterMove : MonoBehaviour
         }
     }
 
-    private IEnumerator ProcessActions()
+    private IEnumerator ProcessActions(bool preserveProgramUi = false, Queue<CharacterAction> actionsOverride = null)
     {
         NotifyCameraRunPresentation(true);
         try
         {
-        int actionsInThisRun = actionQueue.Count; 
+        // Prefer the explicit snapshot from RUN so RebuildActionQueueFromUI cannot truncate
+        // multi-bag programs (it skips macros and would clear the live queue).
+        var pending = actionsOverride != null
+            ? new Queue<CharacterAction>(actionsOverride)
+            : new Queue<CharacterAction>(actionQueue ?? new Queue<CharacterAction>());
+        actionQueue = new Queue<CharacterAction>(pending);
+        int actionsInThisRun = pending.Count;
+        Debug.Log($"[ProcessActions] Starting run with {actionsInThisRun} actions (preserveProgramUi={preserveProgramUi}).");
         Queue<CharacterAction> successfullyExecutedActions = new Queue<CharacterAction>();
         LevelData levelData = GetCurrentLevelData();
         isProcessing = true;
-        while (actionQueue.Count > 0)
+        ClearExecutingProgramHighlights();
+        // When bags stay on the strip, map each expanded step → owning program item for highlight.
+        List<GameObject> highlightByStep = preserveProgramUi ? BuildExecutingHighlightTargets() : null;
+        int step = 0;
+        while (pending.Count > 0)
         {
-            var action = actionQueue.Dequeue();
-            HighlightFirstNonPlaceholderQueueChild();
+            var action = pending.Dequeue();
+            // Keep field in sync for any code that peeks actionQueue mid-run.
+            actionQueue = new Queue<CharacterAction>(pending);
+            step++;
+            Debug.Log($"[ProcessActions] Step {step}/{actionsInThisRun}: {GetActionLogString(action)} (remaining={pending.Count})");
+
+            if (preserveProgramUi && highlightByStep != null && step - 1 < highlightByStep.Count)
+                HighlightExecutingProgramItem(highlightByStep[step - 1]);
+            else
+                HighlightFirstNonPlaceholderQueueChild();
+
             if (action != null)
                 yield return action.Execute(this);
+
+            // Out-of-grid / obstacle: bump like an obstacle, then CONTINUE remaining commands
+            // (same as SimulateOneCommandOnGrid — blocked moves do not abort the program).
             if (_lastMoveBlocked)
             {
                 _lastMoveBlocked = false;
-                isProcessing = false;
-                HandleRunFailure(levelData, "Blocked by obstacle");
-                yield break;
+                Debug.Log($"[ProcessActions] Step {step} blocked (obstacle/edge) — continuing with remaining commands.");
             }
+
             successfullyExecutedActions.Enqueue(action);
-            DestroyFirstNonPlaceholderQueueChild();
+            // Bag/chunk macros: one UI card maps to many actions — keep the program strip intact.
+            if (!preserveProgramUi)
+                DestroyFirstNonPlaceholderQueueChild();
 
         }
+        Debug.Log($"[ProcessActions] Finished all {successfullyExecutedActions.Count} actions.");
         isProcessing = false;
+        ClearExecutingProgramHighlights();
         // Keep the queue panel active in drag-and-drop mode so it can still receive drops
         // when empty. Otherwise restore the original "hide when empty" behaviour.
         if (!useDragAndDropForActions)
@@ -7279,6 +9220,31 @@ public class CharacterMove : MonoBehaviour
             yield break;
         }
 
+        // Geometry Path: grade by traced edges (existing program pipeline already moved the robot).
+        if (IsGeometryPathLevel(levelData))
+        {
+            GeometryPathController.Instance?.EndRunTracking();
+            bool geoOk = GeometryPathController.Instance != null &&
+                GeometryPathController.Instance.ValidateAfterRun(
+                    levelData, robotGridPosition, facingDirection);
+            if (geoOk)
+            {
+                hasReachedEndObject = true;
+                pendingLevelPassed = true;
+                StartCoroutine(CompleteLevelSuccessfully());
+                yield break;
+            }
+
+            HandleRunFailure(levelData, GeometryPathController.Instance != null
+                ? GeometryPathController.Instance.GetFailureHint()
+                : "Trace the glowing path with your program.");
+            // Return robot home so the restored shape is readable under the Try Again popup.
+            ResetRobotToLevelStart();
+            SnapRobotToLogicalGridCell();
+            RestoreGeometryPathForNewAttempt(levelData);
+            yield break;
+        }
+
         ApplyVisitSequenceFlagsFromRunReplay(levelData, successfullyExecutedActions);
         bool robotReachedEndObject = RobotReachedEndAfterRun(levelData);
 
@@ -7312,6 +9278,10 @@ public class CharacterMove : MonoBehaviour
         }
         finally
         {
+            GeometryPathController.Instance?.EndRunTracking();
+            ClearExecutingProgramHighlights();
+            isProcessing = false;
+            currentMoveCoroutine = null;
             NotifyCameraRunPresentation(false);
         }
     }
@@ -8367,6 +10337,7 @@ public class CharacterMove : MonoBehaviour
         if (runButton != null && !UsesGuidedBlankFlow(levelData))
             runButton.interactable = !IsRunBlockedByFlagRequirement();
 
+        RestoreGeometryPathForNewAttempt(levelData);
         RefreshStudentResetButtonState();
         
         // Update UI text with level-specific instructions

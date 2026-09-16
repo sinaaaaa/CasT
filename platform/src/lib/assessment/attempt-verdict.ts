@@ -12,6 +12,7 @@ import type { ChoiceActionAnalysisResult } from "@/lib/assessment/choiceActionAn
 import type { DebuggingAnalysisResult } from "@/lib/assessment/debuggingAnalysis";
 import type { PathBuildingAnalysisResult } from "@/lib/assessment/pathBuildingAnalysis";
 import type { NumberLineEvidence } from "@/lib/assessment/assessmentTypes";
+import type { GeometryPathAnalysisResult } from "@/lib/assessment/geometryPathAnalysis";
 
 export type VerdictTone = "success" | "warning" | "danger" | "neutral";
 
@@ -38,6 +39,7 @@ export type AttemptVerdictInput = {
   choice: ChoiceActionAnalysisResult | null | undefined;
   debugging: DebuggingAnalysisResult | null | undefined;
   pathBuilding: PathBuildingAnalysisResult | null | undefined;
+  geometryPath?: GeometryPathAnalysisResult | null;
   numberLine: NumberLineEvidence | null | undefined;
   /** Canvas / pattern / count items. */
   canvasPattern?: {
@@ -503,6 +505,90 @@ function canvasPatternVerdict(r: NonNullable<AttemptVerdictInput["canvasPattern"
   };
 }
 
+function geometryVerdict(r: GeometryPathAnalysisResult): AttemptVerdict {
+  if (r.requiresDestination) {
+    if (r.combinedOutcome === "geometry_and_destination" || r.outcome === "correct") {
+      return {
+        headline: "Correct — geometry traced and destination reached.",
+        detail: r.summary,
+        fix: null,
+        tone: "success",
+        confidence: null,
+      };
+    }
+    if (r.combinedOutcome === "geometry_only") {
+      return {
+        headline: "Almost — shape complete, but destination missed.",
+        detail: r.summary,
+        fix: "After tracing the shape, keep going to the highlighted destination.",
+        tone: "warning",
+        confidence: null,
+      };
+    }
+    if (r.combinedOutcome === "destination_only") {
+      return {
+        headline: "Almost — destination reached, but geometry incomplete.",
+        detail: r.summary,
+        fix: "Have the student trace every edge of the glowing shape before heading to the destination.",
+        tone: "warning",
+        confidence: null,
+      };
+    }
+    if (r.outcome === "partial" || (r.hasTelemetry && r.completedEdgeCount > 0)) {
+      return {
+        headline: "Partial — geometry and destination both need work.",
+        detail: r.summary,
+        fix: "Plan the full route: draw the shape first, then navigate to the destination.",
+        tone: "warning",
+        confidence: null,
+      };
+    }
+    return {
+      headline: "Not yet — geometry and destination incomplete.",
+      detail: r.summary,
+      fix: "Have the student plan the shape, then the path to the destination.",
+      tone: "danger",
+      confidence: null,
+    };
+  }
+
+  if (r.outcome === "correct" || (r.hasTelemetry && r.pathCompletionPct >= 100 && r.extraEdgeCount === 0)) {
+    return {
+      headline: "Correct — the robot traced the geometry.",
+      detail: r.summary,
+      fix: null,
+      tone: "success",
+      confidence: null,
+    };
+  }
+  if (r.outcome === "partial" || (r.hasTelemetry && r.completedEdgeCount > 0)) {
+    return {
+      headline: "Almost — part of the path was traced.",
+      detail: r.summary,
+      fix:
+        r.missedEdgeCount > 0
+          ? "Have the student revisit missed edges on the glowing shape."
+          : r.extraEdgeCount > 0
+            ? "Ask them to avoid traveling edges that are not part of the target shape."
+            : "Compare the robot trail with the target shape.",
+      tone: "warning",
+      confidence: r.hasTelemetry
+        ? null
+        : {
+            level: "medium",
+            note: "Edge telemetry was limited for this attempt, so treat the details as approximate.",
+          },
+    };
+  }
+  return {
+    headline: "Not yet — the geometry path was not completed.",
+    detail: r.summary,
+    fix: "Have the student plan the path on paper, then build the program step by step.",
+    tone: "danger",
+    confidence: null,
+  };
+}
+
 export function buildAttemptVerdict(input: AttemptVerdictInput): AttemptVerdict {
   const goalLabel = input.goalLabel || "goal";
 
@@ -510,6 +596,7 @@ export function buildAttemptVerdict(input: AttemptVerdictInput): AttemptVerdict 
     if (input.prediction) return flagVerdict(input.prediction, goalLabel);
   }
   if (input.choice?.available) return choiceVerdict(input.choice);
+  if (input.geometryPath?.available) return geometryVerdict(input.geometryPath);
   if (input.pathBuilding?.available) return pathVerdict(input.pathBuilding, goalLabel);
   if (input.debugging?.available) return debuggingVerdict(input.debugging, goalLabel);
   if (input.numberLine) return numberLineVerdict(input.numberLine, input.fallback.passed);

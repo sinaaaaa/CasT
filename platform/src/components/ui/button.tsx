@@ -39,7 +39,9 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         className={cn(buttonVariants({ variant, size, className }))}
         ref={ref}
         {...props}
-        disabled={Boolean(disabled)}
+        // Only pass `disabled` when true. `disabled={false}` becomes `null` in SSR HTML
+        // and can disagree with the client, triggering hydration warnings.
+        {...(disabled ? { disabled: true } : {})}
       />
     );
   }

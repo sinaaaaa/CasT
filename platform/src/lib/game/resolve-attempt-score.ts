@@ -13,6 +13,8 @@ import {
 } from "@/lib/assessment/routeAnalysis";
 import { matchesAnyCorrectProgram, suggestProgramVariants } from "@/lib/assessment/expand-repeats";
 import { levelGameplayConfigSchema, type LevelGameplayConfig, isCanvasLayout, isIntroItem, parseCountAnswerToken, isCountAnswerStrip } from "@/lib/level-config";
+import { resolveGeometryPathPassed } from "@/lib/assessment/geometryPathAnalysis";
+import { parseGeometryPathTelemetry } from "@/lib/attempt-mistakes";
 
 /** Unity JsonUtility may send 0/1 or string booleans — normalize for scoring. */
 export function parseUnityBoolean(value: unknown): boolean | null {
@@ -327,6 +329,26 @@ export function resolveAttemptEndScore(params: {
   });
   if (!resolvedPassed && routePassed === true) resolvedPassed = true;
   else if (resolvedPassed && routePassed === false && !unityPassed) resolvedPassed = false;
+
+  if (params.levelType === LevelType.GEOMETRY_PATH && config) {
+    const tokens = (params.finalCommand ?? "")
+      .split(/[;,]/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const geoPassed = resolveGeometryPathPassed({
+      config,
+      mistakes: params.mistakes,
+      programTokens: tokens,
+    });
+    if (geoPassed === true) {
+      resolvedPassed = true;
+      if (resolvedScore == null || resolvedScore <= 0) resolvedScore = 100;
+    } else if (geoPassed === false && parseGeometryPathTelemetry(params.mistakes)) {
+      // Prefer server geometry evidence when telemetry is present.
+      resolvedPassed = false;
+      if (resolvedScore == null || resolvedScore >= 100) resolvedScore = 0;
+    }
+  }
 
   if (!resolvedPassed && (resolvedScore == null || resolvedScore >= 100)) {
     resolvedScore = 0;

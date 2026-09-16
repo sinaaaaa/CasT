@@ -73,7 +73,7 @@ public class LoginSceneManager : MonoBehaviour
         Application.OpenURL(FLASK_URL + "/student");
         
         // Set the target scene for the loading screen
-        PlayerPrefs.SetString("SceneToLoadAfterLoading", "Level1");
+        PlayerPrefs.SetString("SceneToLoadAfterLoading", "level1");
         PlayerPrefs.Save();
         
         // Load the loading scene

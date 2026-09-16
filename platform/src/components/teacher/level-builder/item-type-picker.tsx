@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Flag, GitBranch, MousePointerClick, Wrench } from "lucide-react";
+import { Flag, GitBranch, MousePointerClick, Pentagon, Wrench } from "lucide-react";
 import { LevelType } from "@prisma/client";
 import { LEVEL_TYPE_HELP, LEVEL_TYPE_LABELS } from "@/lib/level-config";
 import { cn } from "@/lib/utils";
@@ -11,6 +11,7 @@ const PLAYABLE_TYPES = [
   LevelType.DRAG_EDIT_PROGRAM,
   LevelType.FLAG_PLACEMENT,
   LevelType.CHOOSE_BUTTONS,
+  LevelType.GEOMETRY_PATH,
 ] as const;
 
 const TYPE_META: Record<
@@ -36,6 +37,11 @@ const TYPE_META: Record<
     icon: MousePointerClick,
     example: "Fill in the missing turn or move",
     gradient: "from-sky-500 to-blue-600",
+  },
+  [LevelType.GEOMETRY_PATH]: {
+    icon: Pentagon,
+    example: "Program the robot to trace a glowing shape",
+    gradient: "from-violet-500 to-indigo-600",
   },
 };
 

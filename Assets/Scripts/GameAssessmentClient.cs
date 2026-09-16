@@ -565,6 +565,17 @@ public class GameAssessmentClient : MonoBehaviour
         public int maxLevelRuns;
         /// <summary>1-based slot in the student's assigned item list (for accurate reporting).</summary>
         public int playSlot;
+        /// <summary>Geometry Path: undirected edge keys the robot traveled this run.</summary>
+        public string[] geometryTraveledKeys;
+        /// <summary>Geometry Path: target edges completed this run.</summary>
+        public string[] geometryCompletedKeys;
+        /// <summary>Geometry Path: ordered edge keys as traveled (for post-shape movement).</summary>
+        public string[] geometryTravelOrder;
+        public int geometryFinalCellX = -1;
+        public int geometryFinalCellY = -1;
+        public int geometryFinalFacingX;
+        public int geometryFinalFacingY;
+        public bool geometryHasTelemetry;
     }
 
     [Serializable]

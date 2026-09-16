@@ -15,10 +15,12 @@ import {
   type LevelDetailPayload,
 } from "@/components/teacher/level-detail-tabs";
 import { type LevelAttemptRow } from "@/components/assessment/level-attempts-table";
-import { LEVEL_TYPE_LABELS } from "@/lib/level-config";
+import { LEVEL_TYPE_LABELS, levelGameplayConfigSchema } from "@/lib/level-config";
 import { AttemptStatus } from "@prisma/client";
 import { formatAttemptRunLabel, parseAttemptRunMeta } from "@/lib/attempt-mistakes";
 import { resolveAttemptDurationSeconds } from "@/lib/game/resolve-attempt-duration";
+import { buildGeometryPathAnalysisFromAttempt } from "@/lib/assessment/geometryPathAnalysis";
+import { isGeometryPathLevel } from "@/lib/assessment/assessmentConfig";
 
 async function LevelDetailContent({ id }: { id: string }) {
   const session = await getServerSession(authOptions);
@@ -95,6 +97,35 @@ async function LevelDetailContent({ id }: { id: string }) {
     };
   });
 
+  const parsedConfig = levelGameplayConfigSchema.safeParse(level.config);
+  let geometryMetrics: LevelDetailPayload["geometryMetrics"] = null;
+  if (parsedConfig.success && isGeometryPathLevel(parsedConfig.data, level.levelType)) {
+    const analyses = attempts.map((a) =>
+      buildGeometryPathAnalysisFromAttempt({
+        config: parsedConfig.data,
+        levelType: level.levelType,
+        mistakes: a.mistakes,
+        passed: a.passed,
+      })
+    );
+    const withTel = analyses.filter((x) => x.hasTelemetry);
+    const avg = (vals: number[]) =>
+      vals.length ? Math.round(vals.reduce((s, v) => s + v, 0) / vals.length) : null;
+    const cmdUses = attempts.map((a) => (a.finalCommand ?? "").toLowerCase());
+    const pct = (pred: (c: string) => boolean) => {
+      if (cmdUses.length === 0) return null;
+      return Math.round((cmdUses.filter(pred).length / cmdUses.length) * 100);
+    };
+    geometryMetrics = {
+      avgCompletionPct: avg(withTel.map((x) => x.pathCompletionPct)),
+      avgAccuracyPct: avg(withTel.map((x) => x.pathAccuracyPct)),
+      attemptsWithTelemetry: withTel.length,
+      pctUsingRepeat: pct((c) => c.includes("repeat")),
+      pctUsingChunks: pct((c) => c.includes("chunk:")),
+      pctUsingBags: pct((c) => c.includes("bag:")),
+    };
+  }
+
   const payload: LevelDetailPayload = {
     id: level.id,
     levelKey: level.levelKey,
@@ -114,6 +145,7 @@ async function LevelDetailContent({ id }: { id: string }) {
     },
     chartData,
     attempts: rows,
+    geometryMetrics,
   };
 
   return <LevelDetailTabs level={payload} />;

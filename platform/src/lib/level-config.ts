@@ -1,6 +1,27 @@
 import { z } from "zod";
 import { LevelType } from "@prisma/client";
 import { expandRepeatTokens } from "@/lib/assessment/expand-repeats";
+import {
+  DEFAULT_GEOMETRY_PATH,
+  geometryPathConfigSchema,
+  generateShapeSegments,
+  syncGeometryPathToolsToConfig,
+  type GeometryPathConfig,
+} from "@/lib/geometry-path";
+
+export type { GeometryPathConfig, GeometryShapeType, GeometryValidationMode, PathSegment } from "@/lib/geometry-path";
+export {
+  GEOMETRY_SHAPE_LABELS,
+  GEOMETRY_VALIDATION_LABELS,
+  GEOMETRY_VALIDATION_HELP,
+  GEOMETRY_TOOL_PRESETS,
+  DEFAULT_GEOMETRY_PATH,
+  geometryPathReady,
+  buildGeometryAuthoringSummary,
+  generateShapeSegments,
+  syncGeometryPathToolsToConfig,
+} from "@/lib/geometry-path";
+export type { GeometryToolPresetId } from "@/lib/geometry-path";
 
 const vec2 = z.object({ x: z.number().int(), y: z.number().int() });
 
@@ -312,6 +333,94 @@ export const ALL_ROBOT_ACTION_BUTTONS: RobotActionButton[] = [
 
 export const DEFAULT_ENABLED_ACTION_BUTTONS: RobotActionButton[] = [...ALL_ROBOT_ACTION_BUTTONS];
 
+/**
+ * Command Bags (toolbox) → Chunks (mini-programs) → motion / repeat tokens.
+ * Used by grid DRAG_ACTIONS activities; independent of canvas exampleChunk.
+ */
+export const commandBagModeSchema = z.enum(["BAG", "CHUNK", "MIXED"]);
+export type CommandBagMode = z.infer<typeof commandBagModeSchema>;
+
+export const commandChunkSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  /** Hex color for the chunk puzzle identity in Unity (e.g. #9E66EB). */
+  color: z.string().optional(),
+  /** Same token vocabulary as guidedActions / yellow strip (forward, turn left, repeat:N, …). */
+  tokens: z.array(z.string()).default([]),
+});
+export type CommandChunk = z.infer<typeof commandChunkSchema>;
+
+export const commandBagSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  /** Hex color for the bag card (e.g. #4F46E5). */
+  color: z.string().optional(),
+  /** Optional icon key or image URL. */
+  icon: z.string().optional(),
+  chunks: z.array(commandChunkSchema).default([]),
+});
+export type CommandBag = z.infer<typeof commandBagSchema>;
+
+/** Prefixes for yellow-strip macro tokens (Unity + assessment). */
+export const COMMAND_BAG_TOKEN_PREFIX = "bag:";
+export const COMMAND_CHUNK_TOKEN_PREFIX = "chunk:";
+
+export function formatCommandBagToken(bagId: string): string {
+  return `${COMMAND_BAG_TOKEN_PREFIX}${bagId}`;
+}
+
+export function formatCommandChunkToken(chunkId: string): string {
+  return `${COMMAND_CHUNK_TOKEN_PREFIX}${chunkId}`;
+}
+
+export function parseCommandBagToken(token: string | null | undefined): string | null {
+  if (!token?.startsWith(COMMAND_BAG_TOKEN_PREFIX)) return null;
+  const id = token.slice(COMMAND_BAG_TOKEN_PREFIX.length).trim();
+  return id || null;
+}
+
+export function parseCommandChunkToken(token: string | null | undefined): string | null {
+  if (!token?.startsWith(COMMAND_CHUNK_TOKEN_PREFIX)) return null;
+  const id = token.slice(COMMAND_CHUNK_TOKEN_PREFIX.length).trim();
+  return id || null;
+}
+
+/** Flatten bag:/chunk: macros using level commandBags definitions (for scoring / preview). */
+export function resolveCommandBagProgramTokens(
+  tokens: string[],
+  bags: CommandBag[] | null | undefined
+): string[] {
+  if (!tokens?.length) return [];
+  if (!bags?.length) return [...tokens];
+
+  const bagById = new Map(bags.map((b) => [b.id, b]));
+  const chunkById = new Map<string, CommandChunk>();
+  for (const bag of bags) {
+    for (const chunk of bag.chunks ?? []) chunkById.set(chunk.id, chunk);
+  }
+
+  const out: string[] = [];
+  for (const tok of tokens) {
+    const bagId = parseCommandBagToken(tok);
+    if (bagId) {
+      const bag = bagById.get(bagId);
+      if (!bag) continue;
+      for (const chunk of bag.chunks ?? []) {
+        out.push(...(chunk.tokens ?? []));
+      }
+      continue;
+    }
+    const chunkId = parseCommandChunkToken(tok);
+    if (chunkId) {
+      const chunk = chunkById.get(chunkId);
+      if (chunk?.tokens?.length) out.push(...chunk.tokens);
+      continue;
+    }
+    out.push(tok);
+  }
+  return out;
+}
+
 export const numberLineSchema = z.object({
   /** Number of tick marks (positions 0 .. tickCount - 1). */
   tickCount: z.number().int().min(3).max(20).default(9),
@@ -474,6 +583,17 @@ export const levelGameplayConfigSchema = z.object({
    * number-line levels also respect numberLine.forwardBackwardOnly when unset.
    */
   enabledActionButtons: z.array(robotActionButtonSchema).optional(),
+  /**
+   * Command Bags = toolbox containers of Chunks (reusable mini-programs).
+   * Grid DRAG_ACTIONS activities. Omitted / empty = classic arrow palette only.
+   */
+  commandBagMode: z.enum(["BAG", "CHUNK", "MIXED"]).optional(),
+  commandBags: z.array(commandBagSchema).optional(),
+  /**
+   * Geometry Path levels: edge-based target route the robot must trace.
+   * Present when levelType === GEOMETRY_PATH (also allowed on other grid types for reuse).
+   */
+  geometryPath: geometryPathConfigSchema.optional(),
   /** Optional ECD task metadata for stealth assessment (additive). */
   assessment: z
     .object({
@@ -722,6 +842,46 @@ export function applyLevelTypeDefaults(
         guidedActions: base.guidedActions ?? ["forward", "turn left", "forward"],
         blanks: undefined,
       };
+    case LevelType.GEOMETRY_PATH: {
+      const gp: GeometryPathConfig = {
+        ...DEFAULT_GEOMETRY_PATH,
+        ...base.geometryPath,
+        tools: {
+          ...DEFAULT_GEOMETRY_PATH.tools,
+          ...base.geometryPath?.tools,
+        },
+        segments: base.geometryPath?.segments?.length
+          ? base.geometryPath.segments
+          : generateShapeSegments(
+              base.geometryPath?.shapeType ?? "SQUARE",
+              base.geometryPath?.templateOrigin ?? { x: 1, y: 1 },
+              base.geometryPath?.templateSize ?? 2,
+              base.geometryPath?.templateWidth ?? 3,
+              base.geometryPath?.templateHeight ?? 2
+            ),
+      };
+      const synced = syncGeometryPathToolsToConfig(gp.tools);
+      return {
+        ...base,
+        layoutMode: "GRID",
+        useFlagPlacement: false,
+        playerPicksEndCellWithFlag: false,
+        requireFlagBeforeRun: false,
+        visitObjectSequence: false,
+        guidedActions: undefined,
+        blanks: undefined,
+        // Soft default tip for kids
+        cornerHint: base.cornerHint ?? {
+          enabled: true,
+          title: "Trace the shape",
+          body: "Make the robot follow the glowing path.",
+        },
+        geometryPath: gp,
+        enabledActionButtons: synced.enabledActionButtons ?? base.enabledActionButtons,
+        // Prefer synced mode; when tools are arrows/repeat only, force-clear leftover bag mode.
+        commandBagMode: synced.commandBagMode,
+      };
+    }
     default:
       return base;
   }
@@ -806,6 +966,27 @@ export function defaultConfigForType(levelType: LevelType, levelName: string): L
     });
   }
 
+  if (levelType === LevelType.GEOMETRY_PATH) {
+    return applyLevelTypeDefaults(levelType, {
+      ...base,
+      gridObjects: [{ position: { x: 1, y: 1 }, objectType: "newspaper", isStartObject: true }],
+      robotStartPosition: { x: 1, y: 1 },
+      robotStartFacing: { x: 1, y: 0 },
+      goalCell: undefined,
+      blinkEndCells: false,
+      cornerHint: {
+        enabled: true,
+        title: "Trace the shape",
+        body: "Make the robot follow the glowing path.",
+      },
+      geometryPath: {
+        ...DEFAULT_GEOMETRY_PATH,
+        segments: generateShapeSegments("SQUARE", { x: 1, y: 1 }, 2, 3, 2),
+        templateOrigin: { x: 1, y: 1 },
+      },
+    });
+  }
+
   return applyLevelTypeDefaults(levelType, {
     ...base,
     cornerHint: {
@@ -824,6 +1005,7 @@ export const LEVEL_TYPE_LABELS: Record<LevelType, string> = {
   [LevelType.FLAG_PLACEMENT]: "Place flag (goal)",
   [LevelType.CHOOSE_BUTTONS]: "Choose action buttons (guided blanks)",
   [LevelType.DRAG_EDIT_PROGRAM]: "Edit starter program (drag & drop)",
+  [LevelType.GEOMETRY_PATH]: "Geometry Path",
 };
 
 export const LEVEL_TYPE_HELP: Record<LevelType, string> = {
@@ -837,6 +1019,8 @@ export const LEVEL_TYPE_HELP: Record<LevelType, string> = {
     "Pre-filled program with blanks; students pick the correct arrow buttons.",
   [LevelType.DRAG_EDIT_PROGRAM]:
     "You design a starter program; students add, remove, or reorder blocks with drag and drop, then RUN.",
+  [LevelType.GEOMETRY_PATH]:
+    "Students program the robot to trace a glowing geometric path on the grid. Works with arrows, Repeat, Chunks, and Command Bags.",
 };
 
 export const INTRO_LEVEL_KEY = "level_0";

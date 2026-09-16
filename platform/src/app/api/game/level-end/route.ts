@@ -141,6 +141,36 @@ export async function POST(request: NextRequest) {
           : {}),
         ...(storedPlaySlot != null ? { playSlot: storedPlaySlot } : {}),
         ...(playSlotFromExtras != null ? { playSlot: playSlotFromExtras } : {}),
+        ...(extras?.geometryHasTelemetry === true ||
+        Array.isArray(extras?.geometryTraveledKeys) ||
+        Array.isArray(extras?.geometryCompletedKeys)
+          ? {
+              geometryPath: {
+                traveledKeys: Array.isArray(extras.geometryTraveledKeys)
+                  ? extras.geometryTraveledKeys.filter((k): k is string => typeof k === "string")
+                  : [],
+                completedKeys: Array.isArray(extras.geometryCompletedKeys)
+                  ? extras.geometryCompletedKeys.filter((k): k is string => typeof k === "string")
+                  : [],
+                travelOrder: Array.isArray(extras.geometryTravelOrder)
+                  ? extras.geometryTravelOrder.filter((k): k is string => typeof k === "string")
+                  : Array.isArray(extras.geometryTraveledKeys)
+                    ? extras.geometryTraveledKeys.filter((k): k is string => typeof k === "string")
+                    : [],
+                finalCell:
+                  typeof extras.geometryFinalCellX === "number" &&
+                  typeof extras.geometryFinalCellY === "number" &&
+                  extras.geometryFinalCellX >= 0
+                    ? { x: extras.geometryFinalCellX, y: extras.geometryFinalCellY }
+                    : null,
+                finalFacing:
+                  typeof extras.geometryFinalFacingX === "number" &&
+                  typeof extras.geometryFinalFacingY === "number"
+                    ? { x: extras.geometryFinalFacingX, y: extras.geometryFinalFacingY }
+                    : null,
+              },
+            }
+          : {}),
       } as Prisma.InputJsonValue;
     }
     return ((mistakes ?? attempt.mistakes) as Prisma.InputJsonValue) ?? [];

@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.EventSystems;
 using System.Collections;
 
 public class GridObjectCluster : MonoBehaviour
@@ -221,6 +222,9 @@ public class GridObjectCluster : MonoBehaviour
     // Test method to verify the component is working
     void OnMouseEnter()
     {
+        if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
+            return;
+
         Debug.Log($"[GridObjectCluster] *** MOUSE ENTERED {gameObject.name} *** - allowDrag={allowDrag}");
         
         // Additional debugging - check collider state
@@ -240,6 +244,9 @@ public class GridObjectCluster : MonoBehaviour
     
     void OnMouseExit()
     {
+        if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
+            return;
+
         Debug.Log($"[GridObjectCluster] *** MOUSE EXITED {gameObject.name} ***");
         
         // Reset visual feedback when mouse exits
@@ -263,13 +270,12 @@ public class GridObjectCluster : MonoBehaviour
     // Additional debugging - check if mouse events are being received at all
     void Update()
     {
-        // Check for mouse button press anywhere on screen for debugging
-        if (Input.GetMouseButtonDown(0))
-        {
-            Vector3 mouseWorldPos = GetMouseWorldPosition();
-            float distanceToObject = Vector3.Distance(mouseWorldPos, transform.position);
-            Debug.Log($"[GridObjectCluster] Mouse clicked at world pos {mouseWorldPos}, distance to {gameObject.name}: {distanceToObject}");
-        }
+        // World debug clicks only — never log UI presses on the yellow strip / bags.
+        if (!Input.GetMouseButtonDown(0)) return;
+        if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
+            return;
+        if (UiDragState.ShouldBlockWorldPointer(Input.mousePosition))
+            return;
     }
     
     // Note: OnMouseDown and OnMouseUp are already handled by the existing drag system above

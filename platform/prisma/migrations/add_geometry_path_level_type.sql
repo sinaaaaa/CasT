@@ -1,0 +1,2 @@
+-- Add GEOMETRY_PATH to LevelType enum (PostgreSQL).
+ALTER TYPE "LevelType" ADD VALUE IF NOT EXISTS 'GEOMETRY_PATH';

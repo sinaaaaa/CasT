@@ -46,6 +46,73 @@ public class LevelConfigDto
     public string maxAttemptsMessage;
     /// <summary>Palette buttons students may use: forward, backward, turn left, turn right. Empty = all four (grid) or number-line defaults.</summary>
     public string[] enabledActionButtons;
+    /// <summary>BAG | CHUNK | MIXED — how students drag Command Bags / Chunks.</summary>
+    public string commandBagMode;
+    public CommandBagDto[] commandBags;
+    /// <summary>Geometry Path — edge-based target route (optional).</summary>
+    public GeometryPathConfigDto geometryPath;
+}
+
+[Serializable]
+public class GeometryPathSegmentDto
+{
+    public Vec2Dto from;
+    public Vec2Dto to;
+}
+
+[Serializable]
+public class GeometryPathToolsDto
+{
+    public bool individualCommands = true;
+    public bool repeat;
+    public bool actionChunks;
+    public bool commandBags;
+}
+
+[Serializable]
+public class GeometryPathConfigDto
+{
+    public bool enabled = true;
+    public string shapeType = "SQUARE";
+    public GeometryPathSegmentDto[] segments;
+    public bool drawRobotTrail = true;
+    public bool keepShapeVisibleDuringRun;
+    public string targetColor;
+    public string trailColor;
+    public bool requireRepeat;
+    public bool requireActionChunk;
+    public bool requireCommandBag;
+    public string validationMode = "TRACE_TARGET";
+    /// <summary>SHAPE_COMPLETE or CONTINUE_TO_DESTINATION</summary>
+    public string afterShapeBehavior = "SHAPE_COMPLETE";
+    public Vec2Dto finishCell;
+    public Vec2Dto finishFacing;
+    public bool requireFinishFacing;
+    public string finishObjectType;
+    public GeometryPathToolsDto tools;
+    public int templateSize = 2;
+    public int templateWidth = 3;
+    public int templateHeight = 2;
+    public Vec2Dto templateOrigin;
+}
+
+[Serializable]
+public class CommandChunkDto
+{
+    public string id;
+    public string name;
+    public string color;
+    public string[] tokens;
+}
+
+[Serializable]
+public class CommandBagDto
+{
+    public string id;
+    public string name;
+    public string color;
+    public string icon;
+    public CommandChunkDto[] chunks;
 }
 
 [Serializable]
@@ -311,6 +378,44 @@ public static class LevelConfigMapper
 
         if (dto.enabledActionButtons != null && dto.enabledActionButtons.Length > 0)
             ld.enabledActionButtons = new List<string>(dto.enabledActionButtons);
+
+        ld.commandBagMode = string.IsNullOrEmpty(dto.commandBagMode) ? null : dto.commandBagMode;
+        if (dto.commandBags != null && dto.commandBags.Length > 0)
+        {
+            ld.commandBags = new List<CommandBagData>();
+            foreach (var b in dto.commandBags)
+            {
+                if (b == null || string.IsNullOrEmpty(b.id)) continue;
+                var bag = new CommandBagData
+                {
+                    id = b.id,
+                    name = string.IsNullOrEmpty(b.name) ? b.id : b.name,
+                    color = b.color,
+                    icon = b.icon,
+                    chunks = new List<CommandChunkData>(),
+                };
+                if (b.chunks != null)
+                {
+                    foreach (var c in b.chunks)
+                    {
+                        if (c == null || string.IsNullOrEmpty(c.id)) continue;
+                        bag.chunks.Add(new CommandChunkData
+                        {
+                            id = c.id,
+                            name = string.IsNullOrEmpty(c.name) ? c.id : c.name,
+                            color = c.color,
+                            tokens = c.tokens != null ? new List<string>(c.tokens) : new List<string>(),
+                        });
+                    }
+                }
+                ld.commandBags.Add(bag);
+            }
+        }
+
+        if (dto.geometryPath != null)
+        {
+            ld.geometryPath = MapGeometryPath(dto.geometryPath);
+        }
 
         if (dto.cornerHint != null)
         {
@@ -595,5 +700,65 @@ public static class LevelConfigMapper
             if (ld.guidedActions == null || ld.guidedActions.Count == 0)
                 ld.guidedActions = new List<string> { "forward", "turn left", "forward" };
         }
+        else if (t == "GEOMETRY_PATH")
+        {
+            ld.useFlagPlacement = false;
+            ld.playerPicksEndCellWithFlag = false;
+            ld.requireFlagBeforeRun = false;
+            ld.visitObjectSequence = false;
+            ld.layoutMode = "GRID";
+            ld.guidedActions = null;
+            ld.blanks = null;
+            if (ld.geometryPath == null)
+                ld.geometryPath = new GeometryPathData { enabled = true };
+            else
+                ld.geometryPath.enabled = true;
+        }
+    }
+
+    static GeometryPathData MapGeometryPath(GeometryPathConfigDto dto)
+    {
+        var data = new GeometryPathData
+        {
+            enabled = dto.enabled,
+            shapeType = string.IsNullOrEmpty(dto.shapeType) ? "SQUARE" : dto.shapeType,
+            drawRobotTrail = dto.drawRobotTrail,
+            keepShapeVisibleDuringRun = dto.keepShapeVisibleDuringRun,
+            targetColor = dto.targetColor,
+            trailColor = dto.trailColor,
+            requireRepeat = dto.requireRepeat,
+            requireActionChunk = dto.requireActionChunk,
+            requireCommandBag = dto.requireCommandBag,
+            validationMode = string.IsNullOrEmpty(dto.validationMode) ? "TRACE_TARGET" : dto.validationMode,
+            afterShapeBehavior = string.IsNullOrEmpty(dto.afterShapeBehavior)
+                ? "SHAPE_COMPLETE"
+                : dto.afterShapeBehavior,
+            finishCell = dto.finishCell != null ? dto.finishCell.ToVector2Int() : new Vector2Int(-1, -1),
+            finishFacing = dto.finishFacing != null ? dto.finishFacing.ToVector2Int() : Vector2Int.zero,
+            requireFinishFacing = dto.requireFinishFacing,
+            finishObjectType = dto.finishObjectType,
+            segments = new List<GeometryPathSegmentData>(),
+            tools = new GeometryPathToolsData(),
+        };
+        if (dto.tools != null)
+        {
+            data.tools.individualCommands = dto.tools.individualCommands;
+            data.tools.repeat = dto.tools.repeat;
+            data.tools.actionChunks = dto.tools.actionChunks;
+            data.tools.commandBags = dto.tools.commandBags;
+        }
+        if (dto.segments != null)
+        {
+            foreach (var s in dto.segments)
+            {
+                if (s?.from == null || s.to == null) continue;
+                data.segments.Add(new GeometryPathSegmentData
+                {
+                    from = s.from.ToVector2Int(),
+                    to = s.to.ToVector2Int(),
+                });
+            }
+        }
+        return data;
     }
 }

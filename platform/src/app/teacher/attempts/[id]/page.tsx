@@ -10,6 +10,7 @@ import { computeAttemptRouteAnalysis } from "@/lib/assessment/compute-attempt-ro
 import {
   isDebuggingLevel,
   isEditStarterProgramLevel,
+  isGeometryPathLevel,
   isPathBuildingLevel,
   resolveRouteMapAnchors,
 } from "@/lib/assessment/assessmentConfig";
@@ -20,6 +21,7 @@ import {
   resolveStarterProgram,
 } from "@/lib/assessment/resolve-program";
 import { buildCanvasPatternMatch } from "@/lib/assessment/canvas-pattern-match";
+import { buildGeometryPathAnalysisFromAttempt } from "@/lib/assessment/geometryPathAnalysis";
 import { formatAttemptRunLabel, parseAttemptRunMeta } from "@/lib/attempt-mistakes";
 import { resolveAttemptDurationSeconds } from "@/lib/game/resolve-attempt-duration";
 import { LevelType } from "@prisma/client";
@@ -131,6 +133,9 @@ export default async function AttemptDetailPage({
   const isPathBuildingLevelFlag =
     parsedLevelConfig.success &&
     isPathBuildingLevel(parsedLevelConfig.data, attempt.level.levelType);
+  const isGeometryPathLevelFlag =
+    parsedLevelConfig.success &&
+    isGeometryPathLevel(parsedLevelConfig.data, attempt.level.levelType);
   const isEditStarterLevelFlag =
     parsedLevelConfig.success &&
     isEditStarterProgramLevel(parsedLevelConfig.data, attempt.level.levelType);
@@ -168,7 +173,7 @@ export default async function AttemptDetailPage({
       commandEvents: evidenceInput.commandEvents,
       commandHistory: attempt.commandHistory,
     });
-  } else if (parsedLevelConfig.success && isPathBuildingLevelFlag) {
+  } else if (parsedLevelConfig.success && (isPathBuildingLevelFlag || isGeometryPathLevelFlag)) {
     studentProgram = resolveAttemptProgram({
       finalCommand: attempt.finalCommand,
       initialCommand: attempt.initialCommand,
@@ -178,6 +183,16 @@ export default async function AttemptDetailPage({
       commandHistory: attempt.commandHistory,
     });
   }
+
+  const geometryPathAnalysis =
+    parsedLevelConfig.success && isGeometryPathLevelFlag
+      ? buildGeometryPathAnalysisFromAttempt({
+          config: parsedLevelConfig.data,
+          levelType: attempt.level.levelType,
+          mistakes: attempt.mistakes,
+          passed: attempt.passed,
+        })
+      : null;
 
   const mapAnchors =
     parsedLevelConfig.success
@@ -233,6 +248,8 @@ export default async function AttemptDetailPage({
     },
     isEditStarterLevel: isEditStarterLevelFlag,
     isPathBuildingLevel: isPathBuildingLevelFlag,
+    isGeometryPathLevel: isGeometryPathLevelFlag,
+    geometryPathAnalysis,
     isDebuggingLevel: isDebuggingLevelFlag,
     isCanvasLevel: isCanvasLevelFlag,
     canvasPatternMatch,

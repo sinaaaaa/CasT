@@ -79,7 +79,6 @@ public class ActionQueueDropZone : MonoBehaviour, IDropHandler, IPointerEnterHan
         {
             var go = new GameObject("DropAreaHitTarget", typeof(RectTransform), typeof(Image));
             go.transform.SetParent(transform, false);
-            go.transform.SetAsFirstSibling();
             hitRt = go.GetComponent<RectTransform>();
             hitRt.anchorMin = Vector2.zero;
             hitRt.anchorMax = Vector2.one;
@@ -91,9 +90,18 @@ public class ActionQueueDropZone : MonoBehaviour, IDropHandler, IPointerEnterHan
             img.raycastTarget = true;
         }
 
+        // Always behind ProgramBagScroll / queue bags.
+        hitRt.SetAsFirstSibling();
+
         dropHitRect = hitRt;
         var hitImg = hitRt.GetComponent<Image>();
-        if (hitImg != null) hitImg.raycastTarget = true;
+        if (hitImg != null)
+        {
+            // When ProgramBagScroll exists, its viewport already receives empty-strip hits.
+            // Keeping this overlay raycastable covers bags and blocks reorder.
+            bool hasProgramScroll = transform.Find("ProgramBagScroll") != null;
+            hitImg.raycastTarget = !hasProgramScroll;
+        }
     }
 
     public bool ContainsScreenPoint(Vector2 screenPosition, Camera eventCamera = null)
@@ -146,6 +154,38 @@ public class ActionQueueDropZone : MonoBehaviour, IDropHandler, IPointerEnterHan
         lastDropHandledFrame = Time.frameCount;
     }
 
+    public void TryAcceptCommandBagDrop(PointerEventData eventData, DraggableCommandBagBlock source)
+    {
+        if (source == null || characterMove == null) return;
+        if (lastDropHandledFrame == Time.frameCount) return;
+
+        int dropIndex = currentInsertionIndex >= 0 ? currentInsertionIndex : ComputeInsertionIndex(eventData);
+        RemovePlaceholderImmediate();
+        ResetHighlight();
+        lastDropHandledFrame = Time.frameCount;
+        characterMove.InsertCommandBagMacroFromDrag(source, dropIndex);
+    }
+
+    /// <summary>
+    /// Fallback used by DraggableQueuedBlock.OnEndDrag when Unity did not route
+    /// IDropHandler through the strip. Uses the same placeholder/sibling logic.
+    /// </summary>
+    public void TryAcceptReorderedDrop(PointerEventData eventData, DraggableQueuedBlock source)
+    {
+        if (source == null || characterMove == null) return;
+
+        int dropIndex = currentInsertionIndex >= 0
+            ? currentInsertionIndex
+            : ComputeInsertionIndex(eventData);
+        if (placeholderInstance != null && placeholderInstance.transform.parent != null)
+            dropIndex = placeholderInstance.transform.GetSiblingIndex();
+
+        RemovePlaceholderImmediate();
+        ResetHighlight();
+        lastDropHandledFrame = Time.frameCount;
+        source.AcceptReorderedDrop(dropIndex);
+    }
+
     void OnDisable()
     {
         HideInsertionPreview(animate: false);
@@ -180,17 +220,29 @@ public class ActionQueueDropZone : MonoBehaviour, IDropHandler, IPointerEnterHan
             dropIndex = placeholderInstance.transform.GetSiblingIndex();
 
         var sourceBlock = eventData.pointerDrag.GetComponent<DraggableActionBlock>();
+        var bagBlock = eventData.pointerDrag.GetComponent<DraggableCommandBagBlock>();
         var queuedBlock = eventData.pointerDrag.GetComponent<DraggableQueuedBlock>();
 
         RemovePlaceholderImmediate();
         ResetHighlight();
-        lastDropHandledFrame = Time.frameCount;
 
         if (queuedBlock != null)
         {
-            queuedBlock.AcceptReorderedDrop(dropIndex);
+            TryAcceptReorderedDrop(eventData, queuedBlock);
             return;
         }
+
+        if (bagBlock != null)
+        {
+            if (lastDropHandledFrame == Time.frameCount) return;
+            lastDropHandledFrame = Time.frameCount;
+            var bagTarget = characterMove != null ? characterMove : bagBlock.characterMove;
+            if (bagTarget != null)
+                bagTarget.InsertCommandBagMacroFromDrag(bagBlock, dropIndex);
+            return;
+        }
+
+        lastDropHandledFrame = Time.frameCount;
 
         if (sourceBlock == null) return;
 
@@ -208,6 +260,7 @@ public class ActionQueueDropZone : MonoBehaviour, IDropHandler, IPointerEnterHan
         if (eventData.pointerDrag == null) return;
         bool isDraggingActionInput =
             eventData.pointerDrag.GetComponent<DraggableActionBlock>() != null ||
+            eventData.pointerDrag.GetComponent<DraggableCommandBagBlock>() != null ||
             eventData.pointerDrag.GetComponent<DraggableQueuedBlock>() != null;
         if (!isDraggingActionInput) return;
         ApplyHighlight();
@@ -221,13 +274,11 @@ public class ActionQueueDropZone : MonoBehaviour, IDropHandler, IPointerEnterHan
     public void UpdateInsertionPreview(PointerEventData eventData, Sprite previewSprite)
     {
         if (characterMove == null || characterMove.actionQueueTransform == null) return;
-        if (characterMove.actionImagePrefab == null) return;
 
         Canvas.ForceUpdateCanvases();
 
         int desiredIndex = ComputeInsertionIndex(eventData);
-        if (desiredIndex != currentInsertionIndex)
-            currentInsertionIndex = desiredIndex;
+        currentInsertionIndex = desiredIndex;
 
         EnsurePlaceholder(previewSprite);
         if (placeholderInstance == null) return;
@@ -561,12 +612,26 @@ public class ActionQueueDropZone : MonoBehaviour, IDropHandler, IPointerEnterHan
             return;
         }
 
-        var prefab = characterMove.actionImagePrefab;
-        if (prefab == null) return;
+        var prefab = characterMove != null ? characterMove.actionImagePrefab : null;
+        if (prefab != null)
+        {
+            placeholderInstance = Instantiate(prefab, characterMove.actionQueueTransform);
+        }
+        else
+        {
+            // Bag-only levels may have no arrow prefab — still show a gap preview.
+            placeholderInstance = new GameObject(
+                "InsertionPlaceholder",
+                typeof(RectTransform),
+                typeof(Image),
+                typeof(LayoutElement),
+                typeof(CanvasGroup));
+            placeholderInstance.transform.SetParent(characterMove.actionQueueTransform, false);
+        }
 
-        placeholderInstance = Instantiate(prefab, characterMove.actionQueueTransform);
         placeholderInstance.name = "InsertionPlaceholder";
-        placeholderInstance.AddComponent<QueueInsertionPlaceholder>();
+        if (placeholderInstance.GetComponent<QueueInsertionPlaceholder>() == null)
+            placeholderInstance.AddComponent<QueueInsertionPlaceholder>();
 
         var img2 = placeholderInstance.GetComponent<Image>();
         if (img2 != null)
@@ -665,18 +730,54 @@ public class ActionQueueDropZone : MonoBehaviour, IDropHandler, IPointerEnterHan
 
     private void ApplyHighlight()
     {
+        SetDragHighlight(true);
+    }
+
+    private void ResetHighlight()
+    {
+        SetDragHighlight(false);
+    }
+
+    /// <summary>
+    /// Soft yellow-strip feedback while a bag/chunk is dragged over it (no harsh flash).
+    /// </summary>
+    public void SetDragHighlight(bool on)
+    {
+        EnsureHighlightTarget();
         if (highlightTarget == null) return;
+
         if (!highlightCached)
         {
             baseColor = highlightTarget.color;
             highlightCached = true;
         }
-        highlightTarget.color = highlightColor;
+
+        if (on)
+        {
+            // Soft warm lift — readable for kids, not flashing.
+            Color soft = Color.Lerp(baseColor, new Color(1f, 0.95f, 0.55f, 1f), 0.35f);
+            soft.a = Mathf.Max(baseColor.a, 0.92f);
+            highlightTarget.color = soft;
+
+            var outline = highlightTarget.GetComponent<Outline>();
+            if (outline == null) outline = highlightTarget.gameObject.AddComponent<Outline>();
+            outline.enabled = true;
+            outline.effectColor = new Color(0.85f, 0.65f, 0.12f, 0.55f);
+            outline.effectDistance = new Vector2(3f, -3f);
+        }
+        else
+        {
+            highlightTarget.color = baseColor;
+            var outline = highlightTarget.GetComponent<Outline>();
+            if (outline != null) outline.enabled = false;
+        }
     }
 
-    private void ResetHighlight()
+    void EnsureHighlightTarget()
     {
-        if (highlightTarget == null || !highlightCached) return;
-        highlightTarget.color = baseColor;
+        if (highlightTarget != null) return;
+        highlightTarget = GetComponent<Image>();
+        if (highlightTarget == null && characterMove != null && characterMove.dropZonePanel != null)
+            highlightTarget = characterMove.dropZonePanel.GetComponent<Image>();
     }
 }

@@ -55,10 +55,10 @@ export function LevelBuilderWizard({ initial }: Props) {
   }, [initial?.id]);
 
   const stepFromUrl = searchParams.get("step");
-  const initialStep: WizardStepId = isWizardStepId(stepFromUrl) ? stepFromUrl : "info";
-
-  const [currentStep, setCurrentStep] = useState<WizardStepId>(initialStep);
-  const [completedSteps, setCompletedSteps] = useState<Set<WizardStepId>>(new Set());
+  // Always start on "info" for SSR + first client paint (same HTML). Apply ?step= after mount.
+  const [currentStep, setCurrentStep] = useState<WizardStepId>("info");
+  const [completedSteps, setCompletedSteps] = useState<Set<WizardStepId>>(() => new Set());
+  const [navReady, setNavReady] = useState(false);
 
   const [levelKey, setLevelKey] = useState(initial?.levelKey ?? defaultNewLevelKey());
   const [name, setName] = useState(initial?.name ?? "Untitled item");
@@ -83,10 +83,11 @@ export function LevelBuilderWizard({ initial }: Props) {
   const currentStepMeta = WIZARD_STEPS[stepIndex];
 
   useEffect(() => {
-    const t = searchParams.get("step");
+    const t = searchParams.get("step") ?? stepFromUrl;
     if (t === "assessment" || t === "ct") setCurrentStep("preview");
     else if (isWizardStepId(t)) setCurrentStep(t);
-  }, [searchParams]);
+    setNavReady(true);
+  }, [searchParams, stepFromUrl]);
 
   async function goToStep(step: WizardStepId) {
     setCurrentStep(step);
@@ -306,6 +307,7 @@ export function LevelBuilderWizard({ initial }: Props) {
               markDirty();
             }}
             currentLevelId={levelId}
+            levelType={levelType}
           />
         );
       case "program":
@@ -431,7 +433,8 @@ export function LevelBuilderWizard({ initial }: Props) {
             type="button"
             variant="outline"
             onClick={handleBack}
-            disabled={stepIndex === 0}
+            // Only disable after mount so SSR/client HTML match (both start enabled).
+            disabled={navReady && stepIndex === 0}
             className="gap-1 rounded-xl"
           >
             <ChevronLeft className="h-4 w-4" />

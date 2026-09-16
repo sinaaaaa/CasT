@@ -77,3 +77,57 @@ export function formatAttemptRunLabel(
   }
   return `#${attemptNumber}`;
 }
+
+/** Geometry Path telemetry stored under mistakes.geometryPath from Unity assessmentExtras. */
+export type GeometryPathAttemptTelemetry = {
+  traveledKeys: string[];
+  completedKeys: string[];
+  /** Ordered edges as traveled (used for “extra movement after shape”). */
+  travelOrder: string[];
+  finalCell: { x: number; y: number } | null;
+  finalFacing: { x: number; y: number } | null;
+};
+
+export function parseGeometryPathTelemetry(
+  mistakes: unknown
+): GeometryPathAttemptTelemetry | null {
+  const o = readMistakesObject(mistakes);
+  const gp = o?.geometryPath;
+  if (!gp || typeof gp !== "object" || Array.isArray(gp)) return null;
+  const g = gp as Record<string, unknown>;
+  const traveledKeys = Array.isArray(g.traveledKeys)
+    ? g.traveledKeys.filter((k): k is string => typeof k === "string")
+    : [];
+  const completedKeys = Array.isArray(g.completedKeys)
+    ? g.completedKeys.filter((k): k is string => typeof k === "string")
+    : [];
+  const travelOrder = Array.isArray(g.travelOrder)
+    ? g.travelOrder.filter((k): k is string => typeof k === "string")
+    : traveledKeys;
+  const finalCell =
+    g.finalCell && typeof g.finalCell === "object" && !Array.isArray(g.finalCell)
+      ? (() => {
+          const c = g.finalCell as Record<string, unknown>;
+          return typeof c.x === "number" && typeof c.y === "number"
+            ? { x: c.x, y: c.y }
+            : null;
+        })()
+      : null;
+  const finalFacing =
+    g.finalFacing && typeof g.finalFacing === "object" && !Array.isArray(g.finalFacing)
+      ? (() => {
+          const c = g.finalFacing as Record<string, unknown>;
+          return typeof c.x === "number" && typeof c.y === "number"
+            ? { x: c.x, y: c.y }
+            : null;
+        })()
+      : null;
+  if (
+    traveledKeys.length === 0 &&
+    completedKeys.length === 0 &&
+    !finalCell
+  ) {
+    return { traveledKeys, completedKeys, travelOrder, finalCell, finalFacing };
+  }
+  return { traveledKeys, completedKeys, travelOrder, finalCell, finalFacing };
+}

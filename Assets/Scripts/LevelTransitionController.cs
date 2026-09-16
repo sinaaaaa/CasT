@@ -28,8 +28,8 @@ public class LevelTransitionController : MonoBehaviour
     public string bootTitle = "SPARC";
     public string bootSubtitleLoading = "Loading your items…";
     public string bootSubtitleReady = "Ready";
-    [Range(0.2f, 2f)] public float bootMinCoverSeconds = 0.85f;
-    [Range(0.2f, 1.5f)] public float bootRevealSeconds = 0.7f;
+    [Range(0.2f, 2f)] public float bootMinCoverSeconds = 0.45f;
+    [Range(0.2f, 1.5f)] public float bootRevealSeconds = 0.55f;
 
     [Header("Item → item")]
     [Range(0.15f, 1.2f)] public float fadeOutSeconds = 0.42f;

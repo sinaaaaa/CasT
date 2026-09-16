@@ -15,6 +15,8 @@ import {
 import {
   LEVEL_TYPE_LABELS,
   visitSequenceReady,
+  geometryPathReady,
+  buildGeometryAuthoringSummary,
   type LevelGameplayConfig,
 } from "@/lib/level-config";
 import { Badge } from "@/components/ui/badge";
@@ -41,6 +43,8 @@ export function StepPreviewPublish({
   const objectCount = config.gridObjects?.length ?? 0;
   const commandCount = config.guidedActions?.length ?? 0;
   const hasTip = config.cornerHint?.enabled !== false && !!config.cornerHint?.title;
+  const isGeometry = levelType === LevelType.GEOMETRY_PATH;
+  const geoSummary = isGeometry ? buildGeometryAuthoringSummary(config) : null;
 
   const visitReady =
     levelType !== LevelType.DRAG_ACTIONS ||
@@ -53,15 +57,24 @@ export function StepPreviewPublish({
     { ok: !!name.trim(), label: "Item has a display name" },
     { ok: visible || !published, label: "Hidden items are not published to students" },
     {
-      ok: objectCount > 0 || levelType === LevelType.FLAG_PLACEMENT,
-      label: "Grid has objects or flag mode",
+      ok:
+        levelType === LevelType.GEOMETRY_PATH
+          ? geometryPathReady(config)
+          : objectCount > 0 || levelType === LevelType.FLAG_PLACEMENT,
+      label:
+        levelType === LevelType.GEOMETRY_PATH
+          ? "Geometry path has at least one edge"
+          : "Grid has objects or flag mode",
     },
     {
       ok: visitReady,
       label: "Visit step 1 and 2 marked on grid (if visit sequence on)",
     },
     {
-      ok: levelType === LevelType.DRAG_ACTIONS || commandCount > 0,
+      ok:
+        levelType === LevelType.DRAG_ACTIONS ||
+        levelType === LevelType.GEOMETRY_PATH ||
+        commandCount > 0,
       label: "Program configured (if required)",
     },
     { ok: (config.maxAttempts ?? 3) >= 1, label: "Max attempts set" },
@@ -103,10 +116,57 @@ export function StepPreviewPublish({
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <SummaryCard icon={Grid3x3} label="Objects on grid" value={String(objectCount)} />
-        <SummaryCard icon={ListOrdered} label="Program steps" value={String(commandCount)} />
-        <SummaryCard icon={Target} label="Max attempts" value={String(config.maxAttempts ?? 3)} />
+        {isGeometry && geoSummary ? (
+          <>
+            <SummaryCard
+              icon={Grid3x3}
+              label={`${geoSummary.shapeLabel} edges`}
+              value={String(geoSummary.edgeCount)}
+            />
+            <SummaryCard icon={ListOrdered} label="Student tools" value={geoSummary.toolsLabel} />
+            <SummaryCard icon={Target} label="Max attempts" value={String(config.maxAttempts ?? 3)} />
+          </>
+        ) : (
+          <>
+            <SummaryCard icon={Grid3x3} label="Objects on grid" value={String(objectCount)} />
+            <SummaryCard icon={ListOrdered} label="Program steps" value={String(commandCount)} />
+            <SummaryCard icon={Target} label="Max attempts" value={String(config.maxAttempts ?? 3)} />
+          </>
+        )}
       </div>
+
+      {isGeometry && geoSummary && (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h4 className="mb-3 text-sm font-semibold text-slate-900">Geometry Path summary</h4>
+          <dl className="grid gap-2 text-sm sm:grid-cols-2">
+            <div>
+              <dt className="text-xs text-slate-500">How to grade</dt>
+              <dd className="font-medium text-slate-800">{geoSummary.gradeLabel}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-slate-500">Start</dt>
+              <dd className="font-medium text-slate-800">
+                {geoSummary.startLabel} · {geoSummary.facingLabel}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-slate-500">Robot trail</dt>
+              <dd className="font-medium text-slate-800">{geoSummary.trailOn ? "On" : "Off"}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-slate-500">Keep shape during run</dt>
+              <dd className="font-medium text-slate-800">{geoSummary.keepShape ? "Yes" : "No"}</dd>
+            </div>
+          </dl>
+          {geoSummary.requirements.length > 0 && (
+            <ul className="mt-3 list-inside list-disc text-xs text-slate-600">
+              {geoSummary.requirements.map((r) => (
+                <li key={r}>{r}</li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-900">

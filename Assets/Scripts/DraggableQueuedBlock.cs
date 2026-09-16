@@ -7,30 +7,9 @@ using UnityEngine.UI;
 /// Attached at runtime to each user-added block in the action queue.
 /// Lets the user pick the block up and drag it to a new position inside the queue
 /// (reorder), or away from the queue and back (snaps back if released outside).
-///
-/// Behaviour:
-///   - OnBeginDrag : the block is reparented to the canvas root so it floats above
-///                   the rest of the UI; a CanvasGroup dims it; an
-///                   <see cref="ActionQueueDropZone"/> placeholder is opened at the
-///                   block's original index so existing neighbours stay arranged.
-///   - OnDrag      : the block follows the cursor; the drop-zone placeholder
-///                   re-anchors to whichever gap the cursor is currently over and
-///                   the existing blocks slide aside via the LayoutGroup reflow.
-///   - OnDrop (via ActionQueueDropZone): the block is reparented back into the
-///                   queue at the placeholder's index. Order in
-///                   <see cref="CharacterMove"/>'s execution queue is rebuilt.
-///   - OnEndDrag (no drop): the block snaps back to its original index.
-///
-/// Notes:
-///   - Reorder is disabled while the program is running
-///     (<see cref="CharacterMove.IsActionQueueLocked"/>).
-///   - The close button on the block is a child Button; if the user presses the close
-///     button and moves the cursor far enough Unity will start a reorder drag on this
-///     block instead of firing the close-button click. That's the standard Unity
-///     "click vs drag" disambiguation and matches Scratch-style block UX.
 /// </summary>
 [RequireComponent(typeof(RectTransform))]
-public class DraggableQueuedBlock : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerDownHandler
+public class DraggableQueuedBlock : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerDownHandler, IInitializePotentialDragHandler
 {
     [Header("References")]
     public CharacterMove characterMove;
@@ -52,6 +31,11 @@ public class DraggableQueuedBlock : MonoBehaviour, IBeginDragHandler, IDragHandl
     private bool addedCanvasGroup = false;
     private ActionQueueDropZone hoveredZone;
     private bool isDragging;
+    private ScrollRect parentScroll;
+    private bool parentScrollWasEnabled;
+
+    /// <summary>True while this block is being reordered (tap-expand should ignore).</summary>
+    public bool IsDragging => isDragging;
 
     private static readonly List<RaycastResult> s_raycastBuffer = new List<RaycastResult>();
 
@@ -76,25 +60,88 @@ public class DraggableQueuedBlock : MonoBehaviour, IBeginDragHandler, IDragHandl
 
     public void OnPointerDown(PointerEventData eventData)
     {
+        if (IsPressOnCloseButton(eventData)) return;
         if (!CanReorder()) return;
         GameInteractionSounds.PlayActionTap();
     }
 
+    static bool IsCloseTarget(GameObject go)
+    {
+        if (go == null) return false;
+        if (go.GetComponentInParent<QueuedBlockCloseButton>() != null) return true;
+        Transform t = go.transform;
+        while (t != null)
+        {
+            if (t.name == "CloseButton" || t.name == "ExpandIcon") return true;
+            if (t.GetComponent<DraggableQueuedBlock>() != null) break;
+            t = t.parent;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// True when the press landed on this block's X or expand icon.
+    /// Those controls own the gesture — do not start a reorder drag.
+    /// </summary>
+    static bool IsPressOnCloseButton(PointerEventData eventData)
+    {
+        if (eventData == null) return false;
+        if (IsCloseTarget(eventData.pointerPressRaycast.gameObject)) return true;
+        if (eventData.pointerPress != null && IsCloseTarget(eventData.pointerPress)) return true;
+        return false;
+    }
+
+    public void OnInitializePotentialDrag(PointerEventData eventData)
+    {
+        if (eventData == null) return;
+
+        // Leave pointerDrag owned by QueuedBlockCloseButton — do not null it.
+        if (IsPressOnCloseButton(eventData))
+            return;
+
+        if (!CanReorder()) return;
+
+        // Claim the drag so parent ProgramBagScroll (ScrollRect) cannot steal it.
+        eventData.pointerDrag = gameObject;
+    }
+
     public void OnBeginDrag(PointerEventData eventData)
     {
-        if (!CanReorder()) return;
+        if (!CanReorder())
+        {
+            if (eventData != null && !IsPressOnCloseButton(eventData))
+                eventData.pointerDrag = null;
+            return;
+        }
+
+        // Close button owns this gesture — never start a reorder from the X.
+        if (IsPressOnCloseButton(eventData))
+            return;
 
         if (rootCanvas == null)
         {
             var c = GetComponentInParent<Canvas>();
             if (c != null) rootCanvas = c.rootCanvas;
         }
-        if (rootCanvas == null) return;
+        if (rootCanvas == null)
+        {
+            Debug.LogWarning("[DraggableQueuedBlock] No root Canvas — cannot reorder.");
+            return;
+        }
 
         originalParent = transform.parent;
         originalSiblingIndex = transform.GetSiblingIndex();
         originalLocalScale = transform.localScale;
         originalAnchoredPos = rt.anchoredPosition;
+
+        // Pause horizontal program-strip scrolling while reordering bags/arrows.
+        parentScroll = GetComponentInParent<ScrollRect>();
+        if (parentScroll != null)
+        {
+            parentScrollWasEnabled = parentScroll.enabled;
+            parentScroll.StopMovement();
+            parentScroll.enabled = false;
+        }
 
         canvasGroup = GetComponent<CanvasGroup>();
         if (canvasGroup == null)
@@ -107,15 +154,12 @@ public class DraggableQueuedBlock : MonoBehaviour, IBeginDragHandler, IDragHandl
         canvasGroup.blocksRaycasts = false;
         canvasGroup.interactable = false;
 
-        // Float the block above the rest of the UI. Preserve world position so it
-        // doesn't visually jump when reparented.
         transform.SetParent(rootCanvas.transform, true);
         transform.SetAsLastSibling();
         transform.localScale = originalLocalScale * draggedScale;
 
-        // Drop the picked-up block out of the execution queue immediately. If the user
-        // clicks Run while still dragging, the run should not include this block.
-        characterMove.OnQueuedBlockPickedUp();
+        if (characterMove != null)
+            characterMove.OnQueuedBlockPickedUp();
 
         isDragging = true;
         UiDragState.BeginDrag();
@@ -123,23 +167,20 @@ public class DraggableQueuedBlock : MonoBehaviour, IBeginDragHandler, IDragHandl
         DragDropTutorialController.NotifyStudentDragStarted();
         hoveredZone = FindDropZoneUnderPointer(eventData);
         if (hoveredZone != null)
-        {
             hoveredZone.UpdateInsertionPreview(eventData, ResolveBlockSprite());
-        }
+
+        Debug.Log($"[DraggableQueuedBlock] Begin reorder '{name}' from index {originalSiblingIndex}");
     }
 
     public void OnDrag(PointerEventData eventData)
     {
         if (!isDragging) return;
 
-        // Block follows the cursor (in canvas-local space).
         var canvasRect = (RectTransform)rootCanvas.transform;
         Camera cam = rootCanvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : rootCanvas.worldCamera;
         Vector2 localPoint;
         if (RectTransformUtility.ScreenPointToLocalPointInRectangle(canvasRect, eventData.position, cam, out localPoint))
-        {
             rt.localPosition = localPoint;
-        }
 
         var zone = FindDropZoneUnderPointer(eventData);
         if (zone == null && characterMove != null)
@@ -155,28 +196,47 @@ public class DraggableQueuedBlock : MonoBehaviour, IBeginDragHandler, IDragHandl
 
     public void OnEndDrag(PointerEventData eventData)
     {
-        // If the drop zone already handled this via AcceptReorderedDrop, isDragging is false.
         if (!isDragging) return;
-        isDragging = false;
-        UiDragState.EndDrag();
 
         var finalZone = FindDropZoneUnderPointer(eventData);
         if (finalZone == null && characterMove != null)
             finalZone = characterMove.FindDropZoneAtScreenPoint(eventData.position);
         if (finalZone == null && hoveredZone != null) finalZone = hoveredZone;
+
+        if (finalZone != null)
+        {
+            finalZone.TryAcceptReorderedDrop(eventData, this);
+            // If AcceptReorderedDrop did not run, snap back so drag cannot stick.
+            if (isDragging)
+            {
+                isDragging = false;
+                UiDragState.EndDrag();
+                if (originalParent != null)
+                {
+                    transform.SetParent(originalParent, false);
+                    int idx = Mathf.Clamp(originalSiblingIndex, 0, Mathf.Max(0, originalParent.childCount - 1));
+                    transform.SetSiblingIndex(idx);
+                }
+                RestoreVisualState();
+                if (characterMove != null) characterMove.OnQueuedBlockPickedUp();
+            }
+            RestoreParentScroll();
+            return;
+        }
+
+        isDragging = false;
+        UiDragState.EndDrag();
+        RestoreParentScroll();
+
         if (hoveredZone != null) hoveredZone.HideInsertionPreview(false);
         hoveredZone = null;
 
-        // Scratch-style: released OUTSIDE the drop zone? Throw the block away.
-        if (finalZone == null && characterMove != null && characterMove.dragOutQueuedToDelete)
+        if (characterMove != null && characterMove.dragOutQueuedToDelete)
         {
-            // Block currently lives under the canvas root (we reparented at OnBeginDrag).
-            // CharacterMove will fade & shrink it in place and log the deletion.
             characterMove.HandleQueuedBlockDroppedOutsideQueue(gameObject);
             return;
         }
 
-        // Otherwise snap back to the original index.
         if (originalParent != null)
         {
             transform.SetParent(originalParent, false);
@@ -185,22 +245,15 @@ public class DraggableQueuedBlock : MonoBehaviour, IBeginDragHandler, IDragHandl
         }
         RestoreVisualState();
 
-        // Put the block back into the execution queue (no analytics "reorder" event,
-        // because the user cancelled).
         if (characterMove != null) characterMove.OnQueuedBlockPickedUp();
     }
 
-    /// <summary>
-    /// Called by <see cref="ActionQueueDropZone.OnDrop"/> when this block is dropped
-    /// over the drop zone. Reparents the block back into the queue at the requested
-    /// index, restores its visual state and asks <see cref="CharacterMove"/> to rebuild
-    /// the execution queue. After this the OnEndDrag callback is a no-op.
-    /// </summary>
     public void AcceptReorderedDrop(int newIndex)
     {
         if (!isDragging) return;
         isDragging = false;
         UiDragState.EndDrag();
+        RestoreParentScroll();
 
         if (originalParent == null) return;
 
@@ -209,6 +262,8 @@ public class DraggableQueuedBlock : MonoBehaviour, IBeginDragHandler, IDragHandl
         transform.SetSiblingIndex(clamped);
 
         RestoreVisualState();
+        if (originalParent is RectTransform ort)
+            LayoutRebuilder.ForceRebuildLayoutImmediate(ort);
 
         if (hoveredZone != null) hoveredZone.HideInsertionPreview(false);
         hoveredZone = null;
@@ -217,6 +272,17 @@ public class DraggableQueuedBlock : MonoBehaviour, IBeginDragHandler, IDragHandl
         {
             characterMove.OnQueuedBlockReordered();
             characterMove.PlayBlockDropBounce(transform);
+        }
+
+        Debug.Log($"[DraggableQueuedBlock] Reordered '{name}' → index {clamped}");
+    }
+
+    private void RestoreParentScroll()
+    {
+        if (parentScroll != null)
+        {
+            parentScroll.enabled = parentScrollWasEnabled;
+            parentScroll = null;
         }
     }
 

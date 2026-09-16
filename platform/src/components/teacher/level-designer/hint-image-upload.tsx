@@ -9,9 +9,15 @@ type Props = {
   imageUrl?: string;
   onChange: (imageUrl: string | undefined) => void;
   label?: string;
+  hint?: string;
 };
 
-export function HintImageUpload({ imageUrl, onChange, label = "Picture for students (optional)" }: Props) {
+export function HintImageUpload({
+  imageUrl,
+  onChange,
+  label = "Picture for students (optional)",
+  hint = "Shown in the top-right panel in Unity. PNG or JPG, max 2 MB.",
+}: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -44,7 +50,7 @@ export function HintImageUpload({ imageUrl, onChange, label = "Picture for stude
   return (
     <div className="space-y-2">
       <p className="text-sm font-medium text-slate-700">{label}</p>
-      <p className="text-xs text-muted-foreground">Shown in the top-right panel in Unity. PNG or JPG, max 2 MB.</p>
+      <p className="text-xs text-muted-foreground">{hint}</p>
 
       {imageUrl ? (
         <div className="relative inline-block overflow-hidden rounded-xl border-2 border-dashed border-primary/30 bg-slate-50 p-2">
