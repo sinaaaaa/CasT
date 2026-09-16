@@ -59,7 +59,7 @@
       var buildUrl = "Build";
       var loaderUrl = buildUrl + "/unity.loader.js";
       var config = {
-        dataUrl: buildUrl + "/671e1dafe2cba1da5e21f9a1be1a1601.data",
+        dataUrl: buildUrl + "/3960e7c0b2106b96cebbc0a0f243a940.data",
         frameworkUrl: buildUrl + "/d97118ff18aa0c8700dcd818ea5c1962.js",
         codeUrl: buildUrl + "/97bc015f9685317f34fc34680788c2e0.wasm",
         streamingAssetsUrl: "StreamingAssets",
@@ -92,10 +92,12 @@
 
 
       } else {
-        // Desktop style: Render the game canvas in a window that can be maximized to fullscreen:
-
-        canvas.style.width = "1920px";
-        canvas.style.height = "1080px";
+        // Desktop / iframe embed: fill the host frame (play page is 16:9).
+        // Fixed 1920x1080 cropped left/right UI when the iframe was smaller than Full HD.
+        canvas.style.width = "100%";
+        canvas.style.height = "100%";
+        container.style.width = "100%";
+        container.style.height = "100%";
       }
 
       loadingBar.style.display = "block";
