@@ -35,7 +35,7 @@ function buildUnityUrl(baseUrl: string, config: StudentGameConfig): string {
   url.searchParams.set("studentCode", config.studentCode);
   url.searchParams.set("token", config.sessionToken);
   url.searchParams.set("apiBaseUrl", config.apiBaseUrl);
-  url.searchParams.set("v", "frame-fill-2");
+  url.searchParams.set("v", "frame-fill-ios-fs-1");
   if (config.gameApiKey) {
     url.searchParams.set("gameApiKey", config.gameApiKey);
   }
@@ -52,6 +52,38 @@ function isDocumentFullscreen(): boolean {
   return !!(document.fullscreenElement ?? document.webkitFullscreenElement);
 }
 
+/** iOS Safari (and some Android WebViews) have no usable Fullscreen API for div/iframe. */
+function canUseNativeFullscreen(el: HTMLElement | null): boolean {
+  if (!el) return false;
+  return typeof el.requestFullscreen === "function" || typeof el.webkitRequestFullscreen === "function";
+}
+
+/** Prefer CSS immersive on iOS — requestFullscreen is missing or a no-op there. */
+function prefersCssImmersiveFullscreen(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent;
+  if (/iPhone|iPad|iPod/i.test(ua)) return true;
+  // iPadOS 13+ reports as MacIntel with touch
+  if (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1) return true;
+  return false;
+}
+
+function setBodyImmersiveLock(locked: boolean) {
+  const html = document.documentElement;
+  const body = document.body;
+  if (locked) {
+    html.style.overflow = "hidden";
+    body.style.overflow = "hidden";
+    body.style.touchAction = "none";
+    body.style.overscrollBehavior = "none";
+  } else {
+    html.style.overflow = "";
+    body.style.overflow = "";
+    body.style.touchAction = "";
+    body.style.overscrollBehavior = "";
+  }
+}
+
 export function StudentPlayClient({
   config,
   unityGameUrl,
@@ -62,7 +94,12 @@ export function StudentPlayClient({
   const frameRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "missing">("loading");
   const [iframeSrc, setIframeSrc] = useState(unityGameUrl);
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  /** Native Fullscreen API (desktop / Android Chrome). */
+  const [isNativeFullscreen, setIsNativeFullscreen] = useState(false);
+  /** CSS immersive mode — works on iOS where Fullscreen API does not. */
+  const [isImmersive, setIsImmersive] = useState(false);
+
+  const isFullscreen = isNativeFullscreen || isImmersive;
 
   useEffect(() => {
     window.StudentGameConfig = config;
@@ -77,7 +114,11 @@ export function StudentPlayClient({
   }, [config, unityGameUrl]);
 
   useEffect(() => {
-    const syncFullscreen = () => setIsFullscreen(isDocumentFullscreen());
+    const syncFullscreen = () => {
+      const native = isDocumentFullscreen();
+      setIsNativeFullscreen(native);
+      if (native) setIsImmersive(false);
+    };
     document.addEventListener("fullscreenchange", syncFullscreen);
     document.addEventListener("webkitfullscreenchange", syncFullscreen);
     return () => {
@@ -86,25 +127,75 @@ export function StudentPlayClient({
     };
   }, []);
 
+  useEffect(() => {
+    setBodyImmersiveLock(isImmersive);
+    return () => setBodyImmersiveLock(false);
+  }, [isImmersive]);
+
+  // Escape / back gesture: leave immersive mode when not using native FS.
+  useEffect(() => {
+    if (!isImmersive) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsImmersive(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isImmersive]);
+
+  const enterImmersive = useCallback(() => {
+    setIsImmersive(true);
+    // Nudge mobile Safari to settle viewport after expanding.
+    window.setTimeout(() => {
+      window.scrollTo(0, 0);
+      try {
+        iframeRef.current?.contentWindow?.dispatchEvent(new Event("resize"));
+      } catch {
+        // Cross-origin guard — same-origin Unity host usually allows this.
+      }
+    }, 50);
+  }, []);
+
   const toggleFullscreen = useCallback(async () => {
     const frame = frameRef.current;
     if (!frame) return;
 
-    try {
-      if (isDocumentFullscreen()) {
+    // Exit either mode first.
+    if (isDocumentFullscreen()) {
+      try {
         if (document.exitFullscreen) await document.exitFullscreen();
         else if (document.webkitExitFullscreen) await document.webkitExitFullscreen();
-        return;
+      } catch {
+        // ignore
       }
-
-      const target = frame as HTMLElement & { webkitRequestFullscreen?: () => Promise<void> };
-      if (target.requestFullscreen) await target.requestFullscreen();
-      else if (target.webkitRequestFullscreen) await target.webkitRequestFullscreen();
-      else if (gameShellRef.current?.requestFullscreen) await gameShellRef.current.requestFullscreen();
-    } catch {
-      // Fullscreen API is limited on some browsers; the framed layout still works.
+      setIsImmersive(false);
+      return;
     }
-  }, []);
+    if (isImmersive) {
+      setIsImmersive(false);
+      return;
+    }
+
+    // Prefer native Fullscreen when the browser supports it (Windows / Android).
+    // On iOS, skip native — it often exists but does nothing for our frame.
+    if (!prefersCssImmersiveFullscreen() && canUseNativeFullscreen(frame)) {
+      try {
+        const target = frame as HTMLElement & { webkitRequestFullscreen?: () => Promise<void> };
+        if (target.requestFullscreen) {
+          await target.requestFullscreen();
+          return;
+        }
+        if (target.webkitRequestFullscreen) {
+          await target.webkitRequestFullscreen();
+          return;
+        }
+      } catch {
+        // Fall through to CSS immersive (common on iOS).
+      }
+    }
+
+    // iOS Safari / unsupported browsers: expand to viewport.
+    enterImmersive();
+  }, [enterImmersive, isImmersive]);
 
   const controlButtonClass =
     "pointer-events-auto inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/25 bg-slate-950/80 text-white shadow-lg backdrop-blur transition hover:bg-slate-900/95 sm:h-10 sm:w-10";
@@ -115,7 +206,11 @@ export function StudentPlayClient({
       <InstallPlayAppPrompt gameReady={status === "ready"} />
       <div
         ref={gameShellRef}
-        className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-black p-3 sm:p-5"
+        className={
+          isImmersive
+            ? "relative flex h-dvh max-h-dvh items-stretch justify-stretch overflow-hidden bg-black p-0"
+            : "relative flex min-h-dvh items-center justify-center overflow-hidden bg-black p-3 sm:p-5"
+        }
       >
         {status === "loading" && (
           <div className="absolute inset-0 z-10 flex min-h-dvh flex-col items-center justify-center gap-3 bg-slate-950">
@@ -156,19 +251,41 @@ export function StudentPlayClient({
         ) : (
           <div
             ref={frameRef}
-            className="relative overflow-hidden rounded-xl border border-white/15 bg-black shadow-2xl shadow-black/70 [&:fullscreen]:h-screen [&:fullscreen]:w-screen [&:fullscreen]:max-h-none [&:fullscreen]:max-w-none [&:fullscreen]:rounded-none [&:fullscreen]:border-0"
-            style={{
-              width: "min(92vw, calc(88dvh * 16 / 9))",
-              maxWidth: "1400px",
-              aspectRatio: "16 / 9",
-            }}
+            className={
+              isImmersive
+                ? "fixed inset-0 z-[120] h-[100dvh] w-[100vw] max-h-none max-w-none overflow-hidden rounded-none border-0 bg-black"
+                : "relative overflow-hidden rounded-xl border border-white/15 bg-black shadow-2xl shadow-black/70 [&:fullscreen]:h-screen [&:fullscreen]:w-screen [&:fullscreen]:max-h-none [&:fullscreen]:max-w-none [&:fullscreen]:rounded-none [&:fullscreen]:border-0"
+            }
+            style={
+              isImmersive
+                ? {
+                    width: "100vw",
+                    height: "100dvh",
+                    paddingTop: "env(safe-area-inset-top)",
+                    paddingBottom: "env(safe-area-inset-bottom)",
+                    paddingLeft: "env(safe-area-inset-left)",
+                    paddingRight: "env(safe-area-inset-right)",
+                  }
+                : {
+                    width: "min(92vw, calc(88dvh * 16 / 9))",
+                    maxWidth: "1400px",
+                    aspectRatio: "16 / 9",
+                  }
+            }
           >
             <iframe
-              ref={iframeRef}
+              ref={(node) => {
+                iframeRef.current = node;
+                if (!node) return;
+                // Legacy WebKit attrs — help iOS recognize fullscreen intent on the frame.
+                node.setAttribute("allowfullscreen", "true");
+                node.setAttribute("webkitallowfullscreen", "true");
+                node.setAttribute("mozallowfullscreen", "true");
+              }}
               src={iframeSrc}
               title="Robot Coding Game"
               className="absolute inset-0 block h-full w-full border-0 bg-black"
-              allow="autoplay; fullscreen"
+              allow="autoplay; fullscreen; web-share"
               allowFullScreen
             />
 
@@ -177,6 +294,10 @@ export function StudentPlayClient({
                 <Link
                   href={homeHref}
                   className={`${controlButtonClass} absolute left-2 top-2 z-30 sm:left-3 sm:top-3`}
+                  style={{
+                    top: isImmersive ? "max(0.5rem, env(safe-area-inset-top))" : undefined,
+                    left: isImmersive ? "max(0.5rem, env(safe-area-inset-left))" : undefined,
+                  }}
                   aria-label="Back to home"
                   title="Home"
                 >
@@ -186,6 +307,10 @@ export function StudentPlayClient({
                   type="button"
                   onClick={toggleFullscreen}
                   className={`${controlButtonClass} absolute right-2 top-2 z-30 sm:right-3 sm:top-3`}
+                  style={{
+                    top: isImmersive ? "max(0.5rem, env(safe-area-inset-top))" : undefined,
+                    right: isImmersive ? "max(0.5rem, env(safe-area-inset-right))" : undefined,
+                  }}
                   aria-pressed={isFullscreen}
                   aria-label={isFullscreen ? "Exit full screen" : "Enter full screen"}
                   title={isFullscreen ? "Exit full screen" : "Full screen"}
