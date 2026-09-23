@@ -1045,8 +1045,14 @@ public class CharacterMove : MonoBehaviour
         Debug.Log($"[CharacterMove] Editor reload slot {slot} key='{ld?.levelKey}'");
     }
 
-    private const int MAX_LEVELS = 19; // Updated to include new levels with grid objects
+    /// <summary>
+    /// Legacy built-in-level ceiling (kept for reference only). Platform playlists can be longer —
+    /// advancement always uses <see cref="LoadedLevelCount"/>.
+    /// </summary>
     private List<LevelData> allLevelsData;
+
+    private bool CanAdvanceToSlot(int slot) =>
+        slot >= 1 && LoadedLevelCount > 0 && slot <= LoadedLevelCount;
     private string currentUserId;
     private System.Random randomGenerator = new System.Random();
     private float levelStartTime = -1f; // To track level start time
@@ -3684,7 +3690,10 @@ public class CharacterMove : MonoBehaviour
     {
         currentUserId = PlayerPrefs.GetString("UserId", "UnknownUser");
         currentLevel = PlayerPrefs.GetInt(currentUserId + "_currentLevel", 1);
-        if (currentLevel > MAX_LEVELS) currentLevel = 1; // Reset if saved level is too high
+        // Do not clamp to the old built-in MAX_LEVELS (19) — platform playlists can be longer.
+        if (currentLevel < 1) currentLevel = 1;
+        if (LoadedLevelCount > 0 && currentLevel > LoadedLevelCount)
+            currentLevel = 1;
         Debug.Log($"[CharacterMove] Loaded level {currentLevel} for user {currentUserId}");
     }
 
@@ -5372,7 +5381,7 @@ public class CharacterMove : MonoBehaviour
             GameAssessmentClient.Instance.ClearCurrentAttempt();
 
         int nextLevel = currentLevel + 1;
-        if (nextLevel <= MAX_LEVELS && nextLevel <= allLevelsData.Count)
+        if (CanAdvanceToSlot(nextLevel))
         {
             currentLevel = nextLevel;
             SavePlayerLevel();
@@ -5443,7 +5452,7 @@ public class CharacterMove : MonoBehaviour
             yield return GameAssessmentClient.Instance.WaitForPendingReports();
 
         int nextLevel = currentLevel + 1;
-        if (nextLevel <= MAX_LEVELS && nextLevel <= allLevelsData.Count)
+        if (CanAdvanceToSlot(nextLevel))
         {
             currentLevel = nextLevel;
             SavePlayerLevel();
@@ -5476,7 +5485,19 @@ public class CharacterMove : MonoBehaviour
 
     private bool IsOnLastPlayableItem()
     {
-        return allLevelsData != null && allLevelsData.Count > 0 && currentLevel >= allLevelsData.Count;
+        return LoadedLevelCount > 0 && currentLevel >= LoadedLevelCount;
+    }
+
+    private int CountNonIntroItems()
+    {
+        if (allLevelsData == null) return 0;
+        int n = 0;
+        for (int i = 0; i < allLevelsData.Count; i++)
+        {
+            if (allLevelsData[i] != null && !IsIntroLevel(allLevelsData[i]))
+                n++;
+        }
+        return n;
     }
 
     private void ShowAllItemsCompleteScreen(LevelData completedLevel = null)
@@ -5484,7 +5505,9 @@ public class CharacterMove : MonoBehaviour
         _allItemsCompleteActive = true;
         SavePlayerLevel();
 
-        int total = allLevelsData != null ? allLevelsData.Count : currentLevel;
+        int total = CountNonIntroItems();
+        if (total <= 0)
+            total = LoadedLevelCount > 0 ? LoadedLevelCount : currentLevel;
         string levelLine = "";
         if (completedLevel != null)
         {
@@ -5750,7 +5773,7 @@ public class CharacterMove : MonoBehaviour
         }
 
         int nextLevel = currentLevel + 1;
-        if (nextLevel <= MAX_LEVELS && nextLevel <= allLevelsData.Count)
+        if (CanAdvanceToSlot(nextLevel))
         {
             currentLevel = nextLevel;
             SavePlayerLevel();
