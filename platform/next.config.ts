@@ -40,9 +40,39 @@ const nextConfig: NextConfig = {
         ],
       },
       {
+        // Unity WebGL: Vercel on-the-fly Brotli (Content-Encoding: br) breaks
+        // WebAssembly.instantiateStreaming → "both async and sync fetching of the wasm failed".
+        // no-transform tells the CDN not to recompress these binaries.
         source: "/unity/Build/:path*",
         headers: [
-          { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable, no-transform",
+          },
+          {
+            key: "CDN-Cache-Control",
+            value: "public, max-age=31536000, immutable, no-transform",
+          },
+        ],
+      },
+      {
+        source: "/unity/Build/:file*.wasm",
+        headers: [
+          { key: "Content-Type", value: "application/wasm" },
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable, no-transform",
+          },
+        ],
+      },
+      {
+        source: "/unity/Build/:file*.data",
+        headers: [
+          { key: "Content-Type", value: "application/octet-stream" },
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable, no-transform",
+          },
         ],
       },
     ];

@@ -35,7 +35,7 @@ function buildUnityUrl(baseUrl: string, config: StudentGameConfig): string {
   url.searchParams.set("studentCode", config.studentCode);
   url.searchParams.set("token", config.sessionToken);
   url.searchParams.set("apiBaseUrl", config.apiBaseUrl);
-  url.searchParams.set("v", "frame-fill-ios-fs-1");
+  url.searchParams.set("v", "wasm-no-transform-1");
   if (config.gameApiKey) {
     url.searchParams.set("gameApiKey", config.gameApiKey);
   }
