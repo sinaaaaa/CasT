@@ -526,7 +526,8 @@ export type RepairQualityLevel =
   | "Close Repair"
   | "Partial Repair"
   | "Incorrect Repair"
-  | "No Repair";
+  | "No Repair"
+  | "Starter Already Works";
 
 /** @deprecated Use RepairQualityLevel */
 export type RepairQualityLabel = RepairQualityLevel;
@@ -589,6 +590,13 @@ export const REPAIR_QUALITY_META: Record<RepairQualityLevel, RepairQualityMeta> 
     borderClass: "border-slate-200/80",
     textClass: "text-slate-700",
   },
+  "Starter Already Works": {
+    level: "Starter Already Works",
+    dotClass: "bg-sky-500 shadow-[0_0_8px_rgba(14,165,233,0.5)]",
+    cardGradient: "from-sky-500/10 via-white to-sky-50/40",
+    borderClass: "border-sky-200/70",
+    textClass: "text-sky-900",
+  },
 };
 
 export type RepairInsightChips = {
@@ -612,9 +620,15 @@ export function resolveRepairQuality(params: {
   studentProgram: CommandToken[];
   preferredFix: CommandToken[] | null;
   programsEqualStarter: boolean;
+  /** The given starter already stops on the goal, so there was no bug to repair. */
+  starterAlreadyWorks?: boolean;
 }): RepairQualityLevel {
   const { repairStatus, bugFixed, studentProgram, preferredFix, programsEqualStarter } =
     params;
+
+  if (params.starterAlreadyWorks && bugFixed && programsEqualStarter) {
+    return "Starter Already Works";
+  }
 
   if (programsEqualStarter || repairStatus === "noRepair") {
     return "No Repair";
@@ -849,6 +863,8 @@ export function repairQualityExplanation(
       return "Student improved the route but the robot still did not finish on the goal.";
     case "No Repair":
       return "Student did not meaningfully change the buggy starter program.";
+    case "Starter Already Works":
+      return "The starter program already stops on the goal, so the student ran it unchanged. This attempt shows no debugging — edit the item's starter so it contains a bug.";
     case "Incorrect Repair":
     default:
       if (ctx.repairStatus === "wrongTurnFix") {

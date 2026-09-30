@@ -22,7 +22,9 @@ import type {
   StructureBlock,
   StructureDiffOp,
 } from "@/lib/assessment/programStructureAnalysis";
+import { COMMAND_ICON_PATHS, type CommandToken } from "@/lib/command-icons";
 import { cn } from "@/lib/utils";
+import Image from "next/image";
 
 const MOTION_ICONS: Record<string, React.ReactNode> = {
   forward: <ArrowUp className="h-3.5 w-3.5 text-sky-600" />,
@@ -58,12 +60,27 @@ export function BlockChip({ block, op }: { block: StructureBlock; op?: Structure
       {op === "remove" && <span className="font-bold text-rose-600">−</span>}
       {icon}
       {block.label}
-      {macro && block.steps > 0 && (
-        <span className="text-[10px] font-normal text-slate-400">{block.steps} steps</span>
+      {macro && (block.inner?.length ?? 0) > 0 && (
+        <span className="ml-0.5 inline-flex items-center gap-0.5 rounded-md bg-slate-50 px-1 py-0.5" aria-label={block.inner!.join(", ")}>
+          {block.inner!.map((move, i) =>
+            MOVE_ICON_PATHS.has(move) ? (
+              <Image
+                key={i}
+                src={COMMAND_ICON_PATHS[move as CommandToken]}
+                alt=""
+                width={14}
+                height={14}
+                className="object-contain"
+              />
+            ) : null
+          )}
+        </span>
       )}
     </span>
   );
 }
+
+const MOVE_ICON_PATHS = new Set(Object.keys(COMMAND_ICON_PATHS));
 
 function BlockRow({ title, blocks, empty }: { title: string; blocks: StructureBlock[]; empty: string }) {
   return (
@@ -90,7 +107,14 @@ const STRATEGY_TONE: Record<string, string> = {
   rewrote: "bg-rose-50 text-rose-800 border-rose-200",
 };
 
-export function ProgramStructurePanel({ result }: { result: ProgramStructureAnalysis }) {
+export function ProgramStructurePanel({
+  result,
+  hideProgramRows = false,
+}: {
+  result: ProgramStructureAnalysis;
+  /** The programs are already drawn elsewhere (debugging block view). */
+  hideProgramRows?: boolean;
+}) {
   if (!result.available) return null;
 
   const title = result.hasStarter
@@ -183,6 +207,7 @@ export function ProgramStructurePanel({ result }: { result: ProgramStructureAnal
           </section>
         )}
 
+        {!hideProgramRows && (
         <section className="space-y-4 rounded-xl border border-slate-200/60 bg-white p-4">
           {result.hasStarter && (
             <BlockRow title="Starter program (given)" blocks={result.starter} empty="No starter blocks." />
@@ -209,6 +234,7 @@ export function ProgramStructurePanel({ result }: { result: ProgramStructureAnal
             </div>
           )}
         </section>
+        )}
 
         {result.usesMacros && result.macroRows.length > 0 && result.source === "unity" && (
           <section className="rounded-xl border border-slate-200/60 bg-white p-4">

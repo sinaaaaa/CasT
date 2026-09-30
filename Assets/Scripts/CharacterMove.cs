@@ -6586,7 +6586,12 @@ public class CharacterMove : MonoBehaviour
         RebuildActionQueueFromUI();
     }
 
-    private const int ProgramQueueLeftInset = 16;
+    private const int ProgramQueueLeftInset = 12;
+    /// <summary>Scroll host inset from the strip edges so cards sit inside the dashed border.</summary>
+    private static readonly Vector2 ProgramScrollInsetMin = new Vector2(10f, 6f);
+    private static readonly Vector2 ProgramScrollInsetMax = new Vector2(-10f, -6f);
+    /// <summary>Card Outline effectDistance draws 3px past the card's right/bottom edge.</summary>
+    private const float ProgramCardOutlineBleed = 3f;
 
     /// <summary>Spacing between ProgramBagInstance cards in the yellow strip + horizontal scroll.</summary>
     private void EnsureProgramQueueSpacing()
@@ -6605,7 +6610,7 @@ public class CharacterMove : MonoBehaviour
         hlg.childControlWidth = true;   // honor LayoutElement preferredWidth — prevents overlap
         hlg.childControlHeight = true;
         // Left inset keeps the first card inside the strip's dashed border.
-        hlg.padding = new RectOffset(ProgramQueueLeftInset, 8, 2, 2);
+        hlg.padding = new RectOffset(ProgramQueueLeftInset, 12, 4, 4 + (int)ProgramCardOutlineBleed);
 
         var fitter = actionQueueTransform.GetComponent<ContentSizeFitter>();
         if (fitter == null)
@@ -6627,6 +6632,33 @@ public class CharacterMove : MonoBehaviour
         }
 
         LayoutRebuilder.ForceRebuildLayoutImmediate(rt);
+        FitProgramQueueToStripHeight(rt, hlg);
+    }
+
+    /// <summary>
+    /// Shrinks the whole card row (never below 80%) when the strip is shorter than a card,
+    /// so cards keep breathing room above and below instead of touching the dashed border.
+    /// </summary>
+    private void FitProgramQueueToStripHeight(RectTransform queueRt, HorizontalLayoutGroup hlg)
+    {
+        if (queueRt == null || hlg == null) return;
+        var viewport = queueRt.parent as RectTransform;
+        if (viewport == null) return;
+        float available = viewport.rect.height;
+        if (available <= 1f) return;
+
+        float tallest = 0f;
+        for (int i = 0; i < queueRt.childCount; i++)
+        {
+            var le = queueRt.GetChild(i).GetComponent<LayoutElement>();
+            if (le != null && !le.ignoreLayout && queueRt.GetChild(i).gameObject.activeSelf)
+                tallest = Mathf.Max(tallest, le.preferredHeight);
+        }
+        if (tallest <= 0f) return;
+
+        float needed = tallest + hlg.padding.top + hlg.padding.bottom;
+        float s = Mathf.Clamp(available / needed, 0.8f, 1f);
+        queueRt.localScale = new Vector3(s, s, 1f);
     }
 
     /// <summary>
@@ -6650,8 +6682,8 @@ public class CharacterMove : MonoBehaviour
             var existingScrollRt = existingScroll.transform as RectTransform;
             if (existingScrollRt != null)
             {
-                existingScrollRt.offsetMin = new Vector2(0f, 2f);
-                existingScrollRt.offsetMax = new Vector2(-6f, -2f);
+                existingScrollRt.offsetMin = ProgramScrollInsetMin;
+                existingScrollRt.offsetMax = ProgramScrollInsetMax;
             }
             // Keep drop-hit overlay behind bags so reorder drags reach ProgramBagInstance.
             EnsureDropHitTargetBehindProgramContent();
@@ -6685,8 +6717,8 @@ public class CharacterMove : MonoBehaviour
         var scrollRt = scrollGo.GetComponent<RectTransform>();
         scrollRt.anchorMin = Vector2.zero;
         scrollRt.anchorMax = Vector2.one;
-        scrollRt.offsetMin = new Vector2(0f, 2f);
-        scrollRt.offsetMax = new Vector2(-6f, -2f);
+        scrollRt.offsetMin = ProgramScrollInsetMin;
+        scrollRt.offsetMax = ProgramScrollInsetMax;
         scrollRt.localScale = Vector3.one;
 
         var scrollImg = scrollGo.GetComponent<Image>();

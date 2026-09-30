@@ -149,7 +149,7 @@ export function CommandDiffChip({
   );
 }
 
-function CommandIcon({
+export function CommandIcon({
   command,
   size,
   ring,

@@ -26,6 +26,7 @@ export function RepairQualityCard({ result }: { result: DebuggingAnalysisResult 
       result.originalProgram,
       result.studentProgram
     ),
+    starterAlreadyWorks: result.reachesGoalBeforeFix,
   });
 
   const meta = REPAIR_QUALITY_META[level];

@@ -238,6 +238,22 @@ function debuggingVerdict(
         }
       : null;
 
+  if (
+    r.bugFixed &&
+    r.reachesGoalBeforeFix &&
+    r.originalProgram.length === r.studentProgram.length &&
+    r.originalProgram.every((c, i) => c === r.studentProgram[i])
+  ) {
+    return {
+      headline: `The starter already worked — the robot stops on the ${goalLabel} without any fix.`,
+      detail:
+        "The student ran the starter program unchanged, so this attempt doesn't show whether they can find and fix a bug.",
+      fix: "Edit this item's starter program so it contains a bug (for example a wrong turn or a missing step).",
+      tone: "warning",
+      confidence: null,
+    };
+  }
+
   if (r.bugFixed && r.repairStatus === "successfulButInefficient") {
     return {
       headline: "Fixed it — but the program has extra steps.",

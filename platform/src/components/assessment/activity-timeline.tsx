@@ -21,6 +21,8 @@ export type TimelineItem = {
   subtitle?: string;
   badge?: string;
   meta?: string;
+  /** Rich content under the subtitle (e.g. the program as built). */
+  extra?: React.ReactNode;
   tone?: "success" | "danger" | "warning" | "info" | "neutral";
 };
 
@@ -134,6 +136,7 @@ export function ActivityTimeline({
                 {format(new Date(item.timestamp), "MMM d, yyyy · HH:mm:ss")}
               </p>
               {item.subtitle && <p className="mt-2 text-sm opacity-90">{item.subtitle}</p>}
+              {item.extra && <div className="mt-3 rounded-lg bg-white/80 p-2.5">{item.extra}</div>}
               {item.meta && <p className="mt-1 font-mono text-xs opacity-75">{item.meta}</p>}
             </div>
           </li>

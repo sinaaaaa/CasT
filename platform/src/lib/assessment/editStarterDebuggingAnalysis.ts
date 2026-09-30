@@ -1160,6 +1160,18 @@ export function analyzeEditStarterDebugging(params: {
     }
   }
 
+  // A program that already stops on the goal is its own reference: comparing it with a
+  // different valid route would invent "mistakes" in a program that works.
+  const studentRouteWorks = bugFixed && repairStatus !== "successfulButInefficient";
+  if (studentRouteWorks) {
+    selectedComparisonRoute = [...student];
+    comparisonUsed = "studentRouteToGoal";
+    comparisonReason = programsEqual(original, student)
+      ? `The starter program already stops on the ${goalLabel}, so the student had nothing to fix.`
+      : `The student's program stops on the ${goalLabel}, so it is compared with itself — no step is wrong.`;
+    firstMistakeStep = null;
+  }
+
   return {
     bugFixed,
     repairStatus,
@@ -1193,10 +1205,10 @@ export function analyzeEditStarterDebugging(params: {
     commandsRemoved,
     commandsChanged,
     commandsReordered: diffOrig.reordered,
-    extraCommandsComparedToFix: diffFix.extra,
-    missingCommandsComparedToFix: diffFix.missing,
-    wrongCommandsComparedToFix: diffFix.wrong,
-    wrongOrderComparedToFix: diffFix.wrongOrder,
+    extraCommandsComparedToFix: studentRouteWorks ? [] : diffFix.extra,
+    missingCommandsComparedToFix: studentRouteWorks ? [] : diffFix.missing,
+    wrongCommandsComparedToFix: studentRouteWorks ? [] : diffFix.wrong,
+    wrongOrderComparedToFix: studentRouteWorks ? false : diffFix.wrongOrder,
     detectedMistakeType,
     matchQuality,
     score,

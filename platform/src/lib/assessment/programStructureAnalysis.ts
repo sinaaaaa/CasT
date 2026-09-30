@@ -17,6 +17,7 @@ import {
   resolveCommandBagProgramTokens,
 } from "@/lib/level-config";
 import { parseProgramStructureTelemetry } from "@/lib/attempt-mistakes";
+import { buildProgramGoalChecker, expandBlockProgram } from "@/lib/assessment/blockProgram";
 import {
   expandRepeatTokens,
   formatRepeatStart,
@@ -34,6 +35,8 @@ export type StructureBlock = {
   color?: string;
   /** Motion steps this block runs (bags / chunks expanded). */
   steps: number;
+  /** Robot moves inside a bag / chunk, in order. */
+  inner?: string[];
   repeatCount?: number;
   /** Bag / chunk id no longer exists in the item. */
   missing?: boolean;
@@ -116,20 +119,22 @@ export function normalizeStructureToken(raw: string): string | null {
   return normalizeMotionToken(t);
 }
 
-function macroSteps(token: string, bags: CommandBag[]): number {
-  return expandRepeatTokens(resolveCommandBagProgramTokens([token], bags)).length;
+function macroMoves(token: string, bags: CommandBag[]): string[] {
+  return expandRepeatTokens(resolveCommandBagProgramTokens([token], bags));
 }
 
 export function describeStructureBlock(token: string, bags: CommandBag[]): StructureBlock {
   const bagId = parseCommandBagToken(token);
   if (bagId) {
     const bag = bags.find((b) => b.id === bagId);
+    const inner = bag ? macroMoves(token, bags) : [];
     return {
       token,
       kind: "bag",
       label: bag?.name ?? "Deleted bag",
       color: bag?.color,
-      steps: bag ? macroSteps(token, bags) : 0,
+      steps: inner.length,
+      inner,
       missing: !bag,
     };
   }
@@ -138,12 +143,14 @@ export function describeStructureBlock(token: string, bags: CommandBag[]): Struc
     for (const bag of bags) {
       const chunk = bag.chunks?.find((c) => c.id === chunkId);
       if (chunk) {
+        const inner = macroMoves(token, bags);
         return {
           token,
           kind: "chunk",
           label: chunk.name,
           color: chunk.color ?? bag.color,
-          steps: macroSteps(token, bags),
+          steps: inner.length,
+          inner,
         };
       }
     }
@@ -358,7 +365,7 @@ export function buildProgramStructureAnalysis(args: {
         kind: "bag",
         name: bag.name,
         color: bag.color,
-        steps: macroSteps(token, bags),
+        steps: macroMoves(token, bags).length,
         inStarter: countIn(starterTokens, token),
         inFinal: countIn(finalTokens, token),
       });
@@ -374,7 +381,7 @@ export function buildProgramStructureAnalysis(args: {
           kind: "chunk",
           name: chunk.name,
           color: chunk.color ?? bag.color,
-          steps: macroSteps(token, bags),
+          steps: macroMoves(token, bags).length,
           inStarter: countIn(starterTokens, token),
           inFinal: countIn(finalTokens, token),
         });
@@ -430,7 +437,7 @@ export function buildProgramStructureAnalysis(args: {
     } else if (starterUnchanged) {
       insights.push(
         passed === true
-          ? "Ran the starter program exactly as given, and it worked."
+          ? "Ran the starter program exactly as given, and it already reached the goal. If this is a debugging item, the starter has no bug to fix."
           : "Ran the starter program without changing it. The student may not have spotted what needed fixing yet."
       );
     } else if (editStrategy === "reordered_only") {
@@ -608,6 +615,15 @@ export function describeProgramStructureReport(
     const missing = starter.filter((t) => describeStructureBlock(t, bags).missing);
     if (starter.some((t) => parseCommandBagToken(t) || parseCommandChunkToken(t))) {
       checks.push({ ok: missing.length === 0, label: "Starter uses only Bags / Chunks that still exist" });
+    }
+    if (context === "edit_starter" && starter.length > 0 && missing.length === 0) {
+      const reachesGoal = buildProgramGoalChecker(config, levelType);
+      if (reachesGoal) {
+        checks.push({
+          ok: !reachesGoal(expandBlockProgram(starter, bags).commands),
+          label: "Starter program has a bug to fix (it doesn't already reach the goal)",
+        });
+      }
     }
   }
   if (usesMacros) {

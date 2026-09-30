@@ -45,6 +45,8 @@ import { GeometryEdgeDiagnosisPanel } from "@/components/assessment/geometry-edg
 import type { GeometryEdgeDiagnosis } from "@/lib/assessment/geometryEdgeDiagnosis";
 import { BlockComparisonPanel } from "@/components/assessment/block-comparison-panel";
 import type { BlockProgramComparison } from "@/lib/assessment/blockProgramComparison";
+import { buildDebugBlockView } from "@/lib/assessment/debugBlockView";
+import { BlockProgramView } from "@/components/assessment/block-program-view";
 import { AttemptVerdictBanner } from "@/components/assessment/attempt-verdict-banner";
 import { buildAttemptVerdict } from "@/lib/assessment/attempt-verdict";
 import {
@@ -138,7 +140,25 @@ export type AttemptDetailPayload = {
 };
 
 export function AttemptAssessmentView({ attempt }: { attempt: AttemptDetailPayload }) {
-  const commandItems = attempt.commandEvents.map(commandTimelineItem);
+  const builtBlocks =
+    attempt.programStructure?.source === "unity" &&
+    attempt.programStructure.final.some((b) => b.kind !== "motion")
+      ? attempt.programStructure.final
+      : null;
+  const lastSubmitIndex = builtBlocks
+    ? attempt.commandEvents.map((e) => e.action.toUpperCase()).lastIndexOf("SUBMITTED")
+    : -1;
+  const commandItems = attempt.commandEvents.map((e, i) => {
+    const item = commandTimelineItem(e);
+    if (i !== lastSubmitIndex || !builtBlocks) return item;
+    const moves = builtBlocks.reduce((n, b) => n + (b.kind === "motion" ? 1 : (b.inner?.length ?? 0)), 0);
+    return {
+      ...item,
+      title: `Ran ${builtBlocks.length} block${builtBlocks.length === 1 ? "" : "s"} · ${moves} robot moves`,
+      meta: `Robot moves: ${e.command.replace(/^\[A\d+\]\s*/, "")}`,
+      extra: <BlockProgramView blocks={builtBlocks} compact />,
+    };
+  });
   const touchItems = attempt.robotTouchEvents.map((e) => ({
     timestamp: e.timestamp,
     title: e.eventType.replace(/_/g, " "),
@@ -182,6 +202,14 @@ export function AttemptAssessmentView({ attempt }: { attempt: AttemptDetailPaylo
   const geometryResult = attempt.geometryPathAnalysis;
   const isDebuggingAssessment =
     Boolean(attempt.isDebuggingLevel) && Boolean(debugResult?.available);
+  const debugBlockView =
+    isDebuggingAssessment && debugResult
+      ? buildDebugBlockView({
+          programStructure: attempt.programStructure,
+          blockComparison: attempt.blockComparison,
+          bugFixed: debugResult.bugFixed,
+        })
+      : null;
   const isChoiceAssessment = Boolean(attempt.liveRoute.choiceActionResult?.available);
   const choiceResult = attempt.liveRoute.choiceActionResult;
   const isCanvasAssessment = Boolean(attempt.isCanvasLevel && attempt.canvasPatternMatch);
@@ -361,7 +389,7 @@ export function AttemptAssessmentView({ attempt }: { attempt: AttemptDetailPaylo
           hideStructureRequirements={Boolean(attempt.programStructure?.requirements.length)}
         />
       ) : isDebuggingAssessment && debugResult ? (
-        <DebuggingAnalysisPanel result={debugResult} />
+        <DebuggingAnalysisPanel result={debugResult} blockView={debugBlockView} />
       ) : (
         <RouteAnalysisPanel
           attemptId={attempt.id}
@@ -388,9 +416,11 @@ export function AttemptAssessmentView({ attempt }: { attempt: AttemptDetailPaylo
 
       {attempt.geometryEdgeDiagnosis && <GeometryEdgeDiagnosisPanel result={attempt.geometryEdgeDiagnosis} />}
 
-      {attempt.blockComparison && <BlockComparisonPanel result={attempt.blockComparison} />}
+      {attempt.blockComparison && !debugBlockView && <BlockComparisonPanel result={attempt.blockComparison} />}
 
-      {attempt.programStructure && <ProgramStructurePanel result={attempt.programStructure} />}
+      {attempt.programStructure && (
+        <ProgramStructurePanel result={attempt.programStructure} hideProgramRows={Boolean(debugBlockView)} />
+      )}
 
       {attempt.stealthAssessment &&
         !isNumberLineAssessment &&

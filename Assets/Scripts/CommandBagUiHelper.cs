@@ -27,7 +27,7 @@ public static class CommandBagUiHelper
     public const float ProgramChunkChipSize = 64f;
     public const float ProgramChunkBadgeSize = 36f;
     public const float ProgramChunkExpandSize = 26f;
-    public const float ProgramCardGap = 6f;
+    public const float ProgramCardGap = 12f;
     public const float ProgramCloseReserve = 24f;
     public const float ProgramInnerPadX = 6f;
     public const float ProgramInnerPadY = 4f;

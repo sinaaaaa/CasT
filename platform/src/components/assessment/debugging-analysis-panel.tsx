@@ -12,11 +12,14 @@ import { ProgramDiffVisualizer } from "@/components/assessment/debugging/program
 import { RepairOutcomeBanner } from "@/components/assessment/debugging/repair-outcome-banner";
 import { RouteReplayPlayer } from "@/components/assessment/route-replay-player";
 import type { DebuggingAnalysisResult } from "@/lib/assessment/debuggingAnalysis";
+import type { DebugBlockView } from "@/lib/assessment/debugBlockView";
 
 export function DebuggingAnalysisPanel({
   result,
+  blockView,
 }: {
   result: DebuggingAnalysisResult;
+  blockView?: DebugBlockView | null;
 }) {
   const [activeStep, setActiveStep] = useState<number | null>(null);
 
@@ -67,6 +70,7 @@ export function DebuggingAnalysisPanel({
               result={result}
               activeStep={activeStep}
               onStepHover={setActiveStep}
+              blockView={blockView}
             />
           </TabsContent>
 
