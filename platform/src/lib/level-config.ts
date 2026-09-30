@@ -777,7 +777,10 @@ export function applyLevelTypeDefaults(
   levelType: LevelType,
   config: LevelGameplayConfig
 ): LevelGameplayConfig {
-  const base = { ...config };
+  // A leftover geometryPath (item copied from / switched away from Geometry Path) makes Unity
+  // draw the target shape on unrelated items.
+  const base =
+    levelType === LevelType.GEOMETRY_PATH ? { ...config } : { ...config, geometryPath: undefined };
   switch (levelType) {
     case LevelType.INTRO: {
       const existingIntro = base.actionBlockIntro;

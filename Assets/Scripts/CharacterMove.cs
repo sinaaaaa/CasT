@@ -6586,6 +6586,8 @@ public class CharacterMove : MonoBehaviour
         RebuildActionQueueFromUI();
     }
 
+    private const int ProgramQueueLeftInset = 16;
+
     /// <summary>Spacing between ProgramBagInstance cards in the yellow strip + horizontal scroll.</summary>
     private void EnsureProgramQueueSpacing()
     {
@@ -6602,8 +6604,8 @@ public class CharacterMove : MonoBehaviour
         hlg.childForceExpandHeight = false;
         hlg.childControlWidth = true;   // honor LayoutElement preferredWidth — prevents overlap
         hlg.childControlHeight = true;
-        // Zero left inset — first chip flush to the yellow-strip edge.
-        hlg.padding = new RectOffset(0, 8, 2, 2);
+        // Left inset keeps the first card inside the strip's dashed border.
+        hlg.padding = new RectOffset(ProgramQueueLeftInset, 8, 2, 2);
 
         var fitter = actionQueueTransform.GetComponent<ContentSizeFitter>();
         if (fitter == null)

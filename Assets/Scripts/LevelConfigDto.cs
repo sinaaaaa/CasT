@@ -652,6 +652,10 @@ public static class LevelConfigMapper
     {
         if (string.IsNullOrEmpty(levelType)) return;
         string t = levelType.ToUpperInvariant();
+        // Leftover geometryPath on other item types would draw the target shape on the grid.
+        if (t != "GEOMETRY_PATH")
+            ld.geometryPath = null;
+
         if (t == "INTRO")
         {
             ld.useFlagPlacement = false;

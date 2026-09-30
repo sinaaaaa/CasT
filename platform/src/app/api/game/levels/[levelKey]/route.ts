@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { gameApiUnauthorized, verifyGameApiKey } from "@/lib/game-api";
-import { levelGameplayConfigSchema } from "@/lib/level-config";
+import { applyLevelTypeDefaults, levelGameplayConfigSchema } from "@/lib/level-config";
 
 type RouteParams = { params: Promise<{ levelKey: string }> };
 
@@ -27,6 +27,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     name: level.name,
     levelType: level.levelType,
     orderIndex: level.orderIndex,
-    config: configParsed.data,
+    config: applyLevelTypeDefaults(level.levelType, configParsed.data),
   });
 }

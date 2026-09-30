@@ -76,6 +76,7 @@ export function isGeometryPathLevel(
   levelType?: LevelType
 ): boolean {
   if (levelType === LevelType.GEOMETRY_PATH) return true;
+  if (levelType) return false;
   return !!(config.geometryPath?.enabled && (config.geometryPath.segments?.length ?? 0) > 0);
 }
 
