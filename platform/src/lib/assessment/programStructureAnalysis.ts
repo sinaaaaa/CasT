@@ -298,8 +298,11 @@ export function buildProgramStructureAnalysis(args: {
   mistakes: unknown;
   finalCommand?: string | null;
   passed?: boolean | null;
+  /** Committed debugging edits for this run; > 0 with an unchanged starter means the edits cancelled out. */
+  editsMade?: number | null;
 }): ProgramStructureAnalysis {
   const { config, levelType, mistakes, finalCommand, passed } = args;
+  const editsMade = args.editsMade ?? 0;
   const bags = config.commandBags ?? [];
   const context = resolveContext(config, levelType);
   const kinds = context ? macroKindsFor(config, context) : { bags: false, chunks: false };
@@ -434,6 +437,10 @@ export function buildProgramStructureAnalysis(args: {
   if (hasStarter && starterTokens.length > 0) {
     if (finalTokens.length === 0) {
       insights.push("No program was recorded for this run.");
+    } else if (starterUnchanged && editsMade > 0) {
+      insights.push(
+        `Made ${plural(editsMade, "edit")}, but they cancelled out — the program that ran was the same as the starter.`
+      );
     } else if (starterUnchanged) {
       insights.push(
         passed === true
@@ -510,7 +517,9 @@ export function buildProgramStructureAnalysis(args: {
   if (hasStarter && editStrategy) {
     headline =
       editStrategy === "unchanged"
-        ? STRATEGY_LABELS.unchanged
+        ? editsMade > 0
+          ? "Edits cancelled out"
+          : STRATEGY_LABELS.unchanged
         : `${STRATEGY_LABELS[editStrategy]} (+${addedCount} / −${removedCount})`;
   } else if (usesMacros && source === "unity") {
     headline =

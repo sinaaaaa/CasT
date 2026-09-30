@@ -12,16 +12,32 @@ function cellLabel(v: { x: number; y: number }) {
   return `(${v.x}, ${v.y})`;
 }
 
-export function GeometryEdgeDiagnosisPanel({ result }: { result: GeometryEdgeDiagnosis }) {
+export function GeometryEdgeDiagnosisPanel({
+  result,
+  compact = false,
+}: {
+  result: GeometryEdgeDiagnosis;
+  /** The Geometry Path card above already shows edges met, off-shape edges and where the robot ended. */
+  compact?: boolean;
+}) {
   if (!result.available) return null;
   const allMet = result.metCount === result.targetCount;
+  const retracedNote = result.retracedEdgeCount
+    ? `${result.retracedEdgeCount} edge${result.retracedEdgeCount === 1 ? "" : "s"} traced twice`
+    : null;
+  const compactNote = [
+    result.shapeCompleteAtStep ? `Shape finished at move ${result.shapeCompleteAtStep}.` : null,
+    retracedNote ? `${retracedNote}.` : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <Card className="overflow-hidden border-slate-200/70 shadow-sm">
       <AssessmentPanelHeader
         icon={Shapes}
         title="Edge-by-edge check"
-        subtitle="Replays the program on the grid, checks every edge of the shape, and explains what happened where an edge was missed."
+        subtitle="Replays the program on the grid and explains where the robot left the shape."
         badges={
           <Badge
             variant="outline"
@@ -39,31 +55,35 @@ export function GeometryEdgeDiagnosisPanel({ result }: { result: GeometryEdgeDia
         }
       />
       <CardContent className="space-y-6 pt-6">
-        <p className="text-sm text-slate-700">{result.summary}</p>
+        {!compact && <p className="text-sm text-slate-700">{result.summary}</p>}
 
-        <div className="grid gap-3 sm:grid-cols-4">
-          <MetricTile
-            label="Edges met"
-            value={`${result.metCount}/${result.targetCount}`}
-            tone={allMet ? "success" : "danger"}
-          />
-          <MetricTile
-            label="Shape finished"
-            value={result.shapeCompleteAtStep ? `Step ${result.shapeCompleteAtStep}` : "No"}
-            tone={result.shapeCompleteAtStep ? "success" : "warning"}
-          />
-          <MetricTile
-            label="Off-shape edges"
-            value={String(result.extraEdges.length)}
-            sub={result.retracedEdgeCount ? `${result.retracedEdgeCount} edge${result.retracedEdgeCount === 1 ? "" : "s"} traced twice` : undefined}
-            tone={result.extraEdges.length ? "warning" : "default"}
-          />
-          <MetricTile
-            label="Robot ended"
-            value={result.finalCell ? cellLabel(result.finalCell) : "—"}
-            sub={result.finalFacing ? `facing ${result.finalFacing}` : undefined}
-          />
-        </div>
+        {compact ? (
+          compactNote && <p className="text-xs text-slate-500">{compactNote}</p>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-4">
+            <MetricTile
+              label="Edges met"
+              value={`${result.metCount}/${result.targetCount}`}
+              tone={allMet ? "success" : "danger"}
+            />
+            <MetricTile
+              label="Shape finished"
+              value={result.shapeCompleteAtStep ? `Step ${result.shapeCompleteAtStep}` : "No"}
+              tone={result.shapeCompleteAtStep ? "success" : "warning"}
+            />
+            <MetricTile
+              label="Off-shape edges"
+              value={String(result.extraEdges.length)}
+              sub={retracedNote ?? undefined}
+              tone={result.extraEdges.length ? "warning" : "default"}
+            />
+            <MetricTile
+              label="Robot ended"
+              value={result.finalCell ? cellLabel(result.finalCell) : "—"}
+              sub={result.finalFacing ? `facing ${result.finalFacing}` : undefined}
+            />
+          </div>
+        )}
 
         {result.telemetryMismatch && (
           <p className="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
@@ -103,8 +123,13 @@ export function GeometryEdgeDiagnosisPanel({ result }: { result: GeometryEdgeDia
           </section>
         )}
 
-        <section className="rounded-xl border border-slate-200/60 bg-white p-4">
-          <h3 className="text-sm font-semibold text-slate-900">Edges of the shape</h3>
+        <details className="rounded-xl border border-slate-200/60 bg-white p-4" open={!compact}>
+          <summary className="cursor-pointer text-sm font-semibold text-slate-900">
+            All {result.targetCount} edges of the shape{" "}
+            <span className="font-normal text-slate-500">
+              ({result.metCount} traced, {result.targetCount - result.metCount} missed)
+            </span>
+          </summary>
           <table className="mt-3 w-full text-left text-xs">
             <thead className="text-slate-500">
               <tr>
@@ -139,7 +164,7 @@ export function GeometryEdgeDiagnosisPanel({ result }: { result: GeometryEdgeDia
               ))}
             </tbody>
           </table>
-        </section>
+        </details>
 
         {result.steps.length > 0 && (
           <details className="rounded-xl border border-slate-200/60 bg-white p-4">

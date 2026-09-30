@@ -143,6 +143,26 @@ export type AttemptDetailPayload = {
   } | null;
 };
 
+function ReportSection({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="space-y-4">
+      <div className="border-b border-slate-200 pb-2">
+        <h2 className="text-base font-semibold tracking-tight text-slate-900">{title}</h2>
+        <p className="text-sm text-muted-foreground">{description}</p>
+      </div>
+      {children}
+    </section>
+  );
+}
+
 export function AttemptAssessmentView({ attempt }: { attempt: AttemptDetailPayload }) {
   const builtBlocks =
     attempt.programStructure?.source === "unity" &&
@@ -155,11 +175,11 @@ export function AttemptAssessmentView({ attempt }: { attempt: AttemptDetailPaylo
   const commandItems = attempt.commandEvents.map((e, i) => {
     const item = commandTimelineItem(e);
     if (i !== lastSubmitIndex || !builtBlocks) return item;
-    const moves = builtBlocks.reduce((n, b) => n + (b.kind === "motion" ? 1 : (b.inner?.length ?? 0)), 0);
+    const moves = attempt.programStructure?.expandedStepCount ?? 0;
     return {
       ...item,
-      title: `Ran ${builtBlocks.length} block${builtBlocks.length === 1 ? "" : "s"} · ${moves} robot moves`,
-      meta: `Robot moves: ${e.command.replace(/^\[A\d+\]\s*/, "")}`,
+      title: `Ran ${builtBlocks.length} block${builtBlocks.length === 1 ? "" : "s"} · ${moves} robot move${moves === 1 ? "" : "s"}`,
+      meta: undefined,
       extra: <BlockProgramView blocks={builtBlocks} compact />,
     };
   });
@@ -214,6 +234,17 @@ export function AttemptAssessmentView({ attempt }: { attempt: AttemptDetailPaylo
           bugFixed: debugResult.bugFixed,
         })
       : null;
+  const showEdgeDiagnosis = Boolean(attempt.geometryEdgeDiagnosis?.available);
+  const showBlockComparison = Boolean(attempt.blockComparison?.available) && !debugBlockView;
+  const showProgramStructure = Boolean(attempt.programStructure?.available);
+  const showDebuggingEdits = Boolean(attempt.debuggingEdits?.available);
+  const showDiagnosisSection = showEdgeDiagnosis || showBlockComparison;
+  const showRepairSection = showProgramStructure || showDebuggingEdits;
+  /** Block-level panels draw the program with Repeat / Bags / Chunks intact; the flat arrow diff would contradict them. */
+  const hasBlockEvidence =
+    isGeometryPathAssessment ||
+    showProgramStructure ||
+    Boolean(attempt.blockComparison?.available);
   const isChoiceAssessment = Boolean(attempt.liveRoute.choiceActionResult?.available);
   const choiceResult = attempt.liveRoute.choiceActionResult;
   const isCanvasAssessment = Boolean(attempt.isCanvasLevel && attempt.canvasPatternMatch);
@@ -392,6 +423,7 @@ export function AttemptAssessmentView({ attempt }: { attempt: AttemptDetailPaylo
                 : attempt.studentProgram
           }
           hideStructureRequirements={Boolean(attempt.programStructure?.requirements.length)}
+          startCell={attempt.geometryEdgeDiagnosis?.steps[0]?.from ?? null}
         />
       ) : isDebuggingAssessment && debugResult ? (
         <DebuggingAnalysisPanel result={debugResult} blockView={debugBlockView} />
@@ -419,14 +451,36 @@ export function AttemptAssessmentView({ attempt }: { attempt: AttemptDetailPaylo
         />
       )}
 
-      {attempt.debuggingEdits && <DebuggingEditsPanel result={attempt.debuggingEdits} />}
+      {showDiagnosisSection && (
+        <ReportSection
+          title={attempt.passed ? "Program check" : "What went wrong"}
+          description={
+            attempt.passed
+              ? "The program replayed block by block."
+              : "Where the program went off track, and the smallest change that would fix it."
+          }
+        >
+          {showEdgeDiagnosis && (
+            <GeometryEdgeDiagnosisPanel result={attempt.geometryEdgeDiagnosis!} compact={isGeometryPathAssessment} />
+          )}
+          {showBlockComparison && <BlockComparisonPanel result={attempt.blockComparison!} />}
+        </ReportSection>
+      )}
 
-      {attempt.geometryEdgeDiagnosis && <GeometryEdgeDiagnosisPanel result={attempt.geometryEdgeDiagnosis} />}
-
-      {attempt.blockComparison && !debugBlockView && <BlockComparisonPanel result={attempt.blockComparison} />}
-
-      {attempt.programStructure && (
-        <ProgramStructurePanel result={attempt.programStructure} hideProgramRows={Boolean(debugBlockView)} />
+      {showRepairSection && (
+        <ReportSection
+          title={attempt.programStructure?.hasStarter || showDebuggingEdits ? "How the student changed the starter" : "Program structure"}
+          description={
+            attempt.programStructure?.hasStarter || showDebuggingEdits
+              ? "What they kept, moved and changed, and how they used the item's edit budget."
+              : "Which blocks, Bags and Chunks the student used."
+          }
+        >
+          {showProgramStructure && (
+            <ProgramStructurePanel result={attempt.programStructure!} hideProgramRows={Boolean(debugBlockView)} />
+          )}
+          {showDebuggingEdits && <DebuggingEditsPanel result={attempt.debuggingEdits!} />}
+        </ReportSection>
       )}
 
       {attempt.stealthAssessment &&
@@ -617,7 +671,8 @@ export function AttemptAssessmentView({ attempt }: { attempt: AttemptDetailPaylo
         !attempt.liveRoute.choiceActionResult?.available &&
         !attempt.liveRoute.pathBuildingResult?.available &&
         !attempt.liveRoute.debuggingResult?.available &&
-        !isNumberLineAssessment && (
+        !isNumberLineAssessment &&
+        !hasBlockEvidence && (
         <Card className="shadow-sm">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

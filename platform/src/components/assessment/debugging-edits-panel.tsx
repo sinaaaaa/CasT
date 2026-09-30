@@ -3,11 +3,8 @@
 import {
   ArrowLeftRight,
   Ban,
-  Briefcase,
   Gauge,
-  MoveHorizontal,
   Plus,
-  Puzzle,
   Repeat,
   Replace,
   Trash2,
@@ -34,13 +31,6 @@ const KIND_TONE: Record<string, string> = {
   replace: "bg-amber-50 text-amber-800 border-amber-200",
   reorder: "bg-sky-50 text-sky-700 border-sky-200",
   editRepeat: "bg-violet-50 text-violet-700 border-violet-200",
-};
-
-const TYPE_ICON: Record<string, LucideIcon> = {
-  arrows: MoveHorizontal,
-  repeat: Repeat,
-  commandBag: Briefcase,
-  actionChunk: Puzzle,
 };
 
 const EFFICIENCY_BADGE: Record<NonNullable<DebuggingEditAnalysis["efficiency"]>, { text: string; tone: string }> = {
@@ -106,7 +96,7 @@ export function DebuggingEditsPanel({ result }: { result: DebuggingEditAnalysis 
           <MetricTile
             label="Smallest fix"
             value={result.minimalEdits != null ? `${result.minimalEdits} edit${result.minimalEdits === 1 ? "" : "s"}` : "—"}
-            sub={result.undoneEdits ? `${result.undoneEdits} edit${result.undoneEdits === 1 ? "" : "s"} undone` : undefined}
+            sub={result.minimalEdits != null ? "fewest edits that would fix the starter" : "not worked out for this item"}
             tone="info"
           />
           <MetricTile
@@ -118,7 +108,12 @@ export function DebuggingEditsPanel({ result }: { result: DebuggingEditAnalysis 
         </div>
 
         {result.editBudget != null && result.editBudget <= 20 && (
-          <BudgetBar used={result.editsUsed} budget={result.editBudget} />
+          <div className="space-y-1.5">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              Edit budget · {result.editsUsed} of {result.editBudget} used
+            </p>
+            <BudgetBar used={result.editsUsed} budget={result.editBudget} />
+          </div>
         )}
 
         {result.insights.length > 0 && (
@@ -149,9 +144,11 @@ export function DebuggingEditsPanel({ result }: { result: DebuggingEditAnalysis 
                       .filter((e) => e.run === run)
                       .map((e, i) => {
                         const Icon = KIND_ICON[e.kind] ?? Plus;
-                        const TypeIcon = TYPE_ICON[e.itemType] ?? MoveHorizontal;
                         return (
                           <li key={i} className="flex items-center gap-2 text-sm text-slate-700">
+                            <span className="w-4 shrink-0 text-right text-[11px] font-semibold text-slate-400">
+                              {i + 1}
+                            </span>
                             <span
                               className={cn(
                                 "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border",
@@ -160,7 +157,6 @@ export function DebuggingEditsPanel({ result }: { result: DebuggingEditAnalysis 
                             >
                               <Icon className="h-3.5 w-3.5" />
                             </span>
-                            <TypeIcon className="h-3.5 w-3.5 shrink-0 text-slate-400" />
                             <span>{e.label}</span>
                           </li>
                         );

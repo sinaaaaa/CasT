@@ -197,6 +197,15 @@ export default async function AttemptDetailPage({
         })
       : null;
 
+  const debuggingEdits = parsedLevelConfig.success
+    ? analyzeDebuggingEdits({
+        config: parsedLevelConfig.data,
+        levelType: attempt.level.levelType,
+        mistakes: attempt.mistakes,
+        passed: attempt.passed,
+      })
+    : null;
+
   const programStructure = parsedLevelConfig.success
     ? buildProgramStructureAnalysis({
         config: parsedLevelConfig.data,
@@ -204,6 +213,7 @@ export default async function AttemptDetailPage({
         mistakes: attempt.mistakes,
         finalCommand: attempt.finalCommand,
         passed: attempt.passed,
+        editsMade: debuggingEdits?.hasTelemetry ? debuggingEdits.editsUsed : null,
       })
     : null;
 
@@ -233,15 +243,6 @@ export default async function AttemptDetailPage({
   ).length;
 
   const runMeta = parseAttemptRunMeta(attempt.mistakes);
-
-  const debuggingEdits = parsedLevelConfig.success
-    ? analyzeDebuggingEdits({
-        config: parsedLevelConfig.data,
-        levelType: attempt.level.levelType,
-        mistakes: attempt.mistakes,
-        passed: attempt.passed,
-      })
-    : null;
 
   const payload: AttemptDetailPayload = {
     id: attempt.id,

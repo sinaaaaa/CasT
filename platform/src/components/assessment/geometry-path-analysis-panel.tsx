@@ -13,6 +13,14 @@ function cellCenter(x: number, y: number) {
   return { cx: x + 0.5, cy: GRID_ROWS - 0.5 - y };
 }
 
+function facingName(v: { x: number; y: number }): string {
+  if (v.y > 0) return "up";
+  if (v.y < 0) return "down";
+  if (v.x > 0) return "right";
+  if (v.x < 0) return "left";
+  return "—";
+}
+
 const STATUS_STROKE: Record<string, string> = {
   correct: "#10b981",
   missed: "#a78bfa",
@@ -32,11 +40,14 @@ export function GeometryPathAnalysisPanel({
   result,
   studentProgram,
   hideStructureRequirements = false,
+  startCell = null,
 }: {
   result: GeometryPathAnalysisResult;
   studentProgram?: string[];
   /** Shown with met / not-met status in the program-structure panel instead. */
   hideStructureRequirements?: boolean;
+  /** Where the robot started (from the replay), drawn as a ring on the map. */
+  startCell?: { x: number; y: number } | null;
 }) {
   if (!result.available) return null;
 
@@ -74,56 +85,7 @@ export function GeometryPathAnalysisPanel({
           </Badge>
         }
       />
-      <CardContent className="space-y-6 pt-6">
-        <p className="text-sm text-slate-600">{result.summary}</p>
-
-        {result.requiresDestination && (
-          <div className="rounded-xl border border-teal-100 bg-teal-50/50 px-3 py-2 text-xs font-medium text-teal-900">
-            Overall: {COMBINED_LABEL[result.combinedOutcome] ?? result.combinedOutcome}
-          </div>
-        )}
-
-        <div className="grid gap-3 sm:grid-cols-4">
-          <MetricTile label="Completion" value={`${result.pathCompletionPct}%`} />
-          <MetricTile label="Accuracy" value={`${result.pathAccuracyPct}%`} />
-          <MetricTile
-            label="Target edges"
-            value={`${result.completedEdgeCount}/${result.targetEdgeCount}`}
-          />
-          <MetricTile label="Extra edges" value={String(result.extraEdgeCount)} />
-        </div>
-
-        {result.requiresDestination && (
-          <div className="grid gap-3 sm:grid-cols-4">
-            <MetricTile
-              label="Shape complete"
-              value={result.shapeCompleted ? "Yes" : "No"}
-            />
-            <MetricTile
-              label="Destination"
-              value={
-                result.destinationReached === true
-                  ? "Reached"
-                  : result.destinationReached === false
-                    ? "Missed"
-                    : "—"
-              }
-            />
-            <MetricTile
-              label="Final cell"
-              value={
-                result.finalCell
-                  ? `(${result.finalCell.x}, ${result.finalCell.y})`
-                  : "—"
-              }
-            />
-            <MetricTile
-              label="After shape"
-              value={`${result.extraMovementAfterShape} moves`}
-            />
-          </div>
-        )}
-
+      <CardContent className="grid items-start gap-6 pt-6 lg:grid-cols-2">
         <section className="rounded-xl border border-slate-200/70 bg-slate-50/40 p-4">
           <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-900">
             <Map className="h-4 w-4 text-slate-500" />
@@ -131,7 +93,7 @@ export function GeometryPathAnalysisPanel({
           </div>
           <svg
             viewBox={`0 0 ${GRID_COLS} ${GRID_ROWS}`}
-            className="mx-auto aspect-square w-full max-w-md rounded-lg border border-slate-200 bg-white"
+            className="mx-auto aspect-square w-full max-w-sm rounded-lg border border-slate-200 bg-white"
             role="img"
             aria-label="Geometry path comparison"
           >
@@ -153,37 +115,19 @@ export function GeometryPathAnalysisPanel({
               const a = cellCenter(e.from.x, e.from.y);
               const b = cellCenter(e.to.x, e.to.y);
               const stroke = STATUS_STROKE[e.status] ?? "#94a3b8";
-              const dashed = e.status === "missed";
-              const solid = e.status === "correct" || e.status === "extra";
               return (
-                <g key={`${e.key}-${e.status}`}>
-                  {e.status === "missed" && (
-                    <line
-                      x1={a.cx}
-                      y1={a.cy}
-                      x2={b.cx}
-                      y2={b.cy}
-                      stroke={stroke}
-                      strokeWidth={0.14}
-                      strokeLinecap="round"
-                      opacity={0.35}
-                      strokeDasharray="0.16 0.12"
-                    />
-                  )}
-                  {solid && (
-                    <line
-                      x1={a.cx}
-                      y1={a.cy}
-                      x2={b.cx}
-                      y2={b.cy}
-                      stroke={stroke}
-                      strokeWidth={e.status === "extra" ? 0.14 : 0.16}
-                      strokeLinecap="round"
-                      opacity={e.status === "extra" ? 0.9 : 1}
-                    />
-                  )}
-                  {dashed && e.status !== "missed" ? null : null}
-                </g>
+                <line
+                  key={`${e.key}-${e.status}`}
+                  x1={a.cx}
+                  y1={a.cy}
+                  x2={b.cx}
+                  y2={b.cy}
+                  stroke={stroke}
+                  strokeWidth={e.status === "correct" ? 0.16 : 0.14}
+                  strokeLinecap="round"
+                  opacity={e.status === "missed" ? 0.35 : e.status === "extra" ? 0.9 : 1}
+                  strokeDasharray={e.status === "missed" ? "0.16 0.12" : undefined}
+                />
               );
             })}
             {result.requiredFinishCell && (
@@ -202,6 +146,16 @@ export function GeometryPathAnalysisPanel({
                 strokeWidth={0.06}
               />
             )}
+            {startCell && (
+              <circle
+                cx={cellCenter(startCell.x, startCell.y).cx}
+                cy={cellCenter(startCell.x, startCell.y).cy}
+                r={0.2}
+                fill="white"
+                stroke="#0f172a"
+                strokeWidth={0.07}
+              />
+            )}
             {result.finalCell && (
               <circle
                 cx={cellCenter(result.finalCell.x, result.finalCell.y).cx}
@@ -211,17 +165,26 @@ export function GeometryPathAnalysisPanel({
               />
             )}
           </svg>
-          <div className="mt-3 flex flex-wrap gap-3 text-[11px] text-slate-600">
+          <div className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1.5 text-[11px] text-slate-600">
             <span className="inline-flex items-center gap-1.5">
-              <span className="h-0.5 w-4 rounded bg-emerald-500" /> Correct
+              <span className="h-0.5 w-4 rounded bg-emerald-500" /> Traced correctly
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <span className="h-0.5 w-4 rounded border border-dashed border-violet-400 bg-violet-200" />{" "}
-              Missed target
+              <span className="h-0.5 w-4 rounded border border-dashed border-violet-400 bg-violet-200" /> Missed
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <span className="h-0.5 w-4 rounded bg-rose-500" /> Extra / off-path
+              <span className="h-0.5 w-4 rounded bg-rose-500" /> Off the shape
             </span>
+            {startCell && (
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full border-2 border-slate-900 bg-white" /> Start
+              </span>
+            )}
+            {result.finalCell && (
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full bg-orange-500" /> Robot ended
+              </span>
+            )}
             {result.requiresDestination && (
               <span className="inline-flex items-center gap-1.5">
                 <MapPin className="h-3 w-3 text-teal-600" /> Destination cell
@@ -230,26 +193,78 @@ export function GeometryPathAnalysisPanel({
           </div>
         </section>
 
-        {!hideStructureRequirements &&
-          (result.requireRepeat || result.requireActionChunk || result.requireCommandBag) && (
-          <section className="rounded-xl border border-slate-200/60 bg-white p-4 text-sm">
-            <h3 className="font-semibold text-slate-900">Structure requirements</h3>
-            <ul className="mt-2 list-inside list-disc text-slate-600">
-              {result.requireRepeat && <li>Must use Repeat</li>}
-              {result.requireActionChunk && <li>Must use an Action Chunk</li>}
-              {result.requireCommandBag && <li>Must use a Command Bag</li>}
-            </ul>
-          </section>
-        )}
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600">{result.summary}</p>
 
-        {studentProgram && studentProgram.length > 0 && (
-          <section className="rounded-xl border border-slate-200/60 bg-white p-4">
-            <h3 className="text-sm font-semibold text-slate-900">Student program</h3>
-            <p className="mt-2 break-words font-mono text-xs text-slate-700">
-              {studentProgram.join(" → ")}
-            </p>
-          </section>
-        )}
+          {result.requiresDestination && (
+            <div className="rounded-xl border border-teal-100 bg-teal-50/50 px-3 py-2 text-xs font-medium text-teal-900">
+              Overall: {COMBINED_LABEL[result.combinedOutcome] ?? result.combinedOutcome}
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <MetricTile
+              label="Edges traced"
+              value={`${result.completedEdgeCount}/${result.targetEdgeCount}`}
+              sub={`${result.pathCompletionPct}% of the shape`}
+              tone={result.completedEdgeCount === result.targetEdgeCount ? "success" : "warning"}
+            />
+            <MetricTile
+              label="Off-shape edges"
+              value={String(result.extraEdgeCount)}
+              sub={`${result.pathAccuracyPct}% of traveled edges were on the shape`}
+              tone={result.extraEdgeCount > 0 ? "warning" : "default"}
+            />
+            {result.requiresDestination ? (
+              <>
+                <MetricTile
+                  label="Destination"
+                  value={
+                    result.destinationReached === true
+                      ? "Reached"
+                      : result.destinationReached === false
+                        ? "Missed"
+                        : "—"
+                  }
+                  tone={result.destinationReached === true ? "success" : result.destinationReached === false ? "danger" : "default"}
+                />
+                <MetricTile label="After shape" value={`${result.extraMovementAfterShape} moves`} />
+              </>
+            ) : (
+              <MetricTile
+                label="Shape finished"
+                value={result.shapeCompleted ? "Yes" : "No"}
+                tone={result.shapeCompleted ? "success" : "warning"}
+              />
+            )}
+            <MetricTile
+              label="Robot ended"
+              value={result.finalCell ? `(${result.finalCell.x}, ${result.finalCell.y})` : "—"}
+              sub={result.finalFacing ? `facing ${facingName(result.finalFacing)}` : undefined}
+            />
+          </div>
+
+          {!hideStructureRequirements &&
+            (result.requireRepeat || result.requireActionChunk || result.requireCommandBag) && (
+              <section className="rounded-xl border border-slate-200/60 bg-white p-4 text-sm">
+                <h3 className="font-semibold text-slate-900">Structure requirements</h3>
+                <ul className="mt-2 list-inside list-disc text-slate-600">
+                  {result.requireRepeat && <li>Must use Repeat</li>}
+                  {result.requireActionChunk && <li>Must use an Action Chunk</li>}
+                  {result.requireCommandBag && <li>Must use a Command Bag</li>}
+                </ul>
+              </section>
+            )}
+
+          {studentProgram && studentProgram.length > 0 && (
+            <section className="rounded-xl border border-slate-200/60 bg-white p-4">
+              <h3 className="text-sm font-semibold text-slate-900">Student program</h3>
+              <p className="mt-2 break-words font-mono text-xs text-slate-700">
+                {studentProgram.join(" → ")}
+              </p>
+            </section>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

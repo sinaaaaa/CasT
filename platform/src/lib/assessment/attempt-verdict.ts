@@ -31,6 +31,8 @@ export type AttemptVerdict = {
   headline: string;
   /** What happened, in plain words. */
   detail: string;
+  /** Extra findings (starter edits, the exact mistake, edit budget), one short line each. */
+  points?: string[];
   /** What to try next (optional). */
   fix: string | null;
   tone: VerdictTone;
@@ -614,18 +616,28 @@ function geometryVerdict(r: GeometryPathAnalysisResult): AttemptVerdict {
   };
 }
 
+function withPoints(verdict: AttemptVerdict, extra: string[], fix: string | null): AttemptVerdict {
+  if (!extra.length && fix === verdict.fix) return verdict;
+  return { ...verdict, points: [...(verdict.points ?? []), ...extra.map(clean)], fix };
+}
+
 /** Add starter-edit / Command Bag findings to the headline verdict without changing its tone. */
 function withProgramStructure(
   verdict: AttemptVerdict,
   ps: ProgramStructureAnalysis | null | undefined,
-  passed: boolean
+  passed: boolean,
+  editsMade: number
 ): AttemptVerdict {
   if (!ps?.available) return verdict;
   const extra: string[] = [];
   let fix = verdict.fix;
 
   if (ps.hasStarter && ps.editStrategy) {
-    if (ps.starterUnchanged) {
+    if (ps.starterUnchanged && editsMade > 0) {
+      extra.push(
+        `Made ${editsMade} edit${editsMade === 1 ? "" : "s"}, but they cancelled out, so the starter ran unchanged.`
+      );
+    } else if (ps.starterUnchanged) {
       extra.push("The student ran the starter program without changing it.");
       if (!passed) fix = "Ask the student to run the starter, watch where it goes wrong, and change only that part.";
     } else {
@@ -652,8 +664,7 @@ function withProgramStructure(
     fix = fix ?? `Remind the student that this item asks them to ${unmet[0]!.label.toLowerCase()}.`;
   }
 
-  if (!extra.length) return verdict;
-  return { ...verdict, detail: [clean(verdict.detail), ...extra].filter(Boolean).join(" "), fix };
+  return withPoints(verdict, extra, fix);
 }
 
 /** Name the exact edge / block that went wrong, when the replay found it. */
@@ -673,8 +684,7 @@ function withReplayFindings(verdict: AttemptVerdict, input: AttemptVerdictInput)
   } else if (issue?.fix) {
     fix = issue.fix;
   }
-  if (!extra.length && fix === verdict.fix) return verdict;
-  return { ...verdict, detail: [clean(verdict.detail), ...extra].filter(Boolean).join(" "), fix };
+  return withPoints(verdict, extra, fix);
 }
 
 function withDebuggingEdits(verdict: AttemptVerdict, input: AttemptVerdictInput): AttemptVerdict {
@@ -689,16 +699,17 @@ function withDebuggingEdits(verdict: AttemptVerdict, input: AttemptVerdictInput)
   else if (!input.fallback.passed && d.runBudgetExhausted) note = `Used all ${d.runBudget} runs.`;
   if (!note) return verdict;
   return {
-    ...verdict,
-    detail: [clean(verdict.detail), note].filter(Boolean).join(" "),
+    ...withPoints(verdict, [note], verdict.fix),
     tone: !input.fallback.passed && d.budgetExhausted && verdict.tone === "warning" ? "danger" : verdict.tone,
   };
 }
 
 export function buildAttemptVerdict(input: AttemptVerdictInput): AttemptVerdict {
+  const d = input.debuggingEdits;
+  const editsMade = d?.available && d.hasTelemetry ? d.editsUsed : 0;
   return withDebuggingEdits(
     withReplayFindings(
-      withProgramStructure(baseAttemptVerdict(input), input.programStructure, input.fallback.passed),
+      withProgramStructure(baseAttemptVerdict(input), input.programStructure, input.fallback.passed, editsMade),
       input
     ),
     input

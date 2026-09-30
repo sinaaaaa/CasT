@@ -74,6 +74,17 @@ export function AttemptVerdictBanner({ verdict }: { verdict: AttemptVerdict }) {
             <p className="text-sm leading-relaxed text-slate-700">{verdict.detail}</p>
           )}
 
+          {verdict.points && verdict.points.length > 0 && (
+            <ul className="space-y-1 text-sm leading-relaxed text-slate-700">
+              {verdict.points.map((point, i) => (
+                <li key={i} className="flex gap-2">
+                  <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400" aria-hidden />
+                  <span>{point}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+
           {verdict.fix && (
             <div className="flex items-start gap-2 rounded-lg border border-slate-200/70 bg-white/70 px-3 py-2">
               <Lightbulb className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden />
