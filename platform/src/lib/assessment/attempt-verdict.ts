@@ -16,6 +16,7 @@ import type { GeometryPathAnalysisResult } from "@/lib/assessment/geometryPathAn
 import type { ProgramStructureAnalysis } from "@/lib/assessment/programStructureAnalysis";
 import type { GeometryEdgeDiagnosis } from "@/lib/assessment/geometryEdgeDiagnosis";
 import type { BlockProgramComparison } from "@/lib/assessment/blockProgramComparison";
+import type { DebuggingEditAnalysis } from "@/lib/assessment/debuggingEditAnalysis";
 
 export type VerdictTone = "success" | "warning" | "danger" | "neutral";
 
@@ -59,6 +60,7 @@ export type AttemptVerdictInput = {
   programStructure?: ProgramStructureAnalysis | null;
   geometryEdges?: GeometryEdgeDiagnosis | null;
   blockComparison?: BlockProgramComparison | null;
+  debuggingEdits?: DebuggingEditAnalysis | null;
   /** Fallback when no rich analysis is available. */
   fallback: { passed: boolean; status: string; score: number | null };
 };
@@ -675,9 +677,30 @@ function withReplayFindings(verdict: AttemptVerdict, input: AttemptVerdictInput)
   return { ...verdict, detail: [clean(verdict.detail), ...extra].filter(Boolean).join(" "), fix };
 }
 
+function withDebuggingEdits(verdict: AttemptVerdict, input: AttemptVerdictInput): AttemptVerdict {
+  const d = input.debuggingEdits;
+  if (!d?.available || !d.hasTelemetry) return verdict;
+  const budget = d.editBudget != null ? ` (${d.editsUsed}/${d.editBudget} edits)` : "";
+  let note: string | null = null;
+  if (input.fallback.passed && d.efficiency === "minimal") note = `Used the fewest edits possible${budget}.`;
+  else if (input.fallback.passed && d.efficiency === "extra" && d.minimalEdits != null)
+    note = `Used ${d.editsUsed} edits where ${d.minimalEdits} would do.`;
+  else if (!input.fallback.passed && d.budgetExhausted) note = `Ran out of edits${budget} before the program worked.`;
+  else if (!input.fallback.passed && d.runBudgetExhausted) note = `Used all ${d.runBudget} runs.`;
+  if (!note) return verdict;
+  return {
+    ...verdict,
+    detail: [clean(verdict.detail), note].filter(Boolean).join(" "),
+    tone: !input.fallback.passed && d.budgetExhausted && verdict.tone === "warning" ? "danger" : verdict.tone,
+  };
+}
+
 export function buildAttemptVerdict(input: AttemptVerdictInput): AttemptVerdict {
-  return withReplayFindings(
-    withProgramStructure(baseAttemptVerdict(input), input.programStructure, input.fallback.passed),
+  return withDebuggingEdits(
+    withReplayFindings(
+      withProgramStructure(baseAttemptVerdict(input), input.programStructure, input.fallback.passed),
+      input
+    ),
     input
   );
 }

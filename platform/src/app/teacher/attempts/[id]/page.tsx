@@ -24,6 +24,7 @@ import { buildCanvasPatternMatch } from "@/lib/assessment/canvas-pattern-match";
 import { buildGeometryPathAnalysisFromAttempt } from "@/lib/assessment/geometryPathAnalysis";
 import { buildProgramStructureAnalysis } from "@/lib/assessment/programStructureAnalysis";
 import { buildReplayDiagnostics } from "@/lib/assessment/replayDiagnostics";
+import { analyzeDebuggingEdits } from "@/lib/assessment/debuggingEditAnalysis";
 import { formatAttemptRunLabel, parseAttemptRunMeta } from "@/lib/attempt-mistakes";
 import { resolveAttemptDurationSeconds } from "@/lib/game/resolve-attempt-duration";
 import { LevelType } from "@prisma/client";
@@ -233,6 +234,15 @@ export default async function AttemptDetailPage({
 
   const runMeta = parseAttemptRunMeta(attempt.mistakes);
 
+  const debuggingEdits = parsedLevelConfig.success
+    ? analyzeDebuggingEdits({
+        config: parsedLevelConfig.data,
+        levelType: attempt.level.levelType,
+        mistakes: attempt.mistakes,
+        passed: attempt.passed,
+      })
+    : null;
+
   const payload: AttemptDetailPayload = {
     id: attempt.id,
     attemptNumber: attempt.attemptNumber,
@@ -275,6 +285,7 @@ export default async function AttemptDetailPage({
     programStructure: programStructure?.available ? programStructure : null,
     geometryEdgeDiagnosis,
     blockComparison,
+    debuggingEdits,
     isDebuggingLevel: isDebuggingLevelFlag,
     isCanvasLevel: isCanvasLevelFlag,
     canvasPatternMatch,

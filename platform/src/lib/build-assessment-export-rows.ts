@@ -4,6 +4,7 @@ import type { TeacherAssessmentSummary } from "@/lib/assessment/assessmentTypes"
 import { levelGameplayConfigSchema } from "@/lib/level-config";
 import { buildProgramStructureAnalysis } from "@/lib/assessment/programStructureAnalysis";
 import { buildReplayDiagnostics } from "@/lib/assessment/replayDiagnostics";
+import { analyzeDebuggingEdits } from "@/lib/assessment/debuggingEditAnalysis";
 
 export async function buildAssessmentExportRows(filters?: {
   studentIds?: string[];
@@ -109,6 +110,15 @@ export async function buildAssessmentExportRows(filters?: {
         : null;
       const edges = replay?.geometryEdgeDiagnosis ?? null;
       const blocks = replay?.blockComparison ?? null;
+      const dbg = parsedConfig.success
+        ? analyzeDebuggingEdits({
+            config: parsedConfig.data,
+            levelType: a.level.levelType,
+            mistakes: a.mistakes,
+            passed: a.passed,
+            skipMinimalSearch: true,
+          })
+        : null;
 
       rows.push({
         studentId: s.externalId?.trim() || s.id,
@@ -151,6 +161,15 @@ export async function buildAssessmentExportRows(filters?: {
                 closestFix: blocks?.fixes[0]?.description ?? (blocks?.noSmallFix ? "No fix within two block changes" : ""),
               }
             : null,
+        debuggingEdits: dbg?.hasTelemetry
+          ? {
+              editsUsed: dbg.editBudget != null ? `${dbg.editsUsed}/${dbg.editBudget}` : String(dbg.editsUsed),
+              runsUsed: dbg.runBudget != null ? `${dbg.runsUsed}/${dbg.runBudget}` : String(dbg.runsUsed),
+              editBreakdown: dbg.byKind.map((k) => `${k.label} ×${k.count}`).join(", "),
+              undoneEdits: dbg.undoneEdits ?? "",
+              refusedActions: dbg.blocked.map((b) => `${b.label} ×${b.count}`).join(", "),
+            }
+          : null,
       });
     }
   }

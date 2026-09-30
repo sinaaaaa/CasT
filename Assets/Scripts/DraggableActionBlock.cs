@@ -98,6 +98,7 @@ public class DraggableActionBlock : MonoBehaviour, IBeginDragHandler, IDragHandl
 
         if (cachedButton != null && !cachedButton.interactable)
         {
+            characterMove.DebugNotifyPaletteLocked(actionKind);
             return;
         }
 

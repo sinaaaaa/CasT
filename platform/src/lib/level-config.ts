@@ -9,6 +9,7 @@ import {
   syncGeometryPathToolsToConfig,
   type GeometryPathConfig,
 } from "@/lib/geometry-path";
+import { debuggingConfigSchema, supportsDebuggingConfig } from "@/lib/debugging-config";
 
 export type { GeometryPathConfig, GeometryShapeType, GeometryValidationMode, PathSegment } from "@/lib/geometry-path";
 export {
@@ -595,6 +596,8 @@ export const levelGameplayConfigSchema = z.object({
    * Present when levelType === GEOMETRY_PATH (also allowed on other grid types for reuse).
    */
   geometryPath: geometryPathConfigSchema.optional(),
+  /** Debugging items only: which edits are allowed, edit / run budgets, structure rules. */
+  debuggingConfig: debuggingConfigSchema.optional(),
   /** Optional ECD task metadata for stealth assessment (additive). */
   assessment: z
     .object({
@@ -779,8 +782,11 @@ export function applyLevelTypeDefaults(
 ): LevelGameplayConfig {
   // A leftover geometryPath (item copied from / switched away from Geometry Path) makes Unity
   // draw the target shape on unrelated items.
-  const base =
+  const withGeometry =
     levelType === LevelType.GEOMETRY_PATH ? { ...config } : { ...config, geometryPath: undefined };
+  const base = supportsDebuggingConfig(levelType, withGeometry)
+    ? withGeometry
+    : { ...withGeometry, debuggingConfig: undefined };
   switch (levelType) {
     case LevelType.INTRO: {
       const existingIntro = base.actionBlockIntro;

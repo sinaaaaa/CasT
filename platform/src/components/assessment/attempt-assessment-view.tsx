@@ -46,6 +46,8 @@ import type { GeometryEdgeDiagnosis } from "@/lib/assessment/geometryEdgeDiagnos
 import { BlockComparisonPanel } from "@/components/assessment/block-comparison-panel";
 import type { BlockProgramComparison } from "@/lib/assessment/blockProgramComparison";
 import { buildDebugBlockView } from "@/lib/assessment/debugBlockView";
+import { DebuggingEditsPanel } from "@/components/assessment/debugging-edits-panel";
+import type { DebuggingEditAnalysis } from "@/lib/assessment/debuggingEditAnalysis";
 import { BlockProgramView } from "@/components/assessment/block-program-view";
 import { AttemptVerdictBanner } from "@/components/assessment/attempt-verdict-banner";
 import { buildAttemptVerdict } from "@/lib/assessment/attempt-verdict";
@@ -96,6 +98,8 @@ export type AttemptDetailPayload = {
   geometryEdgeDiagnosis?: GeometryEdgeDiagnosis | null;
   /** Block-level comparison against the closest working program (Bags / Chunks / Repeat kept whole). */
   blockComparison?: BlockProgramComparison | null;
+  /** Debugging Config usage: edits / runs against budget, edit log, refused actions. */
+  debuggingEdits?: DebuggingEditAnalysis | null;
   isDebuggingLevel?: boolean;
   starterProgram?: CommandToken[];
   studentProgram?: CommandToken[];
@@ -253,6 +257,7 @@ export function AttemptAssessmentView({ attempt }: { attempt: AttemptDetailPaylo
     programStructure: attempt.programStructure,
     geometryEdges: attempt.geometryEdgeDiagnosis,
     blockComparison: attempt.blockComparison,
+    debuggingEdits: attempt.debuggingEdits,
     numberLine: isNumberLineAssessment ? numberLineResult : null,
     canvasPattern: isCanvasAssessment && attempt.canvasPatternMatch
       ? {
@@ -413,6 +418,8 @@ export function AttemptAssessmentView({ attempt }: { attempt: AttemptDetailPaylo
           objectMarkers={attempt.mapAnchors?.objects}
         />
       )}
+
+      {attempt.debuggingEdits && <DebuggingEditsPanel result={attempt.debuggingEdits} />}
 
       {attempt.geometryEdgeDiagnosis && <GeometryEdgeDiagnosisPanel result={attempt.geometryEdgeDiagnosis} />}
 

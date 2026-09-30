@@ -22,6 +22,7 @@ import {
 } from "@/lib/level-config";
 import { Badge } from "@/components/ui/badge";
 import { describeProgramStructureReport } from "@/lib/assessment/programStructureAnalysis";
+import { describeDebuggingReport } from "@/lib/assessment/debuggingEditAnalysis";
 
 type Props = {
   name: string;
@@ -54,7 +55,12 @@ export function StepPreviewPublish({
     visitSequenceReady(config);
 
   const visible = config.visible ?? true;
-  const reportPreview = describeProgramStructureReport(levelType, config);
+  const structureReport = describeProgramStructureReport(levelType, config);
+  const debuggingReport = describeDebuggingReport(levelType, config);
+  const reportPreview = {
+    lines: [...structureReport.lines, ...debuggingReport.lines],
+    checks: [...structureReport.checks, ...debuggingReport.checks],
+  };
 
   const checklist = [
     ...reportPreview.checks,

@@ -212,6 +212,8 @@ public class LevelData
     public List<CommandBagData> commandBags = null;
     /// <summary>GEOMETRY_PATH: edge-based target route the robot should trace.</summary>
     public GeometryPathData geometryPath;
+    /// <summary>Debugging items: allowed edit kinds, editable item types and budgets (null = free editing).</summary>
+    [System.NonSerialized] public DebuggingConfigData debuggingConfig;
     public List<BlankData> blanks = null; // Add the missing blanks property
     public bool allowGridObjectDrag = false; // If true, grid objects can be dragged
 
@@ -420,7 +422,7 @@ public class ActionBlockIntroStepData
 }
 
 
-public class CharacterMove : MonoBehaviour
+public partial class CharacterMove : MonoBehaviour
 {
     public Button rotateLeftButton;
     public Button rotateRightButton;
@@ -1672,11 +1674,13 @@ public class CharacterMove : MonoBehaviour
     /// Like <see cref="CollectProgramTokensFromUI"/>, but each Command Bag / Chunk stays one
     /// bag:id / chunk:id token so the platform can report which macros the student used.
     /// </summary>
-    public List<string> CollectProgramStructureFromUI()
+    public List<string> CollectProgramStructureFromUI() =>
+        StructureTokensOfItems(CollectProgramItemsInStripOrder());
+
+    private List<string> StructureTokensOfItems(List<QueuedActionRef> items)
     {
         var tokens = new List<string>();
         LevelData level = GetCurrentLevelData();
-        var items = CollectProgramItemsInStripOrder();
         for (int i = 0; i < items.Count; i++)
         {
             var item = items[i];
@@ -1868,6 +1872,7 @@ public class CharacterMove : MonoBehaviour
         SetButton(repeatButton, "repeat");
 
         RebuildCommandBagPalette(levelData);
+        ApplyDebuggingPaletteLocks();
     }
 
     private CommandBagPaletteController _commandBagPalette;
@@ -4251,6 +4256,8 @@ public class CharacterMove : MonoBehaviour
             wrongAnswerTryAgainButton.onClick.AddListener(() => {
                 if (wrongAnswerPopup != null) wrongAnswerPopup.SetActive(false);
 
+                // Edit-budget items keep the student's program: edits already spent must not be wiped.
+                _debugKeepProgramOnReset = DebugKeepsProgramOnRetry;
                 // Reset the current level without changing scene
                 ResetCurrentLevel();
                 // Belt-and-suspenders: always re-show geometry after Try Again.
@@ -4374,6 +4381,7 @@ public class CharacterMove : MonoBehaviour
         // Per-level timer and initial command snapshot (after guided queue / palette are configured).
         levelStartTime = Time.time;
         CaptureInitialProgramTelemetry();
+        InitDebuggingForLevel(GetCurrentLevelData());
 
         EnsureCornerHintPanel();
         EnsureActionBlockIntro();
@@ -4447,7 +4455,7 @@ public class CharacterMove : MonoBehaviour
         if (IsActionBlockIntroActive && actionBlockIntro != null && !actionBlockIntro.CanStartRun())
             return;
         if (!UsesGuidedBlankFlow(GetCurrentLevelData()))
-            runButton.interactable = !IsRunBlockedByFlagRequirement();
+            runButton.interactable = !IsRunBlockedByFlagRequirement() && !DebugRunsExhausted;
     }
 
     private void EnsureCornerHintPanel()
@@ -4581,6 +4589,8 @@ public class CharacterMove : MonoBehaviour
         // read-only. Canvas SEED_PROGRAM is always editable.
         bool canvasSeed = UsesCanvas(levelData);
         bool editableSeed = canvasSeed || (!UsesGuidedBlankFlow(levelData) && !ShouldLockProgramQueue(levelData));
+        // End blocks show the count of the Start they close.
+        int openRepeatCount = 2;
 
         for (int i = 0; i < levelData.guidedActions.Count; i++)
         {
@@ -4590,12 +4600,13 @@ public class CharacterMove : MonoBehaviour
             string action = NormalizeActionLabel(raw);
             if (ProgramSequenceUtil.IsRepeatStartToken(raw, out int repeatCount))
             {
+                openRepeatCount = repeatCount;
                 SpawnRepeatBoundaryBlock(isStart: true, count: repeatCount);
                 continue;
             }
             if (ProgramSequenceUtil.IsRepeatEndToken(raw))
             {
-                SpawnRepeatBoundaryBlock(isStart: false, count: repeatCount);
+                SpawnRepeatBoundaryBlock(isStart: false, count: openRepeatCount);
                 continue;
             }
             if (action == "forward")
@@ -5798,6 +5809,8 @@ public class CharacterMove : MonoBehaviour
             }
         }
 
+        FillDebuggingTelemetry(extras);
+
         return extras;
     }
 
@@ -6222,7 +6235,7 @@ public class CharacterMove : MonoBehaviour
     /// Used by <see cref="ActionQueueDropZone.OnDrop"/> when the user drops a dragged block
     /// between existing blocks. Falls back to appending if the index is out of range.
     /// </summary>
-    public void InsertActionFromDrag(DraggableActionBlock.ActionKind kind, int uiIndex)
+    private void InsertActionFromDragCore(DraggableActionBlock.ActionKind kind, int uiIndex)
     {
         if (!CanDragPaletteBlockToQueue(kind)) return;
 
@@ -6311,7 +6324,7 @@ public class CharacterMove : MonoBehaviour
     /// Source card in the blue panel is never moved — this always creates a NEW GameObject.
     /// Commands stay visually inside ONE rectangle until RUN expands them for execution.
     /// </summary>
-    public void InsertCommandBagMacroFromDrag(DraggableCommandBagBlock source, int uiIndex)
+    private void InsertCommandBagMacroFromDragCore(DraggableCommandBagBlock source, int uiIndex)
     {
         if (source == null || actionQueueTransform == null) return;
         if (IsActionQueueLocked()) return;
@@ -7750,7 +7763,7 @@ public class CharacterMove : MonoBehaviour
     /// yellow strip and from the student's program. For ProgramBagInstance this
     /// removes the whole bag (all of its commands) in one step.
     /// </summary>
-    public void RemoveQueuedBlock(GameObject blockGo)
+    private void RemoveQueuedBlockCore(GameObject blockGo)
     {
         if (blockGo == null) return;
         if (_chunkPeekAnchor == blockGo)
@@ -7789,8 +7802,9 @@ public class CharacterMove : MonoBehaviour
         // Removing Start or End removes the paired boundary as well (no orphan repeats).
         if (refComp != null && (refComp.isRepeatStart || refComp.isRepeatEnd))
         {
-            RemoveRepeatPair(refComp.isRepeatStart ? blockGo : FindPairedRepeatBlock(blockGo, wantStart: true),
-                             refComp.isRepeatEnd ? blockGo : FindPairedRepeatBlock(blockGo, wantStart: false));
+            GameObject partner = FindRepeatPartner(blockGo, refComp);
+            RemoveRepeatPair(refComp.isRepeatStart ? blockGo : partner,
+                             refComp.isRepeatEnd ? blockGo : partner);
             return;
         }
 
@@ -8092,17 +8106,18 @@ public class CharacterMove : MonoBehaviour
     /// throw it away"). Logs the deletion and animates the block out from wherever
     /// the user dropped it.
     /// </summary>
-    public void HandleQueuedBlockDroppedOutsideQueue(GameObject blockGo)
+    /// <returns>False when the block was not removed; the caller snaps it back into the strip.</returns>
+    public bool HandleQueuedBlockDroppedOutsideQueue(GameObject blockGo)
     {
-        if (blockGo == null) return;
-        if (!dragOutQueuedToDelete) return;
-        if (isProcessing) return;
+        if (blockGo == null) return false;
+        if (!dragOutQueuedToDelete) return false;
+        if (isProcessing) return false;
 
         var refComp = blockGo.GetComponent<QueuedActionRef>();
-        if (refComp != null && !refComp.deletable) return;
+        if (refComp != null && !refComp.deletable) return false;
 
         // Same removal path as the shared close (X) button — clears macros, rebuilds, reflows.
-        RemoveQueuedBlock(blockGo);
+        return RemoveQueuedBlock(blockGo);
     }
 
     private IEnumerator FadeAndShrinkAwayBlock(GameObject blockGo, float duration)
@@ -8681,6 +8696,9 @@ public class CharacterMove : MonoBehaviour
         if (IsActionBlockIntroActive && actionBlockIntro != null && !actionBlockIntro.CanStartRun())
             yield break;
 
+        if (!DebugTryConsumeRun())
+            yield break;
+
         SetRunStartupUI(true);
 
         if (IsActionBlockIntroActive && actionBlockIntro != null)
@@ -8910,7 +8928,7 @@ public class CharacterMove : MonoBehaviour
         if (IsGeometryPathLevel(levelData))
             RestoreGeometryPathForNewAttempt(levelData);
 
-        if (currentAttempt >= levelData.maxAttempts)
+        if (currentAttempt >= levelData.maxAttempts || DebugRunsExhausted)
         {
             pendingLevelPassed = false;
             _skipNextPlatformReport = true;
@@ -10394,6 +10412,7 @@ public class CharacterMove : MonoBehaviour
         // The attempt counter is managed by the retry button
         
         currentAttemptActionLog.Clear();
+        List<string> keptProgram = DebugTakeKeptProgram();
         ClearActionQueueVisual();
         
         // Reset robot position and state
@@ -10484,16 +10503,19 @@ public class CharacterMove : MonoBehaviour
             EnsureRepeatPaletteButton();
             ApplyActionButtonVisibility(levelData);
         }
+        else if (keptProgram != null)
+            DebugReseedProgram(levelData, keptProgram);
         else if (levelData.guidedActions != null && levelData.guidedActions.Count > 0)
             SeedGuidedProgramQueue(levelData);
         else
             ClearActionQueueVisual();
 
         if (runButton != null && !UsesGuidedBlankFlow(levelData))
-            runButton.interactable = !IsRunBlockedByFlagRequirement();
+            runButton.interactable = !IsRunBlockedByFlagRequirement() && !DebugRunsExhausted;
 
         RestoreGeometryPathForNewAttempt(levelData);
         RefreshStudentResetButtonState();
+        DebugRefreshUi();
         
         // Update UI text with level-specific instructions
         if (chatGPTResponseText != null)

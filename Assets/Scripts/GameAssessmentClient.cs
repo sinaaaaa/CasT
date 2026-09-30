@@ -581,6 +581,18 @@ public class GameAssessmentClient : MonoBehaviour
         /// <summary>Yellow strip at the last RUN, with bag:id / chunk:id kept as single tokens.</summary>
         public string[] programStructureFinal;
         public bool programStructureHasTelemetry;
+        /// <summary>Debugging items: shared edit budget + run budget usage for the whole item.</summary>
+        public bool debuggingHasTelemetry;
+        public int debuggingEditsUsed;
+        /// <summary>0 = unlimited.</summary>
+        public int debuggingEditBudget;
+        public int debuggingRunsUsed;
+        /// <summary>0 = unlimited.</summary>
+        public int debuggingRunBudget;
+        /// <summary>"run|kind|itemType|detail" per committed edit.</summary>
+        public string[] debuggingEditLog;
+        /// <summary>"run|kind|itemType|reason" per edit the rules refused.</summary>
+        public string[] debuggingBlocked;
     }
 
     [Serializable]

@@ -56,6 +56,14 @@ public class ActionQueueDropZone : MonoBehaviour, IDropHandler, IPointerEnterHan
     private RectTransform dropHitRect;
     private int lastDropHandledFrame = -1;
 
+    [Header("Replace (debugging items)")]
+    [Tooltip("Central share of a strip block's width that means 'drop here to replace this block'.")]
+    [Range(0.1f, 0.8f)] public float replaceCenterBand = 0.4f;
+    private QueuedActionRef replaceTarget;
+    private Vector3 replaceTargetBaseScale = Vector3.one;
+    private Color replaceTargetBaseColor = Color.white;
+    private Image replaceTargetImage;
+
     private static readonly Vector3[] s_corners = new Vector3[4];
 
     void Awake()
@@ -147,6 +155,13 @@ public class ActionQueueDropZone : MonoBehaviour, IDropHandler, IPointerEnterHan
         if (!characterMove.CanDragPaletteBlockToQueue(source.actionKind)) return;
         if (lastDropHandledFrame == Time.frameCount) return;
 
+        if (TryTakeReplaceTarget(out var paletteTarget))
+        {
+            lastDropHandledFrame = Time.frameCount;
+            characterMove.TryReplaceQueuedBlock(paletteTarget, source.actionKind);
+            return;
+        }
+
         int dropIndex = currentInsertionIndex >= 0 ? currentInsertionIndex : ComputeInsertionIndex(eventData);
         RemovePlaceholderImmediate();
         ResetHighlight();
@@ -158,6 +173,13 @@ public class ActionQueueDropZone : MonoBehaviour, IDropHandler, IPointerEnterHan
     {
         if (source == null || characterMove == null) return;
         if (lastDropHandledFrame == Time.frameCount) return;
+
+        if (TryTakeReplaceTarget(out var bagTarget))
+        {
+            lastDropHandledFrame = Time.frameCount;
+            characterMove.TryReplaceQueuedBlockWithMacro(bagTarget, source);
+            return;
+        }
 
         int dropIndex = currentInsertionIndex >= 0 ? currentInsertionIndex : ComputeInsertionIndex(eventData);
         RemovePlaceholderImmediate();
@@ -191,6 +213,94 @@ public class ActionQueueDropZone : MonoBehaviour, IDropHandler, IPointerEnterHan
         HideInsertionPreview(animate: false);
     }
 
+    /// <summary>Consumes the highlighted replace target (if any) and clears drop visuals.</summary>
+    private bool TryTakeReplaceTarget(out GameObject target)
+    {
+        target = replaceTarget != null ? replaceTarget.gameObject : null;
+        ClearReplaceTarget();
+        if (target == null) return false;
+        RemovePlaceholderImmediate();
+        ResetHighlight();
+        return true;
+    }
+
+    /// <summary>
+    /// Debugging items with Replace allowed: a palette block / bag card hovering over the middle of a
+    /// strip block targets that block instead of opening a gap.
+    /// </summary>
+    private QueuedActionRef FindReplaceTarget(PointerEventData eventData)
+    {
+        if (eventData == null || eventData.pointerDrag == null || characterMove == null) return null;
+        if (!characterMove.DebugReplaceDropEnabled) return null;
+        bool fromPalette =
+            eventData.pointerDrag.GetComponent<DraggableActionBlock>() != null ||
+            eventData.pointerDrag.GetComponent<DraggableCommandBagBlock>() != null;
+        if (!fromPalette) return null;
+
+        var queue = characterMove.actionQueueTransform;
+        if (queue == null) return null;
+        Camera cam = ResolveEventCamera(eventData);
+        bool horizontal = IsQueueHorizontal(queue);
+        float along = horizontal ? eventData.position.x : eventData.position.y;
+        float across = horizontal ? eventData.position.y : eventData.position.x;
+        float band = Mathf.Clamp01(replaceCenterBand) * 0.5f;
+
+        for (int i = 0; i < queue.childCount; i++)
+        {
+            var child = queue.GetChild(i) as RectTransform;
+            if (child == null) continue;
+            if (placeholderInstance != null && child.gameObject == placeholderInstance) continue;
+            var r = child.GetComponent<QueuedActionRef>();
+            if (!CharacterMove.IsReplaceableTarget(r)) continue;
+
+            float min = GetRectScreenMin(child, cam, horizontal);
+            float max = GetRectScreenMax(child, cam, horizontal);
+            float center = (min + max) * 0.5f;
+            float halfBand = (max - min) * band;
+            if (along < center - halfBand || along > center + halfBand) continue;
+
+            float crossMin = GetRectScreenMin(child, cam, !horizontal) - 24f;
+            float crossMax = GetRectScreenMax(child, cam, !horizontal) + 24f;
+            if (across < crossMin || across > crossMax) continue;
+            return r;
+        }
+        return null;
+    }
+
+    private void SetPlaceholderVisible(bool visible)
+    {
+        if (placeholderInstance == null) return;
+        var cg = placeholderInstance.GetComponent<CanvasGroup>();
+        if (cg != null) cg.alpha = visible ? Mathf.Clamp01(placeholderAlpha) : 0f;
+    }
+
+    private void SetReplaceTarget(QueuedActionRef target)
+    {
+        if (target == replaceTarget) return;
+        ClearReplaceTarget();
+        if (target == null) return;
+        replaceTarget = target;
+        replaceTargetBaseScale = target.transform.localScale;
+        target.transform.localScale = replaceTargetBaseScale * 1.12f;
+        replaceTargetImage = target.GetComponent<Image>();
+        if (replaceTargetImage != null)
+        {
+            replaceTargetBaseColor = replaceTargetImage.color;
+            replaceTargetImage.color = Color.Lerp(replaceTargetBaseColor, new Color(1f, 0.82f, 0.3f, 1f), 0.45f);
+        }
+    }
+
+    private void ClearReplaceTarget()
+    {
+        if (replaceTarget != null)
+        {
+            replaceTarget.transform.localScale = replaceTargetBaseScale;
+            if (replaceTargetImage != null) replaceTargetImage.color = replaceTargetBaseColor;
+        }
+        replaceTarget = null;
+        replaceTargetImage = null;
+    }
+
     private void EnsureRaycastable()
     {
         var graphic = GetComponent<Graphic>();
@@ -222,6 +332,18 @@ public class ActionQueueDropZone : MonoBehaviour, IDropHandler, IPointerEnterHan
         var sourceBlock = eventData.pointerDrag.GetComponent<DraggableActionBlock>();
         var bagBlock = eventData.pointerDrag.GetComponent<DraggableCommandBagBlock>();
         var queuedBlock = eventData.pointerDrag.GetComponent<DraggableQueuedBlock>();
+
+        if ((sourceBlock != null || bagBlock != null) && TryTakeReplaceTarget(out var replaceGo))
+        {
+            if (lastDropHandledFrame == Time.frameCount) return;
+            lastDropHandledFrame = Time.frameCount;
+            var cm = characterMove != null ? characterMove
+                : (sourceBlock != null ? sourceBlock.characterMove : bagBlock.characterMove);
+            if (cm == null) return;
+            if (sourceBlock != null) cm.TryReplaceQueuedBlock(replaceGo, sourceBlock.actionKind);
+            else cm.TryReplaceQueuedBlockWithMacro(replaceGo, bagBlock);
+            return;
+        }
 
         RemovePlaceholderImmediate();
         ResetHighlight();
@@ -277,11 +399,23 @@ public class ActionQueueDropZone : MonoBehaviour, IDropHandler, IPointerEnterHan
 
         Canvas.ForceUpdateCanvases();
 
+        // Hide (not remove) the gap while targeting a block so the strip does not reflow under the pointer.
+        var replace = FindReplaceTarget(eventData);
+        if (replace != null)
+        {
+            SetReplaceTarget(replace);
+            currentInsertionIndex = -1;
+            SetPlaceholderVisible(false);
+            return;
+        }
+        ClearReplaceTarget();
+
         int desiredIndex = ComputeInsertionIndex(eventData);
         currentInsertionIndex = desiredIndex;
 
         EnsurePlaceholder(previewSprite);
         if (placeholderInstance == null) return;
+        SetPlaceholderVisible(true);
 
         var queueTransform = characterMove.actionQueueTransform;
         int childCount = queueTransform.childCount;
@@ -300,6 +434,7 @@ public class ActionQueueDropZone : MonoBehaviour, IDropHandler, IPointerEnterHan
     public void HideInsertionPreview(bool animate)
     {
         currentInsertionIndex = -1;
+        ClearReplaceTarget();
         if (placeholderInstance == null) return;
 
         if (placeholderTween != null) { StopCoroutine(placeholderTween); placeholderTween = null; }

@@ -35,9 +35,19 @@ export type ExportRow = {
     firstMistakeBlock: number | "";
     closestFix: string;
   } | null;
+  /** Debugging Config usage (debugging items only). */
+  debuggingEdits?: {
+    editsUsed: string;
+    runsUsed: string;
+    editBreakdown: string;
+    undoneEdits: number | "";
+    refusedActions: string;
+  } | null;
 };
 
 const REPLAY_HEADERS = ["Edges Met", "What Happened", "First Mistake Block", "Closest Fix"];
+
+const DEBUG_EDIT_HEADERS = ["Edits Used", "Runs Used", "Edits By Type", "Edits Undone", "Refused By Rules"];
 
 const STRUCTURE_HEADERS = [
   "Starter Edit Strategy",
@@ -74,10 +84,12 @@ export function buildAssessmentWorkbook(rows: ExportRow[]) {
   const constructHeaders = [...constructSlugs].map((s) => constructDisplayName(s));
   const hasStructure = rows.some((r) => r.programStructure);
   const hasReplay = rows.some((r) => r.replay);
+  const hasDebugEdits = rows.some((r) => r.debuggingEdits);
   const headers = [
     ...baseHeaders,
     ...(hasStructure ? STRUCTURE_HEADERS : []),
     ...(hasReplay ? REPLAY_HEADERS : []),
+    ...(hasDebugEdits ? DEBUG_EDIT_HEADERS : []),
     ...constructHeaders,
   ];
 
@@ -112,8 +124,14 @@ export function buildAssessmentWorkbook(rows: ExportRow[]) {
         ? [rp.edgesMet, rp.whatHappened, rp.firstMistakeBlock, rp.closestFix]
         : REPLAY_HEADERS.map(() => "")
       : [];
+    const de = r.debuggingEdits;
+    const debugCols = hasDebugEdits
+      ? de
+        ? [de.editsUsed, de.runsUsed, de.editBreakdown, de.undoneEdits, de.refusedActions]
+        : DEBUG_EDIT_HEADERS.map(() => "")
+      : [];
     const constructCols = [...constructSlugs].map((s) => r.constructScores[s] ?? "");
-    return [...base, ...structureCols, ...replayCols, ...constructCols];
+    return [...base, ...structureCols, ...replayCols, ...debugCols, ...constructCols];
   });
 
   const sheet = XLSX.utils.aoa_to_sheet([headers, ...data]);

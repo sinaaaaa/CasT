@@ -97,6 +97,83 @@ export function parseProgramStructureTelemetry(mistakes: unknown): ProgramStruct
   return { initial: list(p.initial), final: list(p.final) };
 }
 
+/** One committed program edit on a debugging item (Unity edit log). */
+export type DebuggingEditEvent = {
+  /** 1-based RUN the edit was made before. */
+  run: number;
+  kind: string;
+  itemType: string;
+  detail: string;
+};
+
+/** An edit or RUN the game refused because of the item's Debugging Config. */
+export type DebuggingBlockedEvent = {
+  run: number;
+  kind: string;
+  itemType: string;
+  reason: string;
+};
+
+/** Debugging Config usage stored under mistakes.debugging (cumulative for the item so far). */
+export type DebuggingEditTelemetry = {
+  editsUsed: number;
+  editBudget: number | null;
+  runsUsed: number;
+  runBudget: number | null;
+  edits: DebuggingEditEvent[];
+  blocked: DebuggingBlockedEvent[];
+};
+
+function splitPipe(v: unknown): string[][] {
+  if (!Array.isArray(v)) return [];
+  return v.filter((s): s is string => typeof s === "string" && s.includes("|")).map((s) => s.split("|"));
+}
+
+/** Unity assessmentExtras (flat JsonUtility fields) → stored mistakes.debugging, or null. */
+export function debuggingTelemetryFromExtras(extras: Record<string, unknown> | null): DebuggingEditTelemetry | null {
+  if (!extras || extras.debuggingHasTelemetry !== true) return null;
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.max(0, Math.round(v)) : 0);
+  const budget = (v: unknown) => (num(v) > 0 ? num(v) : null);
+  return {
+    editsUsed: num(extras.debuggingEditsUsed),
+    editBudget: budget(extras.debuggingEditBudget),
+    runsUsed: num(extras.debuggingRunsUsed),
+    runBudget: budget(extras.debuggingRunBudget),
+    edits: splitPipe(extras.debuggingEditLog).map(([run, kind, itemType, ...rest]) => ({
+      run: Number(run) || 1,
+      kind: kind ?? "",
+      itemType: itemType ?? "",
+      detail: rest.join("|"),
+    })),
+    blocked: splitPipe(extras.debuggingBlocked).map(([run, kind, itemType, reason]) => ({
+      run: Number(run) || 1,
+      kind: kind ?? "",
+      itemType: itemType ?? "",
+      reason: reason ?? "",
+    })),
+  };
+}
+
+export function parseDebuggingTelemetry(mistakes: unknown): DebuggingEditTelemetry | null {
+  const o = readMistakesObject(mistakes);
+  const d = o?.debugging;
+  if (!d || typeof d !== "object" || Array.isArray(d)) return null;
+  const p = d as Record<string, unknown>;
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  const orNull = (v: unknown) => (typeof v === "number" && v > 0 ? v : null);
+  const events = <T,>(v: unknown, map: (e: Record<string, unknown>) => T): T[] =>
+    Array.isArray(v) ? v.filter((e) => e && typeof e === "object").map((e) => map(e as Record<string, unknown>)) : [];
+  const str = (v: unknown) => (typeof v === "string" ? v : "");
+  return {
+    editsUsed: num(p.editsUsed),
+    editBudget: orNull(p.editBudget),
+    runsUsed: num(p.runsUsed),
+    runBudget: orNull(p.runBudget),
+    edits: events(p.edits, (e) => ({ run: num(e.run) || 1, kind: str(e.kind), itemType: str(e.itemType), detail: str(e.detail) })),
+    blocked: events(p.blocked, (e) => ({ run: num(e.run) || 1, kind: str(e.kind), itemType: str(e.itemType), reason: str(e.reason) })),
+  };
+}
+
 /** Geometry Path telemetry stored under mistakes.geometryPath from Unity assessmentExtras. */
 export type GeometryPathAttemptTelemetry = {
   traveledKeys: string[];

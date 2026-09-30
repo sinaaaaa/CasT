@@ -8,7 +8,7 @@ import {
 import { resolveAttemptEndScore } from "@/lib/game/resolve-attempt-score";
 import { resolveAttemptDurationSeconds } from "@/lib/game/resolve-attempt-duration";
 import { analyzeAttemptConstructs } from "@/lib/ct/scoring";
-import { parsePlaySlot } from "@/lib/attempt-mistakes";
+import { debuggingTelemetryFromExtras, parsePlaySlot } from "@/lib/attempt-mistakes";
 import { AttemptStatus, Prisma } from "@prisma/client";
 import { clearStudentLevelReplay } from "@/lib/level-student-replay";
 
@@ -97,6 +97,7 @@ export async function POST(request: NextRequest) {
   const baseMessages = Array.isArray(mistakes) ? mistakes : mistakes != null ? [mistakes] : [];
   const extras =
     assessmentExtras && typeof assessmentExtras === "object" ? assessmentExtras : null;
+  const debuggingTelemetry = debuggingTelemetryFromExtras(extras);
 
   const mistakesPayload: Prisma.InputJsonValue = (() => {
     if (extras || objectVisit) {
@@ -183,6 +184,7 @@ export async function POST(request: NextRequest) {
               },
             }
           : {}),
+        ...(debuggingTelemetry ? { debugging: debuggingTelemetry } : {}),
       } as Prisma.InputJsonValue;
     }
     return ((mistakes ?? attempt.mistakes) as Prisma.InputJsonValue) ?? [];

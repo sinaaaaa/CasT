@@ -42,6 +42,7 @@ public class DraggableCommandBagBlock : MonoBehaviour,
     private ActionQueueDropZone lastHoveredZone;
     private Vector3 _sourceBaseScale = Vector3.one;
     private Coroutine _sourceScaleAnim;
+    private bool _debugLockedShown;
     private static readonly List<RaycastResult> s_raycastBuffer = new List<RaycastResult>();
 
     void Awake()
@@ -55,6 +56,15 @@ public class DraggableCommandBagBlock : MonoBehaviour,
         if (sourceCanvasGroup == null)
             sourceCanvasGroup = gameObject.AddComponent<CanvasGroup>();
         _sourceBaseScale = transform.localScale;
+    }
+
+    void LateUpdate()
+    {
+        if (isDragging || sourceCanvasGroup == null || characterMove == null) return;
+        bool locked = characterMove.DebugMacroSourceLocked(dragKind == DragKind.Chunk);
+        if (locked == _debugLockedShown) return;
+        _debugLockedShown = locked;
+        sourceCanvasGroup.alpha = locked ? 0.45f : 1f;
     }
 
     public string ResolveDropToken()
@@ -80,6 +90,13 @@ public class DraggableCommandBagBlock : MonoBehaviour,
     {
         if (characterMove == null) return;
         if (characterMove.IsActionQueueLocked()) return;
+        if (!characterMove.DebugTryBeginMacroDrag(dragKind == DragKind.Chunk))
+        {
+            suppressClick = true;
+            Invoke(nameof(ClearSuppressClick), 0.15f);
+            StartCoroutine(InvalidDropShake());
+            return;
+        }
         suppressClick = true;
         isDragging = true;
 
@@ -127,6 +144,7 @@ public class DraggableCommandBagBlock : MonoBehaviour,
 
     public void OnEndDrag(PointerEventData eventData)
     {
+        if (!isDragging) return;
         isDragging = false;
 
         if (sourceCanvasGroup != null)

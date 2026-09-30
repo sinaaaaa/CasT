@@ -322,7 +322,10 @@ public class RepeatQueueVisualizer : MonoBehaviour
         if (existing == null)
             EnsureEndContent(block, r, hideTitle: customArt);
         else
+        {
             UpdateEndCountLabel(existing, r);
+            ApplyCountButtonLock(existing, r);
+        }
 
         ApplyBlockScale(block, characterMove != null ? characterMove.repeatEndScale : 1f);
         ApplyBlockYOffset(block, characterMove != null ? characterMove.repeatEndYOffset : 0f);
@@ -636,6 +639,11 @@ public class RepeatQueueVisualizer : MonoBehaviour
 
     private void ChangeCount(QueuedActionRef endRef, int delta)
     {
+        if (endRef == null) return;
+        int previous = endRef.repeatCount;
+        if (ProgramSequenceUtil.ClampRepeatCount(previous + delta) == previous) return;
+        if (characterMove != null && !characterMove.DebugApproveRepeatCount(endRef)) return;
+
         endRef.repeatCount = ProgramSequenceUtil.ClampRepeatCount(endRef.repeatCount + delta);
         if (endRef.action is RepeatBoundaryAction ba) ba.repeatCount = endRef.repeatCount;
 
@@ -655,7 +663,20 @@ public class RepeatQueueVisualizer : MonoBehaviour
                 break;
             }
         }
+        if (characterMove != null)
+            characterMove.DebugCommitRepeatCount(endRef, previous, endRef.repeatCount);
         Refresh();
+    }
+
+    /// <summary>Greys out − / + when the debugging rules do not allow changing this Repeat.</summary>
+    private void ApplyCountButtonLock(Transform endContent, QueuedActionRef r)
+    {
+        if (endContent == null || characterMove == null) return;
+        bool locked = characterMove.DebugRepeatCountLocked(r);
+        var minus = endContent.Find("Minus")?.GetComponent<Button>();
+        var plus = endContent.Find("Plus")?.GetComponent<Button>();
+        if (minus != null && minus.interactable == locked) minus.interactable = !locked;
+        if (plus != null && plus.interactable == locked) plus.interactable = !locked;
     }
 
     private static void CreateSizedBtn(

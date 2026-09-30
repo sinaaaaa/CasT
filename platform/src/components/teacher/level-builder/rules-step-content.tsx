@@ -13,7 +13,14 @@ import {
   Route,
   Sparkles,
   Target,
+  Wrench,
 } from "lucide-react";
+import {
+  debuggingConfigIsRestrictive,
+  resolveDebuggingConfig,
+  supportsDebuggingConfig,
+} from "@/lib/debugging-config";
+import { DebuggingRulesEditor } from "./debugging-rules-editor";
 import {
   ALL_ROBOT_ACTION_BUTTONS,
   DEFAULT_ENABLED_ACTION_BUTTONS,
@@ -34,7 +41,7 @@ import {
   RuleToggleCard,
 } from "./rules-ui";
 
-type RulesCategory = "gameplay" | "tools" | "visual" | "win";
+type RulesCategory = "gameplay" | "tools" | "debugging" | "visual" | "win";
 
 type Props = {
   levelType: LevelType;
@@ -45,18 +52,21 @@ type Props = {
 export function RulesStepContent({ levelType, config, onChange }: Props) {
   const hasWinRules =
     levelType === LevelType.DRAG_ACTIONS || levelType === LevelType.FLAG_PLACEMENT;
+  const isDebuggingItem = supportsDebuggingConfig(levelType, config);
+  const debugConfig = resolveDebuggingConfig(levelType, config);
 
   const categories = useMemo(() => {
     const base: { id: RulesCategory; label: string; icon: typeof Gamepad2 }[] = [
       { id: "gameplay", label: "Gameplay", icon: Gamepad2 },
       { id: "tools", label: "Student tools", icon: Hand },
+      ...(isDebuggingItem ? [{ id: "debugging" as const, label: "Debugging", icon: Wrench }] : []),
       { id: "visual", label: "Visual cues", icon: Eye },
     ];
     if (hasWinRules) {
       base.push({ id: "win", label: "Win condition", icon: Target });
     }
     return base;
-  }, [hasWinRules]);
+  }, [hasWinRules, isDebuggingItem]);
 
   const [category, setCategory] = useState<RulesCategory>("gameplay");
 
@@ -87,8 +97,17 @@ export function RulesStepContent({ levelType, config, onChange }: Props) {
         ? [{ label: "Command history on", tone: "success" as const }]
         : []),
       ...(config.visitObjectSequence ? [{ label: "Visit sequence", tone: "success" as const }] : []),
+      ...(debugConfig && debuggingConfigIsRestrictive(debugConfig)
+        ? [
+            {
+              label: debugConfig.editBudget != null ? `${debugConfig.editBudget} edits` : "Edit rules on",
+              tone: "success" as const,
+            },
+            ...(debugConfig.runBudget != null ? [{ label: `${debugConfig.runBudget} runs` }] : []),
+          ]
+        : []),
     ],
-    [config]
+    [config, debugConfig]
   );
 
   function patch(partial: Partial<LevelGameplayConfig>) {
@@ -287,6 +306,10 @@ export function RulesStepContent({ levelType, config, onChange }: Props) {
             </label>
           </RuleToggleCard>
         </div>
+      )}
+
+      {category === "debugging" && isDebuggingItem && (
+        <DebuggingRulesEditor levelType={levelType} config={config} onChange={onChange} />
       )}
 
       {category === "visual" && (

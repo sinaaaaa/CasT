@@ -22,6 +22,8 @@ public class QueuedBlockCloseButton : MonoBehaviour,
     public GameObject targetBlock;
 
     bool _removed;
+    // Pointer-down, click and Button.onClick all fire for one tap: report a refusal once.
+    float _refusedAt = -10f;
 
     void Awake()
     {
@@ -89,8 +91,13 @@ public class QueuedBlockCloseButton : MonoBehaviour,
             Debug.LogWarning("[QueuedBlockCloseButton] Missing characterMove or targetBlock.");
             return;
         }
+        if (Time.unscaledTime - _refusedAt < 0.4f) return;
         _removed = true;
         Debug.Log($"[QueuedBlockCloseButton] Removing '{targetBlock.name}'");
-        characterMove.RemoveQueuedBlock(targetBlock);
+        if (!characterMove.RemoveQueuedBlock(targetBlock))
+        {
+            _removed = false;
+            _refusedAt = Time.unscaledTime;
+        }
     }
 }

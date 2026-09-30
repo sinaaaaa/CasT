@@ -36,6 +36,8 @@ public class DraggableQueuedBlock : MonoBehaviour, IBeginDragHandler, IDragHandl
 
     /// <summary>True while this block is being reordered (tap-expand should ignore).</summary>
     public bool IsDragging => isDragging;
+    /// <summary>Strip index the block was lifted from (valid while dragging).</summary>
+    public int OriginalSiblingIndex => originalSiblingIndex;
 
     private static readonly List<RaycastResult> s_raycastBuffer = new List<RaycastResult>();
 
@@ -55,7 +57,8 @@ public class DraggableQueuedBlock : MonoBehaviour, IBeginDragHandler, IDragHandl
         if (characterMove == null) return false;
         if (characterMove.IsActionQueueLocked()) return false;
         var refComp = GetComponent<QueuedActionRef>();
-        return refComp == null || refComp.deletable;
+        if (refComp != null && !refComp.deletable) return false;
+        return characterMove.DebugCanLift(refComp);
     }
 
     public void OnPointerDown(PointerEventData eventData)
@@ -110,7 +113,13 @@ public class DraggableQueuedBlock : MonoBehaviour, IBeginDragHandler, IDragHandl
         if (!CanReorder())
         {
             if (eventData != null && !IsPressOnCloseButton(eventData))
+            {
                 eventData.pointerDrag = null;
+                var lockedRef = GetComponent<QueuedActionRef>();
+                if (characterMove != null && !characterMove.IsActionQueueLocked() &&
+                    (lockedRef == null || lockedRef.deletable))
+                    characterMove.DebugNotifyLiftRefused(lockedRef);
+            }
             return;
         }
 
@@ -128,6 +137,9 @@ public class DraggableQueuedBlock : MonoBehaviour, IBeginDragHandler, IDragHandl
             Debug.LogWarning("[DraggableQueuedBlock] No root Canvas — cannot reorder.");
             return;
         }
+
+        if (characterMove != null)
+            characterMove.DebugBeginQueuedDrag();
 
         originalParent = transform.parent;
         originalSiblingIndex = transform.GetSiblingIndex();
@@ -231,11 +243,10 @@ public class DraggableQueuedBlock : MonoBehaviour, IBeginDragHandler, IDragHandl
         if (hoveredZone != null) hoveredZone.HideInsertionPreview(false);
         hoveredZone = null;
 
-        if (characterMove != null && characterMove.dragOutQueuedToDelete)
-        {
-            characterMove.HandleQueuedBlockDroppedOutsideQueue(gameObject);
+        // Refused removals fall through and snap the block back into the strip.
+        if (characterMove != null && characterMove.dragOutQueuedToDelete &&
+            characterMove.HandleQueuedBlockDroppedOutsideQueue(gameObject))
             return;
-        }
 
         if (originalParent != null)
         {
@@ -261,6 +272,13 @@ public class DraggableQueuedBlock : MonoBehaviour, IBeginDragHandler, IDragHandl
         int clamped = Mathf.Clamp(newIndex, 0, Mathf.Max(0, originalParent.childCount - 1));
         transform.SetSiblingIndex(clamped);
 
+        bool approved = characterMove == null || characterMove.DebugApproveReorder(GetComponent<QueuedActionRef>());
+        if (!approved)
+        {
+            clamped = Mathf.Clamp(originalSiblingIndex, 0, Mathf.Max(0, originalParent.childCount - 1));
+            transform.SetSiblingIndex(clamped);
+        }
+
         RestoreVisualState();
         if (originalParent is RectTransform ort)
             LayoutRebuilder.ForceRebuildLayoutImmediate(ort);
@@ -270,8 +288,15 @@ public class DraggableQueuedBlock : MonoBehaviour, IBeginDragHandler, IDragHandl
 
         if (characterMove != null)
         {
-            characterMove.OnQueuedBlockReordered();
-            characterMove.PlayBlockDropBounce(transform);
+            if (approved)
+            {
+                characterMove.OnQueuedBlockReordered();
+                characterMove.PlayBlockDropBounce(transform);
+            }
+            else
+            {
+                characterMove.OnQueuedBlockPickedUp();
+            }
         }
 
         Debug.Log($"[DraggableQueuedBlock] Reordered '{name}' → index {clamped}");

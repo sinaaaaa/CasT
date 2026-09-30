@@ -51,6 +51,8 @@ public class LevelConfigDto
     public CommandBagDto[] commandBags;
     /// <summary>Geometry Path — edge-based target route (optional).</summary>
     public GeometryPathConfigDto geometryPath;
+    /// <summary>Debugging items only: which edits are allowed plus edit/run budgets.</summary>
+    public DebuggingConfigDto debuggingConfig;
 }
 
 [Serializable]
@@ -419,6 +421,8 @@ public static class LevelConfigMapper
             ld.geometryPath = MapGeometryPath(dto.geometryPath);
         }
 
+        ld.debuggingConfig = DebuggingConfigData.FromDto(dto.debuggingConfig);
+
         if (dto.cornerHint != null)
         {
             ld.cornerHint = MapCornerHint(dto.cornerHint);
@@ -650,7 +654,11 @@ public static class LevelConfigMapper
 
     private static void ApplyLevelTypeDefaults(LevelData ld, string levelType)
     {
-        if (string.IsNullOrEmpty(levelType)) return;
+        if (string.IsNullOrEmpty(levelType))
+        {
+            ld.debuggingConfig = null;
+            return;
+        }
         string t = levelType.ToUpperInvariant();
         // Leftover geometryPath on other item types would draw the target shape on the grid.
         if (t != "GEOMETRY_PATH")
@@ -724,6 +732,14 @@ public static class LevelConfigMapper
                 ld.guidedActions.RemoveAll(t => string.IsNullOrEmpty(t) ||
                     t.Trim().Equals("blank", StringComparison.OrdinalIgnoreCase));
         }
+
+        // Debugging rules only apply to items that start from a buggy program.
+        bool debuggingItem =
+            t == "DRAG_EDIT_PROGRAM" ||
+            (t == "GEOMETRY_PATH" && ld.geometryPath != null && ld.geometryPath.seedStarterProgram &&
+             ld.guidedActions != null && ld.guidedActions.Count > 0);
+        if (!debuggingItem)
+            ld.debuggingConfig = null;
     }
 
     static GeometryPathData MapGeometryPath(GeometryPathConfigDto dto)
