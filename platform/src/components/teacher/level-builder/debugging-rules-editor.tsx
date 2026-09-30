@@ -342,12 +342,16 @@ export function DebuggingRulesEditor({ levelType, config, onChange }: Props) {
         </div>
       </RuleSection>
 
-      <RuleSection icon={ShieldCheck} title="Budgets" description="Counted across the whole item, including retries.">
+      <RuleSection
+        icon={ShieldCheck}
+        title="Budgets"
+        description="Edits restart on every try (Reset or Try Again bring back the starter). Runs count for the whole item."
+      >
         <div className="space-y-3">
           <BudgetRow
             icon={Wrench}
             title="Edit budget"
-            description="Each committed add, remove, replace, reorder or Repeat change costs 1."
+            description="Each committed add, remove, replace, reorder or Repeat change costs 1. Reset and Try Again give the edits back."
             value={dc.editBudget}
             max={50}
             unit="edits"

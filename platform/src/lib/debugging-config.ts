@@ -41,7 +41,7 @@ export const DEBUG_ITEM_TYPE_LABELS: Record<DebugItemType, string> = {
 export const debuggingConfigSchema = z.object({
   allowedEdits: z.array(z.enum(DEBUG_EDIT_KINDS)).default([...DEBUG_EDIT_KINDS]),
   editableItemTypes: z.array(z.enum(DEBUG_ITEM_TYPES)).default([...DEBUG_ITEM_TYPES]),
-  /** Max committed program edits for the whole item. Omitted = unlimited. */
+  /** Max committed program edits per try; restarts when Reset / Try Again restore the starter. Omitted = unlimited. */
   editBudget: z.number().int().min(1).max(50).optional(),
   /** Max RUN presses for the whole item. Omitted = only maxAttempts applies. */
   runBudget: z.number().int().min(1).max(20).optional(),
@@ -116,7 +116,11 @@ export function describeDebuggingConfig(dc: DebuggingConfig): string[] {
         ? "No block type can be edited."
         : `Editable blocks: ${listLabels(dc.editableItemTypes, DEBUG_ITEM_TYPE_LABELS)}.`
   );
-  lines.push(dc.editBudget != null ? `Edit budget: ${dc.editBudget} edits for the whole item.` : "No edit limit.");
+  lines.push(
+    dc.editBudget != null
+      ? `Edit budget: ${dc.editBudget} edits per try (Reset and Try Again give them back).`
+      : "No edit limit."
+  );
   if (dc.runBudget != null) lines.push(`Run budget: ${dc.runBudget} RUN press${dc.runBudget === 1 ? "" : "es"}.`);
   if (dc.minProgramItems > 0) lines.push(`Program must keep at least ${dc.minProgramItems} block${dc.minProgramItems === 1 ? "" : "s"}.`);
   if (dc.preserveProgramStructure) lines.push("Students must keep at least half of the starter blocks (no delete-all-and-rebuild).");

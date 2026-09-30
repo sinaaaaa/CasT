@@ -10,7 +10,7 @@ public class DebuggingConfigDto
     public string[] allowedEdits;
     /// <summary>arrows | repeat | commandBag | actionChunk. Null = all.</summary>
     public string[] editableItemTypes;
-    /// <summary>Max committed program modifications for the whole item. Null = unlimited.</summary>
+    /// <summary>Max committed program modifications per attempt (restarts on Reset / Try Again). Null = unlimited.</summary>
     public int? editBudget;
     /// <summary>Max RUN presses for the whole item. Null = unlimited.</summary>
     public int? runBudget;
@@ -198,7 +198,8 @@ public static class DebuggingProgramMath
 /// <summary>
 /// One shared edit budget + run budget per debugging item. An edit is one committed
 /// add / remove / replace / reorder / Repeat-count change that actually changes the program.
-/// Budgets persist across Try Again and Reset for the whole item.
+/// The edit budget restarts whenever the starter program is restored (Reset / Try Again);
+/// the run budget covers the whole item.
 /// </summary>
 public class DebuggingEditTracker
 {
@@ -351,6 +352,13 @@ public class DebuggingEditTracker
 
     public void RecordRun() => RunsUsed++;
 
+    /// <summary>Starter restored: edits (and refusals) start over for the new attempt.</summary>
+    public void RestartEdits()
+    {
+        _edits.Clear();
+        _blocked.Clear();
+    }
+
     public string[] EditLog
     {
         get
@@ -395,7 +403,7 @@ public class DebuggingEditTracker
             case ReasonBudget:
                 return RunBudgetExhausted
                     ? $"You've used all {Config.editBudget} edits."
-                    : $"You've used all {Config.editBudget} edits. Press RUN to test your fix.";
+                    : $"You've used all {Config.editBudget} edits. Press RUN to test your fix, or Reset to start over.";
             case ReasonMinItems:
                 return $"Keep at least {Config.minProgramItems} blocks in the program.";
             case ReasonPreserve:

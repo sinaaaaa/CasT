@@ -14,7 +14,6 @@ public partial class CharacterMove
     DebuggingEditTracker _debugEdits;
     /// <summary>Program structure when a strip block was picked up (the block leaves the strip while dragged).</summary>
     List<string> _debugDragBefore;
-    bool _debugKeepProgramOnReset;
     RectTransform _debugHud;
     TextMeshProUGUI _debugHudText;
     Image _debugHudBg;
@@ -23,8 +22,6 @@ public partial class CharacterMove
 
     bool DebugGating => _debugEdits != null;
     public bool DebugRunsExhausted => _debugEdits != null && _debugEdits.RunBudgetExhausted;
-    bool DebugKeepsProgramOnRetry => _debugEdits != null && _debugEdits.Config.HasEditBudget;
-
     /// <summary>Drop-on-a-tile replacement is only offered when the teacher saved rules that allow it.</summary>
     public bool DebugReplaceDropEnabled =>
         _debugEdits != null && _debugEdits.Config.configured &&
@@ -44,7 +41,6 @@ public partial class CharacterMove
     void InitDebuggingForLevel(LevelData level)
     {
         _debugDragBefore = null;
-        _debugKeepProgramOnReset = false;
         _debugEdits = level?.debuggingConfig != null
             ? new DebuggingEditTracker(level.debuggingConfig, _telemetryInitialStructure)
             : null;
@@ -63,24 +59,12 @@ public partial class CharacterMove
         extras.debuggingBlocked = _debugEdits.BlockedLog;
     }
 
-    List<string> DebugTakeKeptProgram()
+    /// <summary>Reset / Try Again restore the starter program, so the student gets the full edit budget back.</summary>
+    void DebugRestartEdits()
     {
-        if (!_debugKeepProgramOnReset) return null;
-        _debugKeepProgramOnReset = false;
-        return CollectProgramStructureFromUI();
-    }
-
-    void DebugReseedProgram(LevelData level, List<string> program)
-    {
-        if (program == null || program.Count == 0)
-        {
-            ClearActionQueueVisual();
-            return;
-        }
-        var starter = level.guidedActions;
-        level.guidedActions = program;
-        try { SeedGuidedProgramQueue(level); }
-        finally { level.guidedActions = starter; }
+        _debugDragBefore = null;
+        if (_debugEdits != null) _debugEdits.RestartEdits();
+        DebugRefreshUi();
     }
 
     // ---------------- Gate helpers ----------------

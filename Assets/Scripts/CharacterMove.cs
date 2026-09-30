@@ -4256,8 +4256,6 @@ public partial class CharacterMove : MonoBehaviour
             wrongAnswerTryAgainButton.onClick.AddListener(() => {
                 if (wrongAnswerPopup != null) wrongAnswerPopup.SetActive(false);
 
-                // Edit-budget items keep the student's program: edits already spent must not be wiped.
-                _debugKeepProgramOnReset = DebugKeepsProgramOnRetry;
                 // Reset the current level without changing scene
                 ResetCurrentLevel();
                 // Belt-and-suspenders: always re-show geometry after Try Again.
@@ -10412,7 +10410,6 @@ public partial class CharacterMove : MonoBehaviour
         // The attempt counter is managed by the retry button
         
         currentAttemptActionLog.Clear();
-        List<string> keptProgram = DebugTakeKeptProgram();
         ClearActionQueueVisual();
         
         // Reset robot position and state
@@ -10503,8 +10500,6 @@ public partial class CharacterMove : MonoBehaviour
             EnsureRepeatPaletteButton();
             ApplyActionButtonVisibility(levelData);
         }
-        else if (keptProgram != null)
-            DebugReseedProgram(levelData, keptProgram);
         else if (levelData.guidedActions != null && levelData.guidedActions.Count > 0)
             SeedGuidedProgramQueue(levelData);
         else
@@ -10515,7 +10510,7 @@ public partial class CharacterMove : MonoBehaviour
 
         RestoreGeometryPathForNewAttempt(levelData);
         RefreshStudentResetButtonState();
-        DebugRefreshUi();
+        DebugRestartEdits();
         
         // Update UI text with level-specific instructions
         if (chatGPTResponseText != null)
