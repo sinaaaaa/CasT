@@ -78,6 +78,7 @@ function patchGeometry(
     validationMode: "TRACE_TARGET",
     afterShapeBehavior: "SHAPE_COMPLETE",
     requireFinishFacing: false,
+    seedStarterProgram: false,
     requireRepeat: false,
     requireActionChunk: false,
     requireCommandBag: false,
@@ -1054,6 +1055,10 @@ export function GeometryPathEditor({ config, onChange }: Props) {
               <div className="flex justify-between gap-3">
                 <dt className="text-slate-500">Student tools</dt>
                 <dd className="font-medium text-slate-800">{summary.toolsLabel}</dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-slate-500">Students start with</dt>
+                <dd className="font-medium text-slate-800">{summary.starterLabel}</dd>
               </div>
               <div className="flex justify-between gap-3">
                 <dt className="text-slate-500">Robot trail</dt>

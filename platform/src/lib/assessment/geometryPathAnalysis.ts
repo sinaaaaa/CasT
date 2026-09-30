@@ -15,6 +15,7 @@ import {
   type PathSegment,
 } from "@/lib/geometry-path";
 import { parseGeometryPathTelemetry } from "@/lib/attempt-mistakes";
+import { resolveProgramStructureFlags } from "@/lib/assessment/programStructureAnalysis";
 
 export type GeometryEdgeStatus = "correct" | "missed" | "extra";
 
@@ -324,9 +325,12 @@ export function resolveGeometryPathPassed(args: {
 
   const mode = analysis.validationMode;
   const tokens = (args.programTokens ?? []).map((t) => t.toLowerCase());
-  const hasRepeat = tokens.some((t) => t.includes("repeat"));
-  const hasChunk = tokens.some((t) => t.includes("chunk:"));
-  const hasBag = tokens.some((t) => t.includes("bag:"));
+  // Recorded programs are expanded motions, so bag/chunk use only exists in structure telemetry.
+  // Older builds without it: trust Unity's own structure check instead of failing the run.
+  const structure = resolveProgramStructureFlags(args.mistakes);
+  const hasRepeat = structure ? structure.hasRepeat : tokens.some((t) => t.includes("repeat"));
+  const hasChunk = structure ? structure.hasChunk : true;
+  const hasBag = structure ? structure.hasBag : true;
 
   const structureOk =
     (!gp.requireRepeat || hasRepeat) &&

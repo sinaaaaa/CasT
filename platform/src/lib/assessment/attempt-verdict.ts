@@ -13,6 +13,9 @@ import type { DebuggingAnalysisResult } from "@/lib/assessment/debuggingAnalysis
 import type { PathBuildingAnalysisResult } from "@/lib/assessment/pathBuildingAnalysis";
 import type { NumberLineEvidence } from "@/lib/assessment/assessmentTypes";
 import type { GeometryPathAnalysisResult } from "@/lib/assessment/geometryPathAnalysis";
+import type { ProgramStructureAnalysis } from "@/lib/assessment/programStructureAnalysis";
+import type { GeometryEdgeDiagnosis } from "@/lib/assessment/geometryEdgeDiagnosis";
+import type { BlockProgramComparison } from "@/lib/assessment/blockProgramComparison";
 
 export type VerdictTone = "success" | "warning" | "danger" | "neutral";
 
@@ -52,6 +55,10 @@ export type AttemptVerdictInput = {
     answerMissing?: boolean;
     explanation?: string;
   } | null;
+  /** Starter edits + Command Bag / Chunk usage (adds sentences to the verdict). */
+  programStructure?: ProgramStructureAnalysis | null;
+  geometryEdges?: GeometryEdgeDiagnosis | null;
+  blockComparison?: BlockProgramComparison | null;
   /** Fallback when no rich analysis is available. */
   fallback: { passed: boolean; status: string; score: number | null };
 };
@@ -589,7 +596,77 @@ function geometryVerdict(r: GeometryPathAnalysisResult): AttemptVerdict {
   };
 }
 
+/** Add starter-edit / Command Bag findings to the headline verdict without changing its tone. */
+function withProgramStructure(
+  verdict: AttemptVerdict,
+  ps: ProgramStructureAnalysis | null | undefined,
+  passed: boolean
+): AttemptVerdict {
+  if (!ps?.available) return verdict;
+  const extra: string[] = [];
+  let fix = verdict.fix;
+
+  if (ps.hasStarter && ps.editStrategy) {
+    if (ps.starterUnchanged) {
+      extra.push("The student ran the starter program without changing it.");
+      if (!passed) fix = "Ask the student to run the starter, watch where it goes wrong, and change only that part.";
+    } else {
+      extra.push(
+        `Starter edits: kept ${ps.keptCount}, removed ${ps.removedCount}, added ${ps.addedCount} (${(ps.editStrategyLabel ?? "").toLowerCase()}).`
+      );
+    }
+  }
+
+  if (ps.usesMacros && ps.source === "unity" && ps.final.length > 0) {
+    if (ps.macroBlocksInFinal === 0) {
+      extra.push("No Command Bags or Chunks were used.");
+    } else {
+      const parts: string[] = [];
+      if (ps.bagsAvailable) parts.push(`${ps.bagsUsed} bag${ps.bagsUsed === 1 ? "" : "s"}`);
+      if (ps.chunksAvailable) parts.push(`${ps.chunksUsed} chunk${ps.chunksUsed === 1 ? "" : "s"}`);
+      if (parts.length) extra.push(`Used ${parts.join(" and ")}.`);
+    }
+  }
+
+  const unmet = ps.requirements.filter((r) => r.met === false);
+  if (unmet.length) {
+    extra.push(`Missing requirement: ${unmet.map((r) => r.label.toLowerCase()).join(", ")}.`);
+    fix = fix ?? `Remind the student that this item asks them to ${unmet[0]!.label.toLowerCase()}.`;
+  }
+
+  if (!extra.length) return verdict;
+  return { ...verdict, detail: [clean(verdict.detail), ...extra].filter(Boolean).join(" "), fix };
+}
+
+/** Name the exact edge / block that went wrong, when the replay found it. */
+function withReplayFindings(verdict: AttemptVerdict, input: AttemptVerdictInput): AttemptVerdict {
+  if (input.fallback.passed) return verdict;
+  const issue = input.geometryEdges?.primaryIssue ?? null;
+  const blocks = input.blockComparison ?? null;
+  const extra: string[] = [];
+  let fix = verdict.fix;
+  if (issue) {
+    extra.push(`${issue.title}${issue.block ? ` (block ${issue.block})` : ""}: ${issue.message}`);
+  }
+  if (blocks?.available && !blocks.studentWorks) {
+    const best = blocks.fixes[0];
+    if (best) fix = `Closest working program: ${best.description}`;
+    else if (issue?.fix) fix = issue.fix;
+  } else if (issue?.fix) {
+    fix = issue.fix;
+  }
+  if (!extra.length && fix === verdict.fix) return verdict;
+  return { ...verdict, detail: [clean(verdict.detail), ...extra].filter(Boolean).join(" "), fix };
+}
+
 export function buildAttemptVerdict(input: AttemptVerdictInput): AttemptVerdict {
+  return withReplayFindings(
+    withProgramStructure(baseAttemptVerdict(input), input.programStructure, input.fallback.passed),
+    input
+  );
+}
+
+function baseAttemptVerdict(input: AttemptVerdictInput): AttemptVerdict {
   const goalLabel = input.goalLabel || "goal";
 
   if (input.prediction?.available || (input.prediction?.misconceptionMatches?.length ?? 0) > 0) {

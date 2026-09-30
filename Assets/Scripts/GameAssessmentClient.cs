@@ -576,6 +576,11 @@ public class GameAssessmentClient : MonoBehaviour
         public int geometryFinalFacingX;
         public int geometryFinalFacingY;
         public bool geometryHasTelemetry;
+        /// <summary>Yellow strip at level load, with bag:id / chunk:id kept as single tokens.</summary>
+        public string[] programStructureInitial;
+        /// <summary>Yellow strip at the last RUN, with bag:id / chunk:id kept as single tokens.</summary>
+        public string[] programStructureFinal;
+        public bool programStructureHasTelemetry;
     }
 
     [Serializable]

@@ -21,6 +21,7 @@ import { formatAttemptRunLabel, parseAttemptRunMeta } from "@/lib/attempt-mistak
 import { resolveAttemptDurationSeconds } from "@/lib/game/resolve-attempt-duration";
 import { buildGeometryPathAnalysisFromAttempt } from "@/lib/assessment/geometryPathAnalysis";
 import { isGeometryPathLevel } from "@/lib/assessment/assessmentConfig";
+import { buildProgramStructureAnalysis } from "@/lib/assessment/programStructureAnalysis";
 
 async function LevelDetailContent({ id }: { id: string }) {
   const session = await getServerSession(authOptions);
@@ -98,6 +99,91 @@ async function LevelDetailContent({ id }: { id: string }) {
   });
 
   const parsedConfig = levelGameplayConfigSchema.safeParse(level.config);
+  const endedAttempts = attempts.filter((a) => a.endedAt != null);
+  const structures = parsedConfig.success
+    ? endedAttempts.map((a) => ({
+        passed: a.passed,
+        ps: buildProgramStructureAnalysis({
+          config: parsedConfig.data,
+          levelType: level.levelType,
+          mistakes: a.mistakes,
+          finalCommand: a.finalCommand,
+          passed: a.passed,
+        }),
+      }))
+    : [];
+  const macroRuns = structures.filter((s) => s.ps.usesMacros && s.ps.source === "unity" && s.ps.final.length > 0);
+  const pctOf = (count: number, total: number) => (total > 0 ? Math.round((count / total) * 100) : null);
+
+  let programStructureMetrics: LevelDetailPayload["programStructureMetrics"] = null;
+  if (structures[0]?.ps.available) {
+    const sample = structures[0].ps;
+    const starterRuns = structures.filter((s) => s.ps.hasStarter && s.ps.editStrategy != null);
+    const unchanged = starterRuns.filter((s) => s.ps.starterUnchanged);
+    const edited = starterRuns.filter((s) => !s.ps.starterUnchanged);
+    const strategyCounts = new Map<string, number>();
+    for (const s of starterRuns) {
+      const label = s.ps.editStrategyLabel ?? "Other";
+      strategyCounts.set(label, (strategyCounts.get(label) ?? 0) + 1);
+    }
+    const macroUse = new Map<
+      string,
+      { name: string; kind: "bag" | "chunk"; color?: string; runs: number; uses: number }
+    >();
+    for (const row of sample.macroRows) {
+      macroUse.set(row.token, { name: row.name, kind: row.kind, color: row.color, runs: 0, uses: 0 });
+    }
+    for (const s of macroRuns) {
+      for (const row of s.ps.macroRows) {
+        if (row.inFinal === 0) continue;
+        const entry = macroUse.get(row.token) ?? {
+          name: row.name,
+          kind: row.kind,
+          color: row.color,
+          runs: 0,
+          uses: 0,
+        };
+        entry.runs += 1;
+        entry.uses += row.inFinal;
+        macroUse.set(row.token, entry);
+      }
+    }
+    const macroList = [...macroUse.values()];
+    programStructureMetrics = {
+      hasStarter: sample.hasStarter,
+      usesMacros: sample.usesMacros,
+      runsAnalyzed: structures.length,
+      starterRuns: starterRuns.length,
+      pctStarterUnchanged: pctOf(unchanged.length, starterRuns.length),
+      avgEdits: starterRuns.length
+        ? Math.round(
+            (starterRuns.reduce((n, s) => n + s.ps.addedCount + s.ps.removedCount, 0) / starterRuns.length) * 10
+          ) / 10
+        : null,
+      passRateUnchanged: pctOf(unchanged.filter((s) => s.passed).length, unchanged.length),
+      passRateEdited: pctOf(edited.filter((s) => s.passed).length, edited.length),
+      strategies: [...strategyCounts.entries()]
+        .map(([label, count]) => ({ label, count }))
+        .sort((a, b) => b.count - a.count),
+      macroRuns: macroRuns.length,
+      pctUsingAnyMacro: pctOf(macroRuns.filter((s) => s.ps.macroBlocksInFinal > 0).length, macroRuns.length),
+      avgMacroSharePct: macroRuns.length
+        ? Math.round(macroRuns.reduce((n, s) => n + (s.ps.macroSharePct ?? 0), 0) / macroRuns.length)
+        : null,
+      macros: macroList
+        .filter((m) => m.runs > 0)
+        .sort((a, b) => b.runs - a.runs)
+        .map((m) => ({
+          name: m.name,
+          kind: m.kind,
+          color: m.color,
+          pctRuns: pctOf(m.runs, macroRuns.length) ?? 0,
+          uses: m.uses,
+        })),
+      unusedMacros: macroRuns.length ? macroList.filter((m) => m.runs === 0).map((m) => m.name) : [],
+    };
+  }
+
   let geometryMetrics: LevelDetailPayload["geometryMetrics"] = null;
   if (parsedConfig.success && isGeometryPathLevel(parsedConfig.data, level.levelType)) {
     const analyses = attempts.map((a) =>
@@ -121,8 +207,9 @@ async function LevelDetailContent({ id }: { id: string }) {
       avgAccuracyPct: avg(withTel.map((x) => x.pathAccuracyPct)),
       attemptsWithTelemetry: withTel.length,
       pctUsingRepeat: pct((c) => c.includes("repeat")),
-      pctUsingChunks: pct((c) => c.includes("chunk:")),
-      pctUsingBags: pct((c) => c.includes("bag:")),
+      // Recorded programs are expanded arrows; bag / chunk use comes from strip telemetry.
+      pctUsingChunks: pctOf(macroRuns.filter((s) => s.ps.chunksUsed > 0).length, macroRuns.length),
+      pctUsingBags: pctOf(macroRuns.filter((s) => s.ps.bagsUsed > 0).length, macroRuns.length),
     };
   }
 
@@ -146,6 +233,7 @@ async function LevelDetailContent({ id }: { id: string }) {
     chartData,
     attempts: rows,
     geometryMetrics,
+    programStructureMetrics,
   };
 
   return <LevelDetailTabs level={payload} />;

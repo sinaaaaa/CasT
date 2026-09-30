@@ -5,16 +5,24 @@ import { motion, Reorder } from "framer-motion";
 import {
   ArrowDown,
   ArrowUp,
+  Briefcase,
   CornerDownLeft,
   CornerDownRight,
   HelpCircle,
   Minus,
   Play,
   Plus,
+  Puzzle,
   RotateCcw,
   Sparkles,
 } from "lucide-react";
-import type { LevelGameplayConfig } from "@/lib/level-config";
+import type { CommandBag, LevelGameplayConfig } from "@/lib/level-config";
+import {
+  formatCommandBagToken,
+  formatCommandChunkToken,
+  parseCommandBagToken,
+  parseCommandChunkToken,
+} from "@/lib/level-config";
 import { GUIDED_ACTIONS } from "@/lib/level-editor-constants";
 import {
   enrichCorrectProgramsWithVariants,
@@ -31,7 +39,11 @@ type Props = {
   showBlanks?: boolean;
   /** guidedActions (default) or assessment.correctPrograms[0] for canvas patterns */
   storage?: "guided" | "correctProgram";
+  /** Blocks the teacher may add. Omit to derive from commandBagMode (arrows + Repeat, or bags/chunks only). */
+  palette?: ProgramPalette;
 };
+
+export type ProgramPalette = { arrows: boolean; repeat: boolean; bags: boolean; chunks: boolean };
 
 type ProgramBlock = { id: string; action: string };
 
@@ -85,7 +97,54 @@ const CATEGORIES = [
   { id: "student", label: "Student choice", actions: ["blank"] as const },
 ];
 
-function actionLabel(value: string) {
+type MacroInfo = { kind: "bag" | "chunk"; name: string; color?: string; missing: boolean };
+
+type MacroOption = { token: string; kind: "bag" | "chunk"; name: string; color?: string; steps: number };
+
+function describeMacro(token: string, bags: CommandBag[]): MacroInfo | null {
+  const bagId = parseCommandBagToken(token);
+  if (bagId) {
+    const bag = bags.find((b) => b.id === bagId);
+    return { kind: "bag", name: bag?.name ?? "Missing bag", color: bag?.color, missing: !bag };
+  }
+  const chunkId = parseCommandChunkToken(token);
+  if (chunkId) {
+    for (const bag of bags) {
+      const chunk = bag.chunks?.find((c) => c.id === chunkId);
+      if (chunk) return { kind: "chunk", name: chunk.name, color: chunk.color ?? bag.color, missing: false };
+    }
+    return { kind: "chunk", name: "Missing chunk", missing: true };
+  }
+  return null;
+}
+
+function macroOptionsFor(bags: CommandBag[], palette: ProgramPalette): MacroOption[] {
+  const bagOptions: MacroOption[] = palette.bags
+    ? bags.map((bag) => ({
+        token: formatCommandBagToken(bag.id),
+        kind: "bag" as const,
+        name: bag.name,
+        color: bag.color,
+        steps: (bag.chunks ?? []).reduce((n, c) => n + (c.tokens?.length ?? 0), 0),
+      }))
+    : [];
+  const chunkOptions: MacroOption[] = palette.chunks
+    ? bags.flatMap((bag) =>
+        (bag.chunks ?? []).map((chunk) => ({
+          token: formatCommandChunkToken(chunk.id),
+          kind: "chunk" as const,
+          name: chunk.name,
+          color: chunk.color ?? bag.color,
+          steps: chunk.tokens?.length ?? 0,
+        }))
+      )
+    : [];
+  return [...bagOptions, ...chunkOptions];
+}
+
+function actionLabel(value: string, bags: CommandBag[] = []) {
+  const macro = describeMacro(value, bags);
+  if (macro) return macro.name;
   const count = parseRepeatStart(value);
   if (count != null) return `Repeat start (×${count})`;
   return GUIDED_ACTIONS.find((g) => g.value === value)?.label ?? value;
@@ -100,6 +159,7 @@ export function VisualProgramBuilder({
   onChange,
   showBlanks = true,
   storage = "guided",
+  palette: paletteProp,
 }: Props) {
   const programs = config.assessment?.correctPrograms ?? [];
   const [activeProgramIndex, setActiveProgramIndex] = useState(0);
@@ -115,6 +175,35 @@ export function VisualProgramBuilder({
   const blanks = config.blanks ?? [];
   const [previewRun, setPreviewRun] = useState(false);
   const blocks = useMemo(() => toBlocks(actions), [actions]);
+
+  const bags = useMemo(() => config.commandBags ?? [], [config.commandBags]);
+  const derivedBagMode: "BAG" | "CHUNK" | null =
+    storage === "guided" && bags.length > 0
+      ? config.commandBagMode === "CHUNK"
+        ? "CHUNK"
+        : "BAG"
+      : null;
+  const palette: ProgramPalette =
+    paletteProp ??
+    (derivedBagMode
+      ? { arrows: false, repeat: false, bags: derivedBagMode === "BAG", chunks: derivedBagMode === "CHUNK" }
+      : { arrows: true, repeat: true, bags: false, chunks: false });
+  const showMacros = storage === "guided" && (palette.bags || palette.chunks);
+  const macroHeading =
+    palette.bags && palette.chunks ? "Command Bags & Chunks" : palette.bags ? "Command Bags" : "Chunks";
+  const macroOptions = showMacros ? macroOptionsFor(bags, palette) : [];
+  // Unity hides loose arrows / Repeat and drops them from the strip while bags are active.
+  const looseTokensHidden =
+    showMacros && !palette.arrows && actions.some((a) => describeMacro(a, bags) == null);
+  const repeatToolOff =
+    palette.arrows &&
+    !palette.repeat &&
+    actions.some((a) => parseRepeatStart(a) != null || a === "repeat-end");
+  const visibleCategories = CATEGORIES.filter((c) => {
+    if (c.id === "move" || c.id === "turn") return palette.arrows;
+    if (c.id === "loop") return palette.repeat;
+    return showBlanks;
+  });
 
   function setActions(next: string[]) {
     if (storage === "correctProgram") {
@@ -328,6 +417,7 @@ export function VisualProgramBuilder({
             <Reorder.Group axis="x" values={blocks} onReorder={setBlocks} className="flex flex-wrap gap-2">
               {blocks.map((block, i) => {
                 const repeatCount = parseRepeatStart(block.action);
+                const macro = describeMacro(block.action, bags);
                 const style =
                   ACTION_STYLES[block.action] ??
                   (repeatCount != null
@@ -339,17 +429,29 @@ export function VisualProgramBuilder({
                     value={block}
                     className={cn(
                       "flex cursor-grab items-center gap-2 rounded-xl border-2 px-3 py-2 text-sm font-medium shadow-sm active:cursor-grabbing",
-                      style.bg,
-                      style.border,
+                      macro
+                        ? macro.missing
+                          ? "border-dashed border-red-300 bg-red-50 text-red-700"
+                          : "bg-white"
+                        : [style.bg, style.border],
                       previewRun && "animate-pulse"
                     )}
+                    style={macro && !macro.missing && macro.color ? { borderColor: macro.color } : undefined}
                     whileDrag={{ scale: 1.05, zIndex: 10 }}
                   >
                     <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-white/80 text-xs font-bold text-slate-500">
                       {i + 1}
                     </span>
-                    {style.icon}
-                    <span>{actionLabel(block.action)}</span>
+                    {macro ? (
+                      macro.kind === "bag" ? (
+                        <Briefcase className="h-4 w-4" style={{ color: macro.color }} />
+                      ) : (
+                        <Puzzle className="h-4 w-4" style={{ color: macro.color }} />
+                      )
+                    ) : (
+                      style.icon
+                    )}
+                    <span>{actionLabel(block.action, bags)}</span>
                     {repeatCount != null && (
                       <span className="ml-1 inline-flex items-center gap-0.5 rounded-lg bg-white/90 p-0.5 ring-1 ring-purple-200">
                         <button
@@ -407,8 +509,64 @@ export function VisualProgramBuilder({
 
       <div className="space-y-4">
         <h4 className="text-sm font-semibold text-slate-800">Add a command</h4>
-        <div className="grid gap-4 sm:grid-cols-3">
-          {CATEGORIES.filter((c) => showBlanks || c.id !== "student").map((cat) => (
+        {showMacros && (
+          <div className="rounded-xl border border-violet-200 bg-violet-50/50 p-3">
+            <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-violet-700">
+              {palette.bags ? <Briefcase className="h-3.5 w-3.5" /> : <Puzzle className="h-3.5 w-3.5" />}
+              {macroHeading}
+            </p>
+            {macroOptions.length === 0 ? (
+              <p className="text-xs text-violet-800/80">
+                Add {palette.bags ? "a bag" : "a chunk"} in the Command Bags &amp; Chunks panel first.
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {macroOptions.map((opt) => (
+                  <motion.button
+                    key={opt.token}
+                    type="button"
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => addAction(opt.token)}
+                    className="flex items-center gap-2 rounded-xl border-2 bg-white px-3 py-2.5 text-left text-sm font-medium transition-shadow hover:shadow-md"
+                    style={opt.color ? { borderColor: opt.color } : undefined}
+                  >
+                    {opt.kind === "bag" ? (
+                      <Briefcase className="h-4 w-4" style={{ color: opt.color }} />
+                    ) : (
+                      <Puzzle className="h-4 w-4" style={{ color: opt.color }} />
+                    )}
+                    {opt.name}
+                    <span className="text-xs font-normal text-slate-400">
+                      {opt.steps} step{opt.steps === 1 ? "" : "s"}
+                    </span>
+                  </motion.button>
+                ))}
+              </div>
+            )}
+            {!palette.arrows && (
+              <p className="mt-2 text-xs text-violet-700/80">
+                While {macroHeading} are on, students only see these in the blue bar — single arrows and
+                Repeat are hidden.
+              </p>
+            )}
+          </div>
+        )}
+        {looseTokensHidden && (
+          <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            This program has single arrows or Repeat blocks. Students won&apos;t see those in the yellow box
+            while {macroHeading} are on — use only {palette.bags ? "bags" : "chunks"}, or turn arrows back
+            on.
+          </p>
+        )}
+        {repeatToolOff && (
+          <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            This program uses Repeat, but Repeat is turned off for students. They will see the starter
+            Repeat but cannot add new ones.
+          </p>
+        )}
+        <div className={cn("grid gap-4 sm:grid-cols-3", visibleCategories.length === 0 && "hidden")}>
+          {visibleCategories.map((cat) => (
             <div key={cat.id} className="rounded-xl border border-slate-100 bg-slate-50/50 p-3">
               <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{cat.label}</p>
               <motion.div className="flex flex-col gap-2">

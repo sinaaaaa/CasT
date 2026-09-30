@@ -1087,4 +1087,5 @@ public class GeometryPathData
     public bool requireFinishFacing;
     public string finishObjectType;
     public GeometryPathToolsData tools = new GeometryPathToolsData();
+    public bool seedStarterProgram;
 }

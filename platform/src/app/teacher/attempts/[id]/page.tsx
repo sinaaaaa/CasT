@@ -22,6 +22,8 @@ import {
 } from "@/lib/assessment/resolve-program";
 import { buildCanvasPatternMatch } from "@/lib/assessment/canvas-pattern-match";
 import { buildGeometryPathAnalysisFromAttempt } from "@/lib/assessment/geometryPathAnalysis";
+import { buildProgramStructureAnalysis } from "@/lib/assessment/programStructureAnalysis";
+import { buildReplayDiagnostics } from "@/lib/assessment/replayDiagnostics";
 import { formatAttemptRunLabel, parseAttemptRunMeta } from "@/lib/attempt-mistakes";
 import { resolveAttemptDurationSeconds } from "@/lib/game/resolve-attempt-duration";
 import { LevelType } from "@prisma/client";
@@ -194,6 +196,26 @@ export default async function AttemptDetailPage({
         })
       : null;
 
+  const programStructure = parsedLevelConfig.success
+    ? buildProgramStructureAnalysis({
+        config: parsedLevelConfig.data,
+        levelType: attempt.level.levelType,
+        mistakes: attempt.mistakes,
+        finalCommand: attempt.finalCommand,
+        passed: attempt.passed,
+      })
+    : null;
+
+  const { geometryEdgeDiagnosis, blockComparison } = parsedLevelConfig.success
+    ? buildReplayDiagnostics({
+        config: parsedLevelConfig.data,
+        levelType: attempt.level.levelType,
+        mistakes: attempt.mistakes,
+        finalCommand: attempt.finalCommand,
+        passed: attempt.passed,
+      })
+    : { geometryEdgeDiagnosis: null, blockComparison: null };
+
   const mapAnchors =
     parsedLevelConfig.success
       ? resolveRouteMapAnchors(parsedLevelConfig.data, {
@@ -250,6 +272,9 @@ export default async function AttemptDetailPage({
     isPathBuildingLevel: isPathBuildingLevelFlag,
     isGeometryPathLevel: isGeometryPathLevelFlag,
     geometryPathAnalysis,
+    programStructure: programStructure?.available ? programStructure : null,
+    geometryEdgeDiagnosis,
+    blockComparison,
     isDebuggingLevel: isDebuggingLevelFlag,
     isCanvasLevel: isCanvasLevelFlag,
     canvasPatternMatch,

@@ -1,6 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import type { ExportRow } from "@/lib/export-assessment-excel";
 import type { TeacherAssessmentSummary } from "@/lib/assessment/assessmentTypes";
+import { levelGameplayConfigSchema } from "@/lib/level-config";
+import { buildProgramStructureAnalysis } from "@/lib/assessment/programStructureAnalysis";
+import { buildReplayDiagnostics } from "@/lib/assessment/replayDiagnostics";
 
 export async function buildAssessmentExportRows(filters?: {
   studentIds?: string[];
@@ -83,6 +86,30 @@ export async function buildAssessmentExportRows(filters?: {
         }
       }
 
+      const parsedConfig = levelGameplayConfigSchema.safeParse(a.level.config);
+      const ps = parsedConfig.success
+        ? buildProgramStructureAnalysis({
+            config: parsedConfig.data,
+            levelType: a.level.levelType,
+            mistakes: a.mistakes,
+            finalCommand: a.finalCommand,
+            passed: a.passed,
+          })
+        : null;
+      const macroKnown = ps?.usesMacros && ps.source === "unity";
+      const replay = parsedConfig.success
+        ? buildReplayDiagnostics({
+            config: parsedConfig.data,
+            levelType: a.level.levelType,
+            mistakes: a.mistakes,
+            finalCommand: a.finalCommand,
+            passed: a.passed,
+            budget: 800,
+          })
+        : null;
+      const edges = replay?.geometryEdgeDiagnosis ?? null;
+      const blocks = replay?.blockComparison ?? null;
+
       rows.push({
         studentId: s.externalId?.trim() || s.id,
         levelName: a.level.name,
@@ -101,6 +128,29 @@ export async function buildAssessmentExportRows(filters?: {
         teacherSummary: summary?.taskMastery ?? "",
         recommendation: summary?.recommendations?.[0] ?? "",
         constructScores,
+        programStructure: ps?.available
+          ? {
+              starterEdit: ps.editStrategyLabel ?? "",
+              keptAddedRemoved: ps.hasStarter
+                ? `${ps.keptCount} / ${ps.addedCount} / ${ps.removedCount}`
+                : "",
+              bagsUsed: macroKnown && ps.bagsAvailable ? ps.bagsUsed : "",
+              chunksUsed: macroKnown && ps.chunksAvailable ? ps.chunksUsed : "",
+              macroSharePct: ps.macroSharePct ?? "",
+              programAsBuilt: ps.final.map((b) => b.label).join(" → "),
+            }
+          : null,
+        replay:
+          edges || blocks
+            ? {
+                edgesMet: edges ? `${edges.metCount}/${edges.targetCount}` : "",
+                whatHappened: edges?.primaryIssue
+                  ? `${edges.primaryIssue.title}: ${edges.primaryIssue.message}`
+                  : "",
+                firstMistakeBlock: blocks?.firstMistakeBlock ?? edges?.primaryIssue?.block ?? "",
+                closestFix: blocks?.fixes[0]?.description ?? (blocks?.noSmallFix ? "No fix within two block changes" : ""),
+              }
+            : null,
       });
     }
   }

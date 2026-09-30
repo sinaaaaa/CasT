@@ -11,6 +11,7 @@ import { VisualProgramBuilder } from "../visual-program-builder";
 import { CanvasLessonEditor } from "@/components/teacher/level-designer/canvas-lesson-editor";
 import { CommandBagsEditor } from "@/components/teacher/level-designer/command-bags-editor";
 import { GeometryPathToolsEditor } from "@/components/teacher/level-designer/geometry-path-tools-editor";
+import { GeometryStarterProgramEditor } from "@/components/teacher/level-designer/geometry-starter-program-editor";
 
 type Props = {
   levelType: LevelType;
@@ -122,6 +123,12 @@ export function StepProgramSetup({ levelType, config, onChange }: Props) {
             <span className="font-semibold">Command Bags</span> above to author them here.
           </p>
         )}
+        <ItemBuilderPanel
+          title="Starting program"
+          description="Start students with a blank program, or seed a starter program they edit to trace the shape."
+        >
+          <GeometryStarterProgramEditor config={config} onChange={onChange} />
+        </ItemBuilderPanel>
       </motion.div>
     );
   }
@@ -151,6 +158,15 @@ export function StepProgramSetup({ levelType, config, onChange }: Props) {
         }
         accent="violet"
       />
+
+      {isEditableDrag && (
+        <ItemBuilderPanel
+          title="Command Bags & Chunks (optional)"
+          description="Define Bags or Chunks for the blue bar, then add them to the starter program below. Leave empty for arrows and Repeat."
+        >
+          <CommandBagsEditor config={config} onChange={onChange} />
+        </ItemBuilderPanel>
+      )}
 
       <VisualProgramBuilder config={config} onChange={onChange} showBlanks={showBlanks} />
     </motion.div>

@@ -39,6 +39,12 @@ import { ChoiceActionAnalysisPanel } from "@/components/assessment/choice-action
 import { DebuggingAnalysisPanel } from "@/components/assessment/debugging-analysis-panel";
 import { PathBuildingAnalysisPanel } from "@/components/assessment/path-building-analysis-panel";
 import { GeometryPathAnalysisPanel } from "@/components/assessment/geometry-path-analysis-panel";
+import { ProgramStructurePanel } from "@/components/assessment/program-structure-panel";
+import type { ProgramStructureAnalysis } from "@/lib/assessment/programStructureAnalysis";
+import { GeometryEdgeDiagnosisPanel } from "@/components/assessment/geometry-edge-diagnosis-panel";
+import type { GeometryEdgeDiagnosis } from "@/lib/assessment/geometryEdgeDiagnosis";
+import { BlockComparisonPanel } from "@/components/assessment/block-comparison-panel";
+import type { BlockProgramComparison } from "@/lib/assessment/blockProgramComparison";
 import { AttemptVerdictBanner } from "@/components/assessment/attempt-verdict-banner";
 import { buildAttemptVerdict } from "@/lib/assessment/attempt-verdict";
 import {
@@ -82,6 +88,12 @@ export type AttemptDetailPayload = {
   /** Geometry Path — edge-trace coding + geometry. */
   isGeometryPathLevel?: boolean;
   geometryPathAnalysis?: import("@/lib/assessment/geometryPathAnalysis").GeometryPathAnalysisResult | null;
+  /** Starter edits + Command Bag / Chunk usage (geometry starter, edit starter with bags, …). */
+  programStructure?: ProgramStructureAnalysis | null;
+  /** Geometry: edge-by-edge met / not met with what happened. */
+  geometryEdgeDiagnosis?: GeometryEdgeDiagnosis | null;
+  /** Block-level comparison against the closest working program (Bags / Chunks / Repeat kept whole). */
+  blockComparison?: BlockProgramComparison | null;
   isDebuggingLevel?: boolean;
   starterProgram?: CommandToken[];
   studentProgram?: CommandToken[];
@@ -210,6 +222,9 @@ export function AttemptAssessmentView({ attempt }: { attempt: AttemptDetailPaylo
     debugging: isDebuggingAssessment ? debugResult : null,
     pathBuilding: isPathBuildingAssessment ? pathResult : null,
     geometryPath: isGeometryPathAssessment ? geometryResult : null,
+    programStructure: attempt.programStructure,
+    geometryEdges: attempt.geometryEdgeDiagnosis,
+    blockComparison: attempt.blockComparison,
     numberLine: isNumberLineAssessment ? numberLineResult : null,
     canvasPattern: isCanvasAssessment && attempt.canvasPatternMatch
       ? {
@@ -337,10 +352,13 @@ export function AttemptAssessmentView({ attempt }: { attempt: AttemptDetailPaylo
         <GeometryPathAnalysisPanel
           result={geometryResult}
           studentProgram={
-            attempt.finalCommand
-              ? attempt.finalCommand.split(/[;,]/).map((s) => s.trim()).filter(Boolean)
-              : attempt.studentProgram
+            attempt.programStructure
+              ? undefined
+              : attempt.finalCommand
+                ? attempt.finalCommand.split(/[;,]/).map((s) => s.trim()).filter(Boolean)
+                : attempt.studentProgram
           }
+          hideStructureRequirements={Boolean(attempt.programStructure?.requirements.length)}
         />
       ) : isDebuggingAssessment && debugResult ? (
         <DebuggingAnalysisPanel result={debugResult} />
@@ -367,6 +385,12 @@ export function AttemptAssessmentView({ attempt }: { attempt: AttemptDetailPaylo
           objectMarkers={attempt.mapAnchors?.objects}
         />
       )}
+
+      {attempt.geometryEdgeDiagnosis && <GeometryEdgeDiagnosisPanel result={attempt.geometryEdgeDiagnosis} />}
+
+      {attempt.blockComparison && <BlockComparisonPanel result={attempt.blockComparison} />}
+
+      {attempt.programStructure && <ProgramStructurePanel result={attempt.programStructure} />}
 
       {attempt.stealthAssessment &&
         !isNumberLineAssessment &&

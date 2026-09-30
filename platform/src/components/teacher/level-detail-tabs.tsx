@@ -51,7 +51,132 @@ export type LevelDetailPayload = {
     pctUsingChunks: number | null;
     pctUsingBags: number | null;
   } | null;
+  /** Starter edits (geometry / edit starter) and Command Bag / Chunk usage across runs. */
+  programStructureMetrics?: {
+    hasStarter: boolean;
+    usesMacros: boolean;
+    runsAnalyzed: number;
+    starterRuns: number;
+    pctStarterUnchanged: number | null;
+    avgEdits: number | null;
+    passRateUnchanged: number | null;
+    passRateEdited: number | null;
+    strategies: { label: string; count: number }[];
+    macroRuns: number;
+    pctUsingAnyMacro: number | null;
+    avgMacroSharePct: number | null;
+    macros: { name: string; kind: "bag" | "chunk"; color?: string; pctRuns: number; uses: number }[];
+    unusedMacros: string[];
+  } | null;
 };
+
+function pctLabel(v: number | null | undefined): string {
+  return v != null ? `${v}%` : "—";
+}
+
+function ProgramStructureMetricsCard({
+  m,
+}: {
+  m: NonNullable<LevelDetailPayload["programStructureMetrics"]>;
+}) {
+  const title = m.hasStarter
+    ? m.usesMacros
+      ? "Starter program & Command Bags"
+      : "Starter program edits"
+    : "Command Bags & Chunks";
+  return (
+    <Card className="shadow-sm border-indigo-100">
+      <CardHeader>
+        <CardTitle className="text-base">{title}</CardTitle>
+        <CardDescription>
+          How students changed the program across {m.runsAnalyzed} finished run
+          {m.runsAnalyzed === 1 ? "" : "s"}.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {m.hasStarter && (
+            <>
+              <MetricTile
+                label="Ran starter unchanged"
+                value={pctLabel(m.pctStarterUnchanged)}
+                sub={`of ${m.starterRuns} run${m.starterRuns === 1 ? "" : "s"}`}
+                tone={(m.pctStarterUnchanged ?? 0) >= 40 ? "warning" : "default"}
+              />
+              <MetricTile
+                label="Avg edits per run"
+                value={m.avgEdits != null ? m.avgEdits : "—"}
+                sub="blocks added + removed"
+              />
+              <MetricTile
+                label="Pass rate"
+                value={pctLabel(m.passRateEdited)}
+                sub={`when edited · ${pctLabel(m.passRateUnchanged)} when unchanged`}
+              />
+            </>
+          )}
+          {m.usesMacros && (
+            <MetricTile
+              label="Used Bags / Chunks"
+              value={pctLabel(m.pctUsingAnyMacro)}
+              sub={
+                m.macroRuns
+                  ? `${pctLabel(m.avgMacroSharePct)} of robot moves on average`
+                  : "Needs the updated game build"
+              }
+              tone="info"
+            />
+          )}
+        </div>
+
+        {m.hasStarter && m.strategies.length > 0 && (
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Editing strategies</p>
+            <div className="flex flex-wrap gap-2">
+              {m.strategies.map((s) => (
+                <Badge key={s.label} variant="outline" className="font-medium">
+                  {s.label} · {s.count}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {m.usesMacros && m.macros.length > 0 && (
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Most-used Bags / Chunks
+            </p>
+            <div className="space-y-1.5">
+              {m.macros.map((mac) => (
+                <div key={`${mac.kind}-${mac.name}`} className="flex items-center gap-3 text-sm">
+                  <span
+                    className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+                    style={{ backgroundColor: mac.color ?? "#94a3b8" }}
+                  />
+                  <span className="min-w-0 flex-1 truncate font-medium text-slate-800">
+                    {mac.name}{" "}
+                    <span className="text-xs font-normal text-slate-400">
+                      {mac.kind === "bag" ? "bag" : "chunk"}
+                    </span>
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    {mac.pctRuns}% of runs · {mac.uses} use{mac.uses === 1 ? "" : "s"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {m.unusedMacros.length > 0 && (
+          <p className="text-xs text-slate-500">
+            Never used: {m.unusedMacros.join(", ")}.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 const TAB_KEYS = ["overview", "attempts", "assessment", "design"] as const;
 type TabKey = (typeof TAB_KEYS)[number];
@@ -219,6 +344,10 @@ export function LevelDetailTabs({ level }: { level: LevelDetailPayload }) {
                 </div>
               </CardContent>
             </Card>
+          )}
+
+          {level.programStructureMetrics && (
+            <ProgramStructureMetricsCard m={level.programStructureMetrics} />
           )}
 
           <div className="grid gap-6 lg:grid-cols-2">

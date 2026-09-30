@@ -7,7 +7,7 @@ import { LevelType } from "@prisma/client";
 import { CommandAction } from "@prisma/client";
 import { normalizeCommandToken, type CommandToken } from "@/lib/command-icons";
 import { expandRepeatTokens } from "@/lib/assessment/expand-repeats";
-import { parseCountAnswerToken } from "@/lib/level-config";
+import { parseCountAnswerToken, resolveCommandBagProgramTokens } from "@/lib/level-config";
 
 function parseCommandStringKeepingRepeats(raw: string): string[] {
   return raw
@@ -45,6 +45,15 @@ export function expandGuidedActions(
     }
   }
   return toCommandTokens(expandRepeatTokens(raw));
+}
+
+/** guidedActions with bag:/chunk: macros replaced by their motion tokens. */
+function expandLevelGuidedActions(levelConfig: LevelGameplayConfig): CommandToken[] {
+  const guided = resolveCommandBagProgramTokens(
+    levelConfig.guidedActions ?? [],
+    levelConfig.commandBags
+  );
+  return expandGuidedActions(guided, levelConfig.blanks);
 }
 
 /** Unity may send placeholder text when no RUN was captured. */
@@ -102,7 +111,9 @@ export function parseBestSubmittedProgramFromEvents(
 
 export function isEditableProgramLevelType(levelType?: LevelType): boolean {
   return (
-    levelType === LevelType.DRAG_EDIT_PROGRAM || levelType === LevelType.DRAG_ACTIONS
+    levelType === LevelType.DRAG_EDIT_PROGRAM ||
+    levelType === LevelType.DRAG_ACTIONS ||
+    levelType === LevelType.GEOMETRY_PATH
   );
 }
 
@@ -117,7 +128,7 @@ export function resolveStarterProgram(params: {
     if (fromInitial.length > 0) return fromInitial;
   }
   if (levelConfig.guidedActions?.length) {
-    return expandGuidedActions(levelConfig.guidedActions, levelConfig.blanks);
+    return expandLevelGuidedActions(levelConfig);
   }
   return [];
 }
@@ -156,7 +167,7 @@ export function resolveAttemptProgram(params: {
   }
 
   if (!editable && levelConfig.guidedActions?.length) {
-    const fromGuided = expandGuidedActions(levelConfig.guidedActions, levelConfig.blanks);
+    const fromGuided = expandLevelGuidedActions(levelConfig);
     if (fromGuided.length > 0) return fromGuided;
   }
 
@@ -166,7 +177,7 @@ export function resolveAttemptProgram(params: {
   }
 
   if (editable && levelConfig.guidedActions?.length) {
-    return expandGuidedActions(levelConfig.guidedActions, levelConfig.blanks);
+    return expandLevelGuidedActions(levelConfig);
   }
 
   return [];

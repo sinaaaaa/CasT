@@ -1060,6 +1060,9 @@ public class CharacterMove : MonoBehaviour
     private readonly List<RunSnapshotTelemetry> _telemetryRunSnapshots = new List<RunSnapshotTelemetry>();
     private string[] _telemetryInitialCommands = System.Array.Empty<string>();
     private string[] _telemetryFinalCommands = System.Array.Empty<string>();
+    /// <summary>Yellow strip as built (bag:/chunk: kept as single tokens) — for teacher reports.</summary>
+    private string[] _telemetryInitialStructure = System.Array.Empty<string>();
+    private string[] _telemetryFinalStructure = System.Array.Empty<string>();
     private float _robotInteractionSeconds;
     private bool _robotWasTouched;
     private bool _robotTouchSessionActive;
@@ -1617,6 +1620,8 @@ public class CharacterMove : MonoBehaviour
         _telemetryRunSnapshots.Clear();
         _telemetryInitialCommands = System.Array.Empty<string>();
         _telemetryFinalCommands = System.Array.Empty<string>();
+        _telemetryInitialStructure = System.Array.Empty<string>();
+        _telemetryFinalStructure = System.Array.Empty<string>();
         _robotInteractionSeconds = 0f;
         _robotWasTouched = false;
         _robotTouchSessionActive = false;
@@ -1627,6 +1632,8 @@ public class CharacterMove : MonoBehaviour
     private void CaptureInitialProgramTelemetry()
     {
         _telemetryInitialCommands = SnapshotQueueCommandLabels();
+        _telemetryInitialStructure = CollectProgramStructureFromUI().ToArray();
+        _telemetryFinalStructure = System.Array.Empty<string>();
         _telemetryRunSnapshots.Clear();
     }
 
@@ -1652,6 +1659,40 @@ public class CharacterMove : MonoBehaviour
         for (int i = 0; i < items.Count; i++)
         {
             var item = items[i];
+            List<string> itemTokens = item.GetExecutableTokens(level);
+            if (itemTokens != null && itemTokens.Count > 0)
+                tokens.AddRange(itemTokens);
+            else if (item.action != null)
+                tokens.Add(GetActionLogString(item.action));
+        }
+        return tokens;
+    }
+
+    /// <summary>
+    /// Like <see cref="CollectProgramTokensFromUI"/>, but each Command Bag / Chunk stays one
+    /// bag:id / chunk:id token so the platform can report which macros the student used.
+    /// </summary>
+    public List<string> CollectProgramStructureFromUI()
+    {
+        var tokens = new List<string>();
+        LevelData level = GetCurrentLevelData();
+        var items = CollectProgramItemsInStripOrder();
+        for (int i = 0; i < items.Count; i++)
+        {
+            var item = items[i];
+            if (item.IsCommandMacro)
+            {
+                string macro = null;
+                if (item.isCommandChunk && !string.IsNullOrEmpty(item.commandChunkId))
+                    macro = CommandBagUtil.FormatChunkToken(item.commandChunkId);
+                else if (item.isCommandBag && !string.IsNullOrEmpty(item.commandBagId))
+                    macro = CommandBagUtil.FormatBagToken(item.commandBagId);
+                else if (!string.IsNullOrEmpty(item.actionLabel))
+                    macro = item.actionLabel;
+                if (!string.IsNullOrEmpty(macro))
+                    tokens.Add(macro);
+                continue;
+            }
             List<string> itemTokens = item.GetExecutableTokens(level);
             if (itemTokens != null && itemTokens.Count > 0)
                 tokens.AddRange(itemTokens);
@@ -1744,6 +1785,7 @@ public class CharacterMove : MonoBehaviour
         };
         _telemetryRunSnapshots.Add(snap);
         _telemetryFinalCommands = (string[])cmds.Clone();
+        _telemetryFinalStructure = CollectProgramStructureFromUI().ToArray();
 
         string program = string.Join(", ", cmds);
         if (!string.IsNullOrEmpty(program))
@@ -4486,18 +4528,46 @@ public class CharacterMove : MonoBehaviour
         return string.Equals(levelData.levelType, "FLAG_PLACEMENT", System.StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>Appends a bag:/chunk: starter token as a Command Bag / Chunk tile. False for any other token.</summary>
+    private bool TrySeedCommandBagMacro(string raw)
+    {
+        int end = actionQueueTransform != null ? actionQueueTransform.childCount : 0;
+        if (CommandBagUtil.IsBagToken(raw, out string bagId))
+        {
+            SpawnCommandBagMacro(true, bagId, null, CommandBagUtil.FormatBagToken(bagId),
+                null, Color.white, end, fromStudent: false);
+            return true;
+        }
+        if (CommandBagUtil.IsChunkToken(raw, out string chunkId))
+        {
+            SpawnCommandBagMacro(false, null, chunkId, CommandBagUtil.FormatChunkToken(chunkId),
+                null, Color.white, end, fromStudent: false);
+            return true;
+        }
+        return false;
+    }
+
     /// <summary>Rebuilds the yellow strip from <see cref="LevelData.guidedActions"/> (flag / fixed-program items).</summary>
     private void SeedGuidedProgramQueue(LevelData levelData)
     {
         if (levelData?.guidedActions == null || levelData.guidedActions.Count == 0) return;
 
-        // Command Bag modes: yellow strip starts empty — students drop whole bags.
+        // Command Bag modes: only bag:/chunk: starter tokens become tiles.
         // Do NOT seed loose arrow tiles (that looks like exploded bags).
         if (IsBagOnlyProgramMode(levelData))
         {
             ClearActionQueueVisual();
             EnsureProgramQueueSpacing();
-            Debug.Log("[CharacterMove] Bag mode: skipped seeding loose guidedActions into yellow strip.");
+            waitingForGuidedInput = false;
+            wrongAnswersCount = 0;
+            int seededMacros = 0;
+            for (int i = 0; i < levelData.guidedActions.Count; i++)
+            {
+                if (TrySeedCommandBagMacro(levelData.guidedActions[i])) seededMacros++;
+            }
+            Debug.Log(seededMacros > 0
+                ? $"[CharacterMove] Bag mode: seeded {seededMacros} starter bag/chunk tile(s); loose tokens skipped."
+                : "[CharacterMove] Bag mode: skipped seeding loose guidedActions into yellow strip.");
             return;
         }
 
@@ -4515,6 +4585,8 @@ public class CharacterMove : MonoBehaviour
         for (int i = 0; i < levelData.guidedActions.Count; i++)
         {
             string raw = levelData.guidedActions[i];
+            if (TrySeedCommandBagMacro(raw))
+                continue;
             string action = NormalizeActionLabel(raw);
             if (ProgramSequenceUtil.IsRepeatStartToken(raw, out int repeatCount))
             {
@@ -5677,6 +5749,12 @@ public class CharacterMove : MonoBehaviour
 
         var extras = new GameAssessmentClient.AssessmentExtrasPayload();
 
+        extras.programStructureInitial = _telemetryInitialStructure ?? System.Array.Empty<string>();
+        extras.programStructureFinal = _telemetryFinalStructure != null && _telemetryFinalStructure.Length > 0
+            ? _telemetryFinalStructure
+            : CollectProgramStructureFromUI().ToArray();
+        extras.programStructureHasTelemetry = true;
+
         if (UsesGuidedBlankFlow(levelData) && levelData.blanks != null && levelData.blanks.Count > 0)
         {
             extras.blankAnswers = userBlankChoices.ToArray();
@@ -6237,7 +6315,6 @@ public class CharacterMove : MonoBehaviour
     {
         if (source == null || actionQueueTransform == null) return;
         if (IsActionQueueLocked()) return;
-        LevelData level = GetCurrentLevelData();
         string token = source.ResolveDropToken();
         if (string.IsNullOrEmpty(token))
         {
@@ -6246,10 +6323,19 @@ public class CharacterMove : MonoBehaviour
         }
 
         bool isBag = source.dragKind == DraggableCommandBagBlock.DragKind.Bag;
-        string bagId = source.bagId;
-        string chunkId = source.chunkId;
-        string title = source.displayName;
-        Color accent = source.accentColor;
+        SpawnCommandBagMacro(isBag, source.bagId, source.chunkId, token,
+            source.displayName, source.accentColor, uiIndex, fromStudent: true);
+    }
+
+    /// <summary>
+    /// Builds a ProgramBagInstance / ProgramChunkInstance in the yellow strip.
+    /// fromStudent=false is used to seed a teacher starter program (no bounce, not logged as a student action).
+    /// </summary>
+    private bool SpawnCommandBagMacro(bool isBag, string bagId, string chunkId, string token,
+        string title, Color accent, int uiIndex, bool fromStudent)
+    {
+        if (actionQueueTransform == null) return false;
+        LevelData level = GetCurrentLevelData();
         List<string> previewTokens = new List<string>();
 
         if (isBag)
@@ -6263,6 +6349,11 @@ public class CharacterMove : MonoBehaviour
                 accent = CommandBagUiHelper.SoftPastel(bag.color, Mathf.Max(0, bagIndex));
                 previewTokens = CommandBagUiHelper.FlattenBagTokens(bag);
             }
+            else if (!fromStudent)
+            {
+                Debug.LogWarning($"[CharacterMove] Starter bag id '{bagId}' not found — skipped.");
+                return false;
+            }
             else
             {
                 Debug.LogWarning($"[CharacterMove] Bag id '{bagId}' not found — creating instance from drag source only.");
@@ -6274,12 +6365,14 @@ public class CharacterMove : MonoBehaviour
             var chunk = CommandBagUtil.FindChunk(level, chunkId);
             if (chunk == null)
             {
-                Debug.LogWarning($"[CharacterMove] Chunk id '{chunkId}' not found — drop ignored.");
-                return;
+                Debug.LogWarning($"[CharacterMove] Chunk id '{chunkId}' not found — {(fromStudent ? "drop ignored" : "starter chunk skipped")}.");
+                return false;
             }
+            if (string.IsNullOrEmpty(bagId))
+                bagId = CommandBagUtil.FindBagContainingChunk(level, chunkId)?.id;
             title = string.IsNullOrWhiteSpace(chunk.name) ? "Chunk" : chunk.name;
             // Prefer platform bag color; fall back to drag accent / puzzle palette.
-            accent = ResolveChunkAccentColor(level, bagId, chunkId, source.accentColor);
+            accent = ResolveChunkAccentColor(level, bagId, chunkId, accent);
             previewTokens = chunk.tokens != null ? new List<string>(chunk.tokens) : new List<string>();
         }
 
@@ -6421,13 +6514,18 @@ public class CharacterMove : MonoBehaviour
         EnsureDropHitTargetBehindProgramContent();
 
         LayoutRebuilder.ForceRebuildLayoutImmediate(actionQueueTransform as RectTransform);
-        PlayBlockDropBounce(blockGo.transform);
+        if (fromStudent)
+            PlayBlockDropBounce(blockGo.transform);
         RebuildActionQueueFromUI();
-        playerActions.Add(token);
-        currentAttemptActionLog.Add(new PlayerActionLogEntry { action = token, timestamp = Time.time });
+        if (fromStudent)
+        {
+            playerActions.Add(token);
+            currentAttemptActionLog.Add(new PlayerActionLogEntry { action = token, timestamp = Time.time });
+        }
         actionQueueTransform.gameObject.SetActive(true);
 
-        Debug.Log($"[CharacterMove] Dropped {(isBag ? "Bag" : "Chunk")} '{title}' cmds=[{string.Join(", ", refComp.macroTokens)}] index={clampedIndex}");
+        Debug.Log($"[CharacterMove] {(fromStudent ? "Dropped" : "Seeded")} {(isBag ? "Bag" : "Chunk")} '{title}' cmds=[{string.Join(", ", refComp.macroTokens)}] index={clampedIndex}");
+        return true;
     }
 
     /// <summary>

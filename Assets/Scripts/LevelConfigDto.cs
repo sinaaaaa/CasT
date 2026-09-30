@@ -90,6 +90,8 @@ public class GeometryPathConfigDto
     public bool requireFinishFacing;
     public string finishObjectType;
     public GeometryPathToolsDto tools;
+    /// <summary>When true, guidedActions is an editable starter program seeded into the yellow strip.</summary>
+    public bool seedStarterProgram;
     public int templateSize = 2;
     public int templateWidth = 3;
     public int templateHeight = 2;
@@ -707,12 +709,16 @@ public static class LevelConfigMapper
             ld.requireFlagBeforeRun = false;
             ld.visitObjectSequence = false;
             ld.layoutMode = "GRID";
-            ld.guidedActions = null;
             ld.blanks = null;
             if (ld.geometryPath == null)
                 ld.geometryPath = new GeometryPathData { enabled = true };
             else
                 ld.geometryPath.enabled = true;
+            if (!ld.geometryPath.seedStarterProgram)
+                ld.guidedActions = null;
+            else if (ld.guidedActions != null)
+                ld.guidedActions.RemoveAll(t => string.IsNullOrEmpty(t) ||
+                    t.Trim().Equals("blank", StringComparison.OrdinalIgnoreCase));
         }
     }
 
@@ -737,6 +743,7 @@ public static class LevelConfigMapper
             finishFacing = dto.finishFacing != null ? dto.finishFacing.ToVector2Int() : Vector2Int.zero,
             requireFinishFacing = dto.requireFinishFacing,
             finishObjectType = dto.finishObjectType,
+            seedStarterProgram = dto.seedStarterProgram,
             segments = new List<GeometryPathSegmentData>(),
             tools = new GeometryPathToolsData(),
         };

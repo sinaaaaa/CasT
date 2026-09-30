@@ -31,9 +31,12 @@ const COMBINED_LABEL: Record<string, string> = {
 export function GeometryPathAnalysisPanel({
   result,
   studentProgram,
+  hideStructureRequirements = false,
 }: {
   result: GeometryPathAnalysisResult;
   studentProgram?: string[];
+  /** Shown with met / not-met status in the program-structure panel instead. */
+  hideStructureRequirements?: boolean;
 }) {
   if (!result.available) return null;
 
@@ -227,7 +230,8 @@ export function GeometryPathAnalysisPanel({
           </div>
         </section>
 
-        {(result.requireRepeat || result.requireActionChunk || result.requireCommandBag) && (
+        {!hideStructureRequirements &&
+          (result.requireRepeat || result.requireActionChunk || result.requireCommandBag) && (
           <section className="rounded-xl border border-slate-200/60 bg-white p-4 text-sm">
             <h3 className="font-semibold text-slate-900">Structure requirements</h3>
             <ul className="mt-2 list-inside list-disc text-slate-600">

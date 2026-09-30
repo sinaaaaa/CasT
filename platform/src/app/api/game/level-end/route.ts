@@ -171,6 +171,18 @@ export async function POST(request: NextRequest) {
               },
             }
           : {}),
+        ...(extras?.programStructureHasTelemetry === true
+          ? {
+              programStructure: {
+                initial: Array.isArray(extras.programStructureInitial)
+                  ? extras.programStructureInitial.filter((k): k is string => typeof k === "string")
+                  : [],
+                final: Array.isArray(extras.programStructureFinal)
+                  ? extras.programStructureFinal.filter((k): k is string => typeof k === "string")
+                  : [],
+              },
+            }
+          : {}),
       } as Prisma.InputJsonValue;
     }
     return ((mistakes ?? attempt.mistakes) as Prisma.InputJsonValue) ?? [];

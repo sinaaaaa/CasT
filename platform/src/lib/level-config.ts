@@ -5,6 +5,7 @@ import {
   DEFAULT_GEOMETRY_PATH,
   geometryPathConfigSchema,
   generateShapeSegments,
+  sanitizeGeometryStarter,
   syncGeometryPathToolsToConfig,
   type GeometryPathConfig,
 } from "@/lib/geometry-path";
@@ -868,7 +869,7 @@ export function applyLevelTypeDefaults(
         playerPicksEndCellWithFlag: false,
         requireFlagBeforeRun: false,
         visitObjectSequence: false,
-        guidedActions: undefined,
+        guidedActions: sanitizeGeometryStarter(gp, base.guidedActions),
         blanks: undefined,
         // Soft default tip for kids
         cornerHint: base.cornerHint ?? {

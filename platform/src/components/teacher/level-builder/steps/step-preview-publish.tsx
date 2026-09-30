@@ -5,6 +5,7 @@ import { LevelType } from "@prisma/client";
 import {
   CheckCircle2,
   Circle,
+  ClipboardCheck,
   Eye,
   Gamepad2,
   Grid3x3,
@@ -20,6 +21,7 @@ import {
   type LevelGameplayConfig,
 } from "@/lib/level-config";
 import { Badge } from "@/components/ui/badge";
+import { describeProgramStructureReport } from "@/lib/assessment/programStructureAnalysis";
 
 type Props = {
   name: string;
@@ -52,8 +54,10 @@ export function StepPreviewPublish({
     visitSequenceReady(config);
 
   const visible = config.visible ?? true;
+  const reportPreview = describeProgramStructureReport(levelType, config);
 
   const checklist = [
+    ...reportPreview.checks,
     { ok: !!name.trim(), label: "Item has a display name" },
     { ok: visible || !published, label: "Hidden items are not published to students" },
     {
@@ -123,7 +127,11 @@ export function StepPreviewPublish({
               label={`${geoSummary.shapeLabel} edges`}
               value={String(geoSummary.edgeCount)}
             />
-            <SummaryCard icon={ListOrdered} label="Student tools" value={geoSummary.toolsLabel} />
+            <SummaryCard
+              icon={ListOrdered}
+              label="Student tools"
+              value={`${geoSummary.toolsLabel} · ${geoSummary.starterLabel}`}
+            />
             <SummaryCard icon={Target} label="Max attempts" value={String(config.maxAttempts ?? 3)} />
           </>
         ) : (
@@ -165,6 +173,23 @@ export function StepPreviewPublish({
               ))}
             </ul>
           )}
+        </section>
+      )}
+
+      {reportPreview.lines.length > 0 && (
+        <section className="rounded-2xl border border-indigo-100 bg-indigo-50/40 p-5 shadow-sm">
+          <h4 className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-900">
+            <ClipboardCheck className="h-4 w-4 text-indigo-500" />
+            What your report will show
+          </h4>
+          <ul className="space-y-1.5 text-sm text-slate-700">
+            {reportPreview.lines.map((line) => (
+              <li key={line} className="flex gap-2">
+                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-400" />
+                <span>{line}</span>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 

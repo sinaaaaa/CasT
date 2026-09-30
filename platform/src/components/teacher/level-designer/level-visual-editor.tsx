@@ -17,6 +17,7 @@ import { FlagSettingsEditor } from "./flag-settings-editor";
 import { CopyLevelLayout } from "./copy-level-layout";
 import { GeometryPathEditor } from "./geometry-path-editor";
 import { GeometryPathToolsEditor } from "./geometry-path-tools-editor";
+import { GeometryStarterProgramEditor } from "./geometry-starter-program-editor";
 import { Briefcase } from "lucide-react";
 
 const PLAYABLE_TYPES = [
@@ -66,13 +67,14 @@ export function LevelVisualEditor({ levelType, config, onChange, levelName, curr
         </TabsTrigger>
         {(levelType === LevelType.FLAG_PLACEMENT ||
           levelType === LevelType.CHOOSE_BUTTONS ||
-          levelType === LevelType.DRAG_EDIT_PROGRAM) && (
+          levelType === LevelType.DRAG_EDIT_PROGRAM ||
+          levelType === LevelType.GEOMETRY_PATH) && (
           <TabsTrigger value="program" className="gap-2 data-[state=active]:bg-white">
             <ListTree className="h-4 w-4" />
             <span className="hidden sm:inline">Program</span>
           </TabsTrigger>
         )}
-        {levelType === LevelType.DRAG_ACTIONS && (
+        {(levelType === LevelType.DRAG_ACTIONS || levelType === LevelType.DRAG_EDIT_PROGRAM) && (
           <TabsTrigger value="bags" className="gap-2 data-[state=active]:bg-white">
             <Briefcase className="h-4 w-4" />
             <span className="hidden sm:inline">Bags</span>
@@ -151,9 +153,14 @@ export function LevelVisualEditor({ levelType, config, onChange, levelName, curr
           <GuidedProgramEditor config={config} onChange={handleChange} showBlanks={false} />
         </TabsContent>
       )}
-      {levelType === LevelType.DRAG_ACTIONS && (
+      {(levelType === LevelType.DRAG_ACTIONS || levelType === LevelType.DRAG_EDIT_PROGRAM) && (
         <TabsContent value="bags" className="mt-0">
           <CommandBagsEditor config={config} onChange={handleChange} />
+        </TabsContent>
+      )}
+      {levelType === LevelType.GEOMETRY_PATH && (
+        <TabsContent value="program" className="mt-0">
+          <GeometryStarterProgramEditor config={config} onChange={handleChange} />
         </TabsContent>
       )}
       {levelType === LevelType.GEOMETRY_PATH && (

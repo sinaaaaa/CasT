@@ -84,6 +84,11 @@ export const geometryPathConfigSchema = z.object({
     actionChunks: false,
     commandBags: false,
   }),
+  /**
+   * When true, config.guidedActions is a starter program seeded into the yellow strip
+   * that students edit (like Edit Starter Program). When false, students start blank.
+   */
+  seedStarterProgram: z.boolean().default(false),
   /** Optional structure requirements (used with PROGRAM_STRUCTURE / teacher summary). */
   requireRepeat: z.boolean().default(false),
   requireActionChunk: z.boolean().default(false),
@@ -200,6 +205,7 @@ export const DEFAULT_GEOMETRY_PATH: GeometryPathConfig = {
     actionChunks: false,
     commandBags: false,
   },
+  seedStarterProgram: false,
   requireRepeat: false,
   requireActionChunk: false,
   requireCommandBag: false,
@@ -403,6 +409,31 @@ export function syncGeometryPathToolsToConfig(tools: GeometryPathTools): {
   };
 }
 
+/** Which blocks a teacher may put in a Geometry Path starter program (mirrors the student palette). */
+export function geometryStarterPalette(tools: GeometryPathTools | null | undefined): {
+  arrows: boolean;
+  repeat: boolean;
+  bags: boolean;
+  chunks: boolean;
+} {
+  return {
+    arrows: !!(tools?.individualCommands || tools?.repeat),
+    repeat: !!tools?.repeat,
+    bags: !!tools?.commandBags,
+    chunks: !!tools?.actionChunks,
+  };
+}
+
+/** Starter tokens kept for a Geometry Path item (blank slots are not supported there). */
+export function sanitizeGeometryStarter(
+  gp: Pick<GeometryPathConfig, "seedStarterProgram"> | null | undefined,
+  guidedActions: string[] | null | undefined
+): string[] | undefined {
+  if (!gp?.seedStarterProgram || !guidedActions?.length) return undefined;
+  const kept = guidedActions.filter((t) => t && t.trim().toLowerCase() !== "blank");
+  return kept.length ? kept : undefined;
+}
+
 export function geometryPathReady(config: { geometryPath?: GeometryPathConfig | null }): boolean {
   const gp = config.geometryPath;
   if (!gp?.enabled) return false;
@@ -425,10 +456,12 @@ export function buildGeometryAuthoringSummary(config: {
   geometryPath?: GeometryPathConfig | null;
   robotStartPosition?: { x: number; y: number } | null;
   robotStartFacing?: { x: number; y: number } | null;
+  guidedActions?: string[] | null;
 }): {
   shapeLabel: string;
   edgeCount: number;
   toolsLabel: string;
+  starterLabel: string;
   gradeLabel: string;
   goalLabel: string;
   requirements: string[];
@@ -493,11 +526,18 @@ export function buildGeometryAuthoringSummary(config: {
       : GEOMETRY_VALIDATION_LABELS.TRACE_TARGET;
 
   const start = config.robotStartPosition ?? { x: 0, y: 0 };
+  const starter = sanitizeGeometryStarter(gp, config.guidedActions);
+  const starterLabel = gp?.seedStarterProgram
+    ? starter
+      ? `Starter program (${starter.length} block${starter.length === 1 ? "" : "s"})`
+      : "Starter program (empty)"
+    : "Blank program";
 
   return {
     shapeLabel,
     edgeCount: gp?.segments?.length ?? 0,
     toolsLabel: toolParts.length ? toolParts.join(" + ") : "None selected",
+    starterLabel,
     gradeLabel,
     goalLabel,
     requirements,

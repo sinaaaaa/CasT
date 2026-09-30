@@ -78,6 +78,25 @@ export function formatAttemptRunLabel(
   return `#${attemptNumber}`;
 }
 
+/**
+ * Yellow strip as the student built it (mistakes.programStructure from Unity).
+ * Command Bags / Chunks stay single `bag:<id>` / `chunk:<id>` tokens; arrows and repeat tokens as-is.
+ */
+export type ProgramStructureTelemetry = {
+  initial: string[];
+  final: string[];
+};
+
+export function parseProgramStructureTelemetry(mistakes: unknown): ProgramStructureTelemetry | null {
+  const o = readMistakesObject(mistakes);
+  const ps = o?.programStructure;
+  if (!ps || typeof ps !== "object" || Array.isArray(ps)) return null;
+  const p = ps as Record<string, unknown>;
+  const list = (v: unknown) =>
+    Array.isArray(v) ? v.filter((k): k is string => typeof k === "string" && k.trim().length > 0) : [];
+  return { initial: list(p.initial), final: list(p.final) };
+}
+
 /** Geometry Path telemetry stored under mistakes.geometryPath from Unity assessmentExtras. */
 export type GeometryPathAttemptTelemetry = {
   traveledKeys: string[];
