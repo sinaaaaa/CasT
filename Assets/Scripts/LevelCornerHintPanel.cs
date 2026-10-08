@@ -73,6 +73,12 @@ public class LevelCornerHintPanel : MonoBehaviour
     private Sprite _sceneListenSprite;
     private Sprite _sceneSkipSprite;
     private bool _sceneSpritesCaptured;
+    private bool _sceneImageRectCaptured;
+    private Vector2 _sceneImagePos;
+    private Vector2 _sceneImageSize;
+    private Coroutine _imageFitRoutine;
+    private const float ImageTextGap = 8f;
+    private const float MinFittedImageHeight = 32f;
 
     /// <summary>
     /// Sprites placed directly on the panel's Image objects in the scene are the default style when the
@@ -88,6 +94,12 @@ public class LevelCornerHintPanel : MonoBehaviour
             : playAudioButton != null ? playAudioButton.GetComponent<Image>() : null;
         _sceneListenSprite = listenImg != null ? listenImg.sprite : null;
         _sceneSkipSprite = skipButtonImage != null ? skipButtonImage.sprite : null;
+        if (hintImage != null)
+        {
+            _sceneImagePos = hintImage.rectTransform.anchoredPosition;
+            _sceneImageSize = hintImage.rectTransform.sizeDelta;
+            _sceneImageRectCaptured = true;
+        }
         _sceneSpritesCaptured = true;
     }
 
@@ -823,7 +835,12 @@ public class LevelCornerHintPanel : MonoBehaviour
         hintImage.sprite = sprite;
         hintImage.gameObject.SetActive(true);
         hintImage.preserveAspect = true;
-        if (SceneLayout) return;
+        if (SceneLayout)
+        {
+            FitHintImageBelowText();
+            ScheduleImageFit();
+            return;
+        }
 
         float maxW = _activeLayout != null && _activeLayout.imageWidth > 0f
             ? _activeLayout.imageWidth
@@ -846,6 +863,110 @@ public class LevelCornerHintPanel : MonoBehaviour
             rtAuto.sizeDelta = new Vector2(maxW, rtAuto.sizeDelta.y * (maxW / rtAuto.sizeDelta.x));
         if (maxH > 0f && rtAuto.sizeDelta.y > maxH)
             rtAuto.sizeDelta = new Vector2(rtAuto.sizeDelta.x * (maxH / rtAuto.sizeDelta.y), maxH);
+    }
+
+    private void ScheduleImageFit()
+    {
+        if (!Application.isPlaying || !isActiveAndEnabled) return;
+        if (_imageFitRoutine != null) StopCoroutine(_imageFitRoutine);
+        _imageFitRoutine = StartCoroutine(FitHintImageNextFrame());
+    }
+
+    private IEnumerator FitHintImageNextFrame()
+    {
+        // Canvas scaling / text layout can settle a frame after Show.
+        yield return null;
+        _imageFitRoutine = null;
+        FitHintImageBelowText();
+    }
+
+    /// <summary>
+    /// Scene layout: starts from the image rect you placed in the scene, then moves the image down (and
+    /// shrinks it if the Skip / speaker buttons are in the way) so long body text never sits under it.
+    /// </summary>
+    private void FitHintImageBelowText()
+    {
+        if (!SceneLayout || !Application.isPlaying || !_sceneImageRectCaptured) return;
+        if (hintImage == null || hintImage.sprite == null || !hintImage.gameObject.activeSelf) return;
+        var imgRt = hintImage.rectTransform;
+        var parent = imgRt.parent as RectTransform;
+        if (parent == null) return;
+
+        imgRt.anchoredPosition = _sceneImagePos;
+        imgRt.sizeDelta = _sceneImageSize;
+
+        if (bodyText == null || !bodyText.gameObject.activeInHierarchy || string.IsNullOrEmpty(bodyText.text))
+            return;
+
+        bodyText.ForceMeshUpdate();
+        var bounds = bodyText.textBounds;
+        if (bounds.size.y <= 0f) return;
+        float textBottom = ToParentY(parent, bodyText.rectTransform, bounds.min.y);
+        float targetTop = textBottom - ImageTextGap;
+
+        float imageTop = VisibleImageTop(parent);
+        if (imageTop <= targetTop) return;
+
+        float imageHeight = imageTop - VisibleImageBottom(parent);
+        float floor = ImageFloor(parent, textBottom);
+        float available = targetTop - floor;
+        bool pointAnchors = imgRt.anchorMin == imgRt.anchorMax;
+        if (available < imageHeight && pointAnchors && imageHeight > 0f)
+        {
+            float scale = Mathf.Max(MinFittedImageHeight, available) / imageHeight;
+            imgRt.sizeDelta = _sceneImageSize * Mathf.Min(1f, scale);
+        }
+
+        float shift = VisibleImageTop(parent) - targetTop;
+        if (shift > 0f)
+            imgRt.anchoredPosition = new Vector2(imgRt.anchoredPosition.x, imgRt.anchoredPosition.y - shift);
+    }
+
+    private static float ToParentY(RectTransform parent, RectTransform child, float localY)
+    {
+        return parent.InverseTransformPoint(child.TransformPoint(new Vector3(0f, localY, 0f))).y;
+    }
+
+    /// <summary>Local rect of the drawn sprite (Image.preserveAspect letterboxes inside the rect).</summary>
+    private Rect VisibleImageLocalRect()
+    {
+        var rt = hintImage.rectTransform;
+        Rect r = rt.rect;
+        Vector2 spriteSize = hintImage.sprite.rect.size;
+        if (!hintImage.preserveAspect || spriteSize.x <= 0f || spriteSize.y <= 0f || r.height <= 0f)
+            return r;
+        float spriteRatio = spriteSize.x / spriteSize.y;
+        if (spriteRatio > r.width / r.height)
+        {
+            float h = r.width / spriteRatio;
+            r.y += (r.height - h) * rt.pivot.y;
+            r.height = h;
+        }
+        return r;
+    }
+
+    private float VisibleImageTop(RectTransform parent) =>
+        ToParentY(parent, hintImage.rectTransform, VisibleImageLocalRect().yMax);
+
+    private float VisibleImageBottom(RectTransform parent) =>
+        ToParentY(parent, hintImage.rectTransform, VisibleImageLocalRect().yMin);
+
+    /// <summary>Lowest y the image may reach: just above the Skip / speaker buttons, else the panel bottom.</summary>
+    private float ImageFloor(RectTransform parent, float textBottom)
+    {
+        float floor = float.NegativeInfinity;
+        foreach (var btn in new[] { skipButton, playAudioButton })
+        {
+            if (btn == null || !btn.gameObject.activeInHierarchy) continue;
+            var rt = btn.GetComponent<RectTransform>();
+            float top = ToParentY(parent, rt, rt.rect.yMax);
+            if (top < textBottom)
+                floor = Mathf.Max(floor, top + ImageTextGap);
+        }
+        if (!float.IsNegativeInfinity(floor)) return floor;
+
+        var bottomRef = panelRoot != null ? panelRoot : parent;
+        return ToParentY(parent, bottomRef, bottomRef.rect.yMin) + ImageTextGap;
     }
 
     public void Hide()

@@ -109,6 +109,9 @@ public class ActionBlockIntroManager : MonoBehaviour
     public float delayBeforeStepDemoSeconds = 0.55f;
     [Tooltip("Pause after a finished intro RUN before the next teaching step.")]
     public float delayBetweenIntroStepsSeconds = 0.7f;
+    [Tooltip("After the robot finishes its move and returns to idle, keep it at its final cell this long " +
+             "so the student sees the result before the next step starts.")]
+    public float holdAfterIntroRunSeconds = 1.5f;
     [Tooltip("Pause after Welcome \"Let's go\" before step 1.")]
     public float delayAfterWelcomeSeconds = 0.35f;
     [Tooltip("When on, soft-fade when swapping intro playfields between steps.")]
@@ -116,7 +119,7 @@ public class ActionBlockIntroManager : MonoBehaviour
 
     public bool IsActive { get; private set; }
 
-    private enum Phase { Welcome, TeachDrag, TeachRun, Running }
+    private enum Phase { Welcome, TeachDrag, TeachRun, Running, StepDone }
 
     private ActionBlockIntroConfig _config;
     private int _stepIndex;
@@ -229,11 +232,13 @@ public class ActionBlockIntroManager : MonoBehaviour
         {
             var firstStep = _config?.steps != null && _config.steps.Count > 0 ? _config.steps[0] : null;
             if (!welcomeEnabled && firstStep != null && !string.IsNullOrEmpty(firstStep.dragInstruction))
-                characterMove.chatGPTResponseText.text = firstStep.dragInstruction;
+                characterMove.chatGPTResponseText.text = HtmlToTmpRichText.Convert(firstStep.dragInstruction);
             else if (!welcomeEnabled && firstStep?.stepHint != null && !string.IsNullOrEmpty(firstStep.stepHint.body))
-                characterMove.chatGPTResponseText.text = firstStep.stepHint.body;
+                characterMove.chatGPTResponseText.text = HtmlToTmpRichText.Convert(firstStep.stepHint.body);
             else if (welcomeEnabled)
-                characterMove.chatGPTResponseText.text = levelData.cornerHint.body ?? "Welcome!";
+                characterMove.chatGPTResponseText.text = string.IsNullOrEmpty(levelData.cornerHint.body)
+                    ? "Welcome!"
+                    : HtmlToTmpRichText.Convert(levelData.cornerHint.body);
             else
                 characterMove.chatGPTResponseText.text = "Let's learn the action blocks first!";
         }
@@ -524,8 +529,14 @@ public class ActionBlockIntroManager : MonoBehaviour
         rt.SetParent(panelRt, false);
         ApplyWelcomePopupTextRect(rt, layout);
         var tmp = go.GetComponent<TextMeshProUGUI>();
-        tmp.text = text;
         ApplyWelcomePopupTextStyle(tmp, layout);
+        tmp.richText = true;
+        tmp.text = HtmlToTmpRichText.Convert(text, relativeFontSizes: true);
+        // Long dashboard text shrinks to fit the card instead of spilling past it.
+        tmp.enableAutoSizing = true;
+        tmp.fontSizeMax = layout.fontSize;
+        tmp.fontSizeMin = Mathf.Max(10f, layout.fontSize * 0.5f);
+        tmp.overflowMode = TextOverflowModes.Overflow;
         return tmp;
     }
 
@@ -715,36 +726,53 @@ public class ActionBlockIntroManager : MonoBehaviour
     {
         if (!IsActive || _phase != Phase.Running) return;
 
-        characterMove.ClearUserActionQueue();
-        characterMove.ResetRobotToLevelStart();
+        _phase = Phase.StepDone;
         StopHighlight();
         SetRunInteractable(false);
-
-        _stepIndex++;
-        if (_config == null || _stepIndex >= _config.steps.Count)
-        {
-            CompleteIntro(markPrefs: true);
-            return;
-        }
+        SetPaletteInteractable(false);
 
         StopStepApplyRoutine();
         if (characterMove?.dragDropTutorial != null)
             characterMove.dragDropTutorial.HideTutorial();
-        _phase = Phase.TeachDrag;
-        _stepApplyRoutine = StartCoroutine(BeginNextIntroStepAfterDelay());
+        _stepApplyRoutine = StartCoroutine(FinishStepThenContinue());
     }
 
-    private IEnumerator BeginNextIntroStepAfterDelay()
+    /// <summary>
+    /// Lets the robot finish its move and blend back to idle, holds it on its final cell so the student
+    /// sees what the command did, then starts the next step (or ends the intro).
+    /// </summary>
+    private IEnumerator FinishStepThenContinue()
     {
-        float delay = delayBetweenIntroStepsSeconds;
-        if (characterMove != null && characterMove.levelTransition != null)
-            delay = Mathf.Max(delay, characterMove.levelTransition.delayBetweenIntroStepsSeconds);
+        bool isLastStep = _config == null || _stepIndex + 1 >= _config.steps.Count;
+        SetBottomInstruction(isLastStep ? "Great job!" : "Nice! Watch where Robo ended up…");
 
-        SetBottomInstruction("Nice! Next action…");
-        if (delay > 0f)
-            yield return new WaitForSeconds(delay);
+        float settleGuard = 0f;
+        while (characterMove != null && !characterMove.IsRobotSettled() && settleGuard < 3f)
+        {
+            settleGuard += Time.unscaledDeltaTime;
+            yield return null;
+        }
+
+        float hold = Mathf.Max(holdAfterIntroRunSeconds, delayBetweenIntroStepsSeconds);
+        if (characterMove != null && characterMove.levelTransition != null)
+            hold = Mathf.Max(hold, characterMove.levelTransition.delayBetweenIntroStepsSeconds);
+        if (hold > 0f)
+            yield return new WaitForSeconds(hold);
         if (!IsActive) yield break;
 
+        _stepIndex++;
+        if (isLastStep)
+        {
+            characterMove.ClearUserActionQueue();
+            characterMove.ResetRobotToLevelStart();
+            _stepApplyRoutine = null;
+            CompleteIntro(markPrefs: true);
+            yield break;
+        }
+
+        SetBottomInstruction("Next action…");
+        _phase = Phase.TeachDrag;
+        // The next step's playfield swap (behind the fade cover) clears the strip and resets the robot.
         yield return ApplyCurrentStepRoutine();
         _stepApplyRoutine = null;
     }
@@ -1101,7 +1129,10 @@ public class ActionBlockIntroManager : MonoBehaviour
     private void SetBottomInstruction(string msg)
     {
         if (characterMove?.chatGPTResponseText != null && !string.IsNullOrEmpty(msg))
-            characterMove.chatGPTResponseText.text = msg;
+        {
+            characterMove.chatGPTResponseText.richText = true;
+            characterMove.chatGPTResponseText.text = HtmlToTmpRichText.Convert(msg);
+        }
     }
 
     private void SetRunInteractable(bool on)

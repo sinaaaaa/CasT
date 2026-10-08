@@ -49,7 +49,13 @@ public static class HtmlToTmpRichText
             RegexOptions.IgnoreCase);
     }
 
-    public static string Convert(string html)
+    public static string Convert(string html) => Convert(html, relativeFontSizes: false);
+
+    /// <param name="relativeFontSizes">
+    /// When true, CSS font sizes become em units relative to 16px (the editor default), so text keeps the
+    /// TMP component's own font size instead of the fixed corner-hint scale.
+    /// </param>
+    public static string Convert(string html, bool relativeFontSizes)
     {
         if (string.IsNullOrEmpty(html)) return "";
         if (!LooksLikeHtml(html)) return html;
@@ -131,7 +137,9 @@ public static class HtmlToTmpRichText
                         if (hex != null) OpenMark(stack, sb, "color", hex);
                     }
                     if (style.TryGetValue("font-size", out string size))
-                        OpenMark(stack, sb, "size", CssSizeToTmp(size).ToString(CultureInfo.InvariantCulture));
+                        OpenMark(stack, sb, "size", relativeFontSizes
+                            ? CssSizeToEm(size)
+                            : CssSizeToTmp(size).ToString(CultureInfo.InvariantCulture));
                     if (style.TryGetValue("font-family", out string fam))
                     {
                         string family = fam.Split(',')[0].Trim().Trim('\'', '"');
@@ -286,6 +294,14 @@ public static class HtmlToTmpRichText
         if (float.TryParse(px.Replace("px", ""), NumberStyles.Float, CultureInfo.InvariantCulture, out float n))
             return Mathf.RoundToInt(n * 2f);
         return 32;
+    }
+
+    static string CssSizeToEm(string px)
+    {
+        float n = 16f;
+        float.TryParse(px.Trim().Replace("px", ""), NumberStyles.Float, CultureInfo.InvariantCulture, out n);
+        if (n <= 0f) n = 16f;
+        return (n / 16f).ToString("0.##", CultureInfo.InvariantCulture) + "em";
     }
 
     static string DecodeEntities(string s)

@@ -602,6 +602,15 @@ public partial class CharacterMove : MonoBehaviour
     public ActionBlockIntroManager actionBlockIntro;
     public bool IsActionBlockIntroActive => actionBlockIntro != null && actionBlockIntro.IsActive;
 
+    /// <summary>True once the robot has stopped walking and its animator has blended back to idle.</summary>
+    public bool IsRobotSettled()
+    {
+        if (isProcessing) return false;
+        if (animator == null || !animator.isActiveAndEnabled) return true;
+        if (animator.GetBool("isWalking")) return false;
+        return !animator.IsInTransition(0);
+    }
+
     [Header("Drag-drop tutorial (runtime)")]
     [Tooltip("Optional. Auto-created when drag-and-drop is enabled. Plays only on the INTRODUCTION level (level_0 / INTRO).")]
     public DragDropTutorialController dragDropTutorial;
