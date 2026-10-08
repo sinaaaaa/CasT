@@ -31,6 +31,12 @@ public class LevelCornerHintPanel : MonoBehaviour
     [Header("Audio")]
     public AudioSource hintAudioSource;
 
+    [Header("Layout source")]
+    [Tooltip("On: position, size and text style of the panel, title, body, image, speaker and Skip button are " +
+             "exactly what you set on those scene objects — the script only fills in text, images and visibility.\n" +
+             "Off: Default Layout below is re-applied every time a hint shows.")]
+    public bool sceneControlsLayout = true;
+
     [Header("Default panel style (Inspector)")]
     [Tooltip("Used for all hints unless LevelCornerHint.useCustomLayout is enabled.")]
     public CornerHintPanelLayout defaultLayout = new CornerHintPanelLayout();
@@ -44,6 +50,9 @@ public class LevelCornerHintPanel : MonoBehaviour
 
     private Action _onSkip;
     private bool _built;
+    /// <summary>The panel was generated in code (no scene objects), so there is no hand-made layout to keep.</summary>
+    private bool _autoBuilt;
+    private bool SceneLayout => sceneControlsLayout && !_autoBuilt;
     private bool _manualLayout;
     private VerticalLayoutGroup _verticalLayout;
     private ContentSizeFitter _contentFitter;
@@ -60,9 +69,31 @@ public class LevelCornerHintPanel : MonoBehaviour
     private TextMeshProUGUI _skipLabelText;
     private static readonly Dictionary<string, Sprite> UrlSpriteCache = new Dictionary<string, Sprite>();
     private static readonly Dictionary<string, AudioClip> UrlAudioClipCache = new Dictionary<string, AudioClip>();
+    private Sprite _scenePanelSprite;
+    private Sprite _sceneListenSprite;
+    private Sprite _sceneSkipSprite;
+    private bool _sceneSpritesCaptured;
+
+    /// <summary>
+    /// Sprites placed directly on the panel's Image objects in the scene are the default style when the
+    /// matching Default Layout slot is empty (before falling back to Resources/CornerHint).
+    /// Play Mode reads them once, before the panel writes anything; Edit Mode re-reads every refresh.
+    /// </summary>
+    private void CaptureSceneSprites()
+    {
+        if (_sceneSpritesCaptured && Application.isPlaying) return;
+        _scenePanelSprite = panelBackground != null ? panelBackground.sprite : null;
+        var listenImg = playAudioButtonImage != null
+            ? playAudioButtonImage
+            : playAudioButton != null ? playAudioButton.GetComponent<Image>() : null;
+        _sceneListenSprite = listenImg != null ? listenImg.sprite : null;
+        _sceneSkipSprite = skipButtonImage != null ? skipButtonImage.sprite : null;
+        _sceneSpritesCaptured = true;
+    }
 
     public void EnsureBuilt()
     {
+        CaptureSceneSprites();
         if (_built && panelRoot != null)
         {
             EnsureBackgroundLayer();
@@ -83,10 +114,67 @@ public class LevelCornerHintPanel : MonoBehaviour
 
         CacheLayoutComponents();
         _built = true;
-        defaultLayout.ApplyResourcesFallback();
 
         if (!showLayoutPreview && !Application.isPlaying)
             Hide();
+    }
+
+    /// <summary>
+    /// Copies what you arranged directly in the scene (text position/size/font/color, image and button
+    /// rects, background / speaker / skip sprites) into <see cref="defaultLayout"/>, which is what the
+    /// panel re-applies every time a level shows a hint. Switches on manual layout.
+    /// </summary>
+    public void CaptureLayoutFromScene()
+    {
+        var d = defaultLayout;
+        d.useManualLayout = true;
+
+        if (panelRoot != null)
+        {
+            d.panelWidth = Mathf.Max(120f, panelRoot.sizeDelta.x);
+            d.panelHeight = Mathf.Max(0f, panelRoot.sizeDelta.y);
+            d.panelOffset = panelRoot.anchoredPosition;
+        }
+        if (titleText != null)
+        {
+            d.titleLayout = CornerHintElementLayout.From(titleText.rectTransform);
+            d.titleTypography = CornerHintTextStyle.From(titleText);
+        }
+        if (bodyText != null)
+        {
+            d.bodyLayout = CornerHintElementLayout.From(bodyText.rectTransform);
+            d.bodyTypography = CornerHintTextStyle.From(bodyText);
+        }
+        if (hintImage != null)
+        {
+            d.imageLayout = CornerHintElementLayout.From(hintImage.rectTransform);
+            d.imageWidth = hintImage.rectTransform.sizeDelta.x;
+            d.imageHeight = hintImage.rectTransform.sizeDelta.y;
+        }
+        if (playAudioButton != null)
+        {
+            var rt = playAudioButton.GetComponent<RectTransform>();
+            d.listenButtonLayout = CornerHintElementLayout.From(rt);
+            d.listenButtonWidth = rt.sizeDelta.x;
+            d.listenButtonHeight = rt.sizeDelta.y;
+        }
+        if (skipButton != null)
+        {
+            var rt = skipButton.GetComponent<RectTransform>();
+            d.skipButtonLayout = CornerHintElementLayout.From(rt);
+            d.skipButtonSpriteWidth = rt.sizeDelta.x;
+            d.skipButtonSpriteHeight = rt.sizeDelta.y;
+        }
+
+        if (panelBackground != null && panelBackground.sprite != null)
+            d.panelBackground = panelBackground.sprite;
+        var listenImg = playAudioButtonImage != null
+            ? playAudioButtonImage
+            : playAudioButton != null ? playAudioButton.GetComponent<Image>() : null;
+        if (listenImg != null && listenImg.sprite != null)
+            d.listenButtonSprite = listenImg.sprite;
+        if (skipButtonImage != null && skipButtonImage.sprite != null)
+            d.skipButtonSprite = skipButtonImage.sprite;
     }
 
     /// <summary>Re-applies layout and preview text (Editor + Play Mode).</summary>
@@ -95,7 +183,6 @@ public class LevelCornerHintPanel : MonoBehaviour
         EnsureBuilt();
         if (panelRoot == null) return;
 
-        defaultLayout.ApplyResourcesFallback();
         var previewHint = new LevelCornerHint
         {
             enabled = true,
@@ -121,7 +208,7 @@ public class LevelCornerHintPanel : MonoBehaviour
             skipButton.gameObject.SetActive(false);
 
         if (playAudioButton != null)
-            playAudioButton.gameObject.SetActive(defaultLayout.listenButtonSprite != null);
+            playAudioButton.gameObject.SetActive(_activeLayout != null && _activeLayout.listenButtonSprite != null);
 
         Canvas.ForceUpdateCanvases();
 #if UNITY_EDITOR
@@ -196,10 +283,12 @@ public class LevelCornerHintPanel : MonoBehaviour
             bodyText.gameObject.SetActive(!string.IsNullOrEmpty(bodyText.text));
         }
 
-        ApplyAllTypography(_activeLayout, introMode);
-
-        if (_manualLayout)
-            ApplyManualElementPositions(_activeLayout);
+        if (!SceneLayout)
+        {
+            ApplyAllTypography(_activeLayout, introMode);
+            if (_manualLayout)
+                ApplyManualElementPositions(_activeLayout);
+        }
 
         _currentHint = hint;
         ApplyHintImage(hint);
@@ -210,11 +299,25 @@ public class LevelCornerHintPanel : MonoBehaviour
 
     private CornerHintPanelLayout ResolveLayout(LevelCornerHint hint)
     {
+        CaptureSceneSprites();
         var merged = new CornerHintPanelLayout();
         merged.MergeFrom(defaultLayout);
-        merged.ApplyResourcesFallback();
+        if (SceneLayout)
+        {
+            // The scene is the source of truth: its sprites beat Default Layout.
+            if (_scenePanelSprite != null) merged.panelBackground = _scenePanelSprite;
+            if (_sceneListenSprite != null) merged.listenButtonSprite = _sceneListenSprite;
+            if (_sceneSkipSprite != null) merged.skipButtonSprite = _sceneSkipSprite;
+        }
+        else
+        {
+            if (merged.panelBackground == null) merged.panelBackground = _scenePanelSprite;
+            if (merged.listenButtonSprite == null) merged.listenButtonSprite = _sceneListenSprite;
+            if (merged.skipButtonSprite == null) merged.skipButtonSprite = _sceneSkipSprite;
+        }
         if (hint != null && hint.useCustomLayout)
             merged.MergeFrom(hint.layout);
+        merged.ApplyResourcesFallback();
         return merged;
     }
 
@@ -222,38 +325,21 @@ public class LevelCornerHintPanel : MonoBehaviour
     {
         if (panelRoot == null || layout == null) return;
 
+        if (SceneLayout)
+        {
+            // Children keep their scene RectTransforms; auto-stacking would move them.
+            _manualLayout = true;
+            if (_verticalLayout != null) _verticalLayout.enabled = false;
+            if (_contentFitter != null) _contentFitter.enabled = false;
+            ApplyPanelBackground(layout, introMode);
+            return;
+        }
+
         _manualLayout = layout.useManualLayout;
         panelRoot.anchoredPosition = layout.panelOffset;
         panelRoot.sizeDelta = new Vector2(layout.panelWidth, layout.panelHeight);
 
-        if (panelBackground != null)
-        {
-            layout.ApplyResourcesFallback();
-            bool hasSprite = layout.panelBackground != null;
-            if (hasSprite)
-            {
-                panelBackground.sprite = layout.panelBackground;
-                panelBackground.type = Image.Type.Simple;
-                panelBackground.preserveAspect = false;
-                var c = layout.panelColorTint;
-                c.a = layout.panelBackgroundAlpha;
-                panelBackground.color = c;
-                panelBackground.raycastTarget = true;
-            }
-            else if (layout.useSolidPanelFallback)
-            {
-                panelBackground.sprite = null;
-                panelBackground.type = Image.Type.Simple;
-                panelBackground.color = introMode ? layout.introPanelFillColor : layout.panelFillColor;
-                panelBackground.raycastTarget = true;
-            }
-            else
-            {
-                panelBackground.sprite = null;
-                panelBackground.color = Color.clear;
-                panelBackground.raycastTarget = false;
-            }
-        }
+        ApplyPanelBackground(layout, introMode);
 
         if (_verticalLayout != null)
         {
@@ -280,6 +366,35 @@ public class LevelCornerHintPanel : MonoBehaviour
 
         if (_skipLayoutElement != null && !_manualLayout)
             _skipLayoutElement.preferredHeight = layout.skipButtonHeight;
+    }
+
+    private void ApplyPanelBackground(CornerHintPanelLayout layout, bool introMode)
+    {
+        if (panelBackground == null) return;
+        layout.ApplyResourcesFallback();
+        if (layout.panelBackground != null)
+        {
+            panelBackground.sprite = layout.panelBackground;
+            panelBackground.type = Image.Type.Simple;
+            panelBackground.preserveAspect = false;
+            var c = layout.panelColorTint;
+            c.a = layout.panelBackgroundAlpha;
+            panelBackground.color = c;
+            panelBackground.raycastTarget = true;
+        }
+        else if (layout.useSolidPanelFallback)
+        {
+            panelBackground.sprite = null;
+            panelBackground.type = Image.Type.Simple;
+            panelBackground.color = introMode ? layout.introPanelFillColor : layout.panelFillColor;
+            panelBackground.raycastTarget = true;
+        }
+        else
+        {
+            panelBackground.sprite = null;
+            panelBackground.color = Color.clear;
+            panelBackground.raycastTarget = false;
+        }
     }
 
     private void CacheTypographyRefs()
@@ -349,14 +464,14 @@ public class LevelCornerHintPanel : MonoBehaviour
                 btnImg.raycastTarget = true;
             }
 
-            if (!_manualLayout && _skipLayoutElement != null)
+            if (!_manualLayout && !SceneLayout && _skipLayoutElement != null)
             {
                 _skipLayoutElement.preferredHeight =
                     layout.skipButtonSpriteHeight > 0f ? layout.skipButtonSpriteHeight : layout.skipButtonHeight;
                 if (layout.skipButtonSpriteWidth > 0f)
                     _skipLayoutElement.preferredWidth = layout.skipButtonSpriteWidth;
             }
-            else if (_manualLayout)
+            else if (_manualLayout && !SceneLayout)
             {
                 // Keep the manual layout size in sync when auto-sizing is enabled.
                 if (layout.skipButtonAutoSizeFromSprite)
@@ -378,7 +493,7 @@ public class LevelCornerHintPanel : MonoBehaviour
             if (btnImg != null)
                 btnImg.color = new Color(0.55f, 0.55f, 0.58f, 1f);
 
-            if (!_manualLayout && _skipLayoutElement != null)
+            if (!_manualLayout && !SceneLayout && _skipLayoutElement != null)
             {
                 _skipLayoutElement.preferredHeight = layout.skipButtonHeight;
             }
@@ -481,7 +596,7 @@ public class LevelCornerHintPanel : MonoBehaviour
             }
         }
 
-        if (!_manualLayout && _listenLayoutElement != null)
+        if (!_manualLayout && !SceneLayout && _listenLayoutElement != null)
         {
             _listenLayoutElement.preferredHeight = layout.listenButtonHeight > 0f
                 ? layout.listenButtonHeight
@@ -708,6 +823,7 @@ public class LevelCornerHintPanel : MonoBehaviour
         hintImage.sprite = sprite;
         hintImage.gameObject.SetActive(true);
         hintImage.preserveAspect = true;
+        if (SceneLayout) return;
 
         float maxW = _activeLayout != null && _activeLayout.imageWidth > 0f
             ? _activeLayout.imageWidth
@@ -770,17 +886,18 @@ public class LevelCornerHintPanel : MonoBehaviour
         // Make sure the image/text mode + sizing is applied immediately.
         if (visible)
         {
-            var layout = _activeLayout ?? defaultLayout;
+            var layout = _activeLayout ?? ResolveLayout(null);
             ApplySkipButtonStyle(layout);
             if (!string.IsNullOrEmpty(labelOverride) && _skipLabelText != null)
                 _skipLabelText.text = labelOverride;
-            if (_manualLayout)
+            if (_manualLayout && !SceneLayout)
                 ApplyManualElementPositions(layout);
         }
     }
 
     private void BuildPanel(Transform canvasTransform)
     {
+        _autoBuilt = true;
         var rootGo = new GameObject("LevelCornerHintPanel", typeof(RectTransform));
         panelRoot = rootGo.GetComponent<RectTransform>();
         panelRoot.SetParent(canvasTransform, false);
@@ -827,8 +944,9 @@ public class LevelCornerHintPanel : MonoBehaviour
         EnsureHintAudioSource();
 
         panelBackground = CreateBackgroundLayer(rootGo.transform);
-        ApplyAllTypography(defaultLayout, introMode: false);
-        ApplySkipButtonStyle(defaultLayout);
+        var layout = ResolveLayout(null);
+        ApplyAllTypography(layout, introMode: false);
+        ApplySkipButtonStyle(layout);
     }
 
     private void CacheLayoutComponents()
@@ -1031,7 +1149,7 @@ public class LevelCornerHintPanel : MonoBehaviour
 
     private void Awake()
     {
-        defaultLayout.ApplyResourcesFallback();
+        CaptureSceneSprites();
         if (playAudioButton != null)
             playAudioButton.onClick.AddListener(PlayTipAudio);
     }
@@ -1061,7 +1179,6 @@ public class LevelCornerHintPanel : MonoBehaviour
     {
         UnityEditor.EditorApplication.delayCall -= EditorDelayedRefresh;
         if (this == null || Application.isPlaying) return;
-        defaultLayout?.ApplyResourcesFallback();
         RefreshLayoutPreview();
     }
 

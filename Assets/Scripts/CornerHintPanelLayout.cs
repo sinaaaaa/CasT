@@ -216,6 +216,15 @@ public struct CornerHintElementLayout
         sizeDelta = new Vector2(180f, 36f),
     };
 
+    public static CornerHintElementLayout From(RectTransform rt) => new CornerHintElementLayout
+    {
+        anchorMin = rt.anchorMin,
+        anchorMax = rt.anchorMax,
+        pivot = rt.pivot,
+        anchoredPosition = rt.anchoredPosition,
+        sizeDelta = rt.sizeDelta,
+    };
+
     public void ApplyTo(RectTransform rt)
     {
         if (rt == null) return;

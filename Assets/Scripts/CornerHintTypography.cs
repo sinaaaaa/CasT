@@ -26,6 +26,23 @@ public class CornerHintTextStyle
     [Min(1f)]
     public float fontSizeMax = 72f;
 
+    /// <summary>Reads the current look of a TextMeshPro object (the inverse of <see cref="CornerHintTypographyApplier.Apply"/>).</summary>
+    public static CornerHintTextStyle From(TextMeshProUGUI tmp) => new CornerHintTextStyle
+    {
+        font = tmp.font,
+        fontSize = tmp.enableAutoSizing ? tmp.fontSizeMax : tmp.fontSize,
+        fontStyle = tmp.fontStyle,
+        color = tmp.color,
+        alignment = tmp.alignment,
+        characterSpacing = tmp.characterSpacing,
+        lineSpacing = tmp.lineSpacing,
+        wordSpacing = tmp.wordSpacing,
+        enableWordWrapping = tmp.enableWordWrapping,
+        enableAutoSize = tmp.enableAutoSizing,
+        fontSizeMin = tmp.fontSizeMin,
+        fontSizeMax = tmp.fontSizeMax,
+    };
+
     public static CornerHintTextStyle DefaultTitle() => new CornerHintTextStyle
     {
         fontSize = 22f,

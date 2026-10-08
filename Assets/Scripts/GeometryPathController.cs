@@ -560,9 +560,16 @@ public class GeometryPathController : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Shows where to start tracing — only when the robot has to drive to the shape first. Edges can be traced
+    /// in any order, so when the robot already stands on the shape, a marker at the first drawn edge would
+    /// wrongly suggest the student must start there.
+    /// </summary>
     void BuildStartMarker()
     {
         if (_cm == null || _config?.segments == null || _config.segments.Count == 0) return;
+        var level = _cm.GetCurrentLevelData();
+        if (level != null && ShapeHasVertex(level.robotStartPosition)) return;
         var s0 = _config.segments[0];
         Vector3 pos = CellWorld(new Vector2Int(s0.from.x, s0.from.y));
 
@@ -584,6 +591,16 @@ public class GeometryPathController : MonoBehaviour
             rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             rend.receiveShadows = false;
         }
+    }
+
+    bool ShapeHasVertex(Vector2Int cell)
+    {
+        foreach (var s in _config.segments)
+        {
+            if ((s.from.x == cell.x && s.from.y == cell.y) || (s.to.x == cell.x && s.to.y == cell.y))
+                return true;
+        }
+        return false;
     }
 
     void DestroyStartMarker()

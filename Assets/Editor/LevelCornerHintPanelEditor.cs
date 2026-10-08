@@ -22,8 +22,25 @@ public class LevelCornerHintPanelEditor : Editor
         EditorGUILayout.HelpBox(
             "Show Layout Preview: live updates in Scene view while you edit (no Play Mode).\n" +
             "Typography: assign Default Font (TMP Font Asset) plus Title/Body/Badge/Button styles (size, bold, alignment, spacing).\n" +
-            "Panel Background sprite only — no white box unless Use Solid Fallback is enabled.",
+            "Panel Background sprite only — no white box unless Use Solid Fallback is enabled.\n" +
+            "Images (background, speaker, skip): with Scene Controls Layout on, the sprite on the scene Image wins; " +
+            "with it off, Default Layout wins. Resources/CornerHint is the last fallback.",
             MessageType.Info);
+
+        EditorGUILayout.HelpBox(
+            panel.sceneControlsLayout
+                ? "Scene Controls Layout is ON: move, resize and restyle the title, body, image, speaker and Skip " +
+                  "button directly in the Scene — the game keeps them as they are, including the background, speaker " +
+                  "and Skip sprites on those Images. Default Layout is only used for an Image that has no sprite."
+                : "Scene Controls Layout is OFF: Default Layout is applied every time a hint shows. Arranged things " +
+                  "in the Scene? Press the button below to save them into Default Layout.",
+            MessageType.None);
+        if (GUILayout.Button("Save scene layout (text, buttons, images) into Default Layout"))
+        {
+            Undo.RecordObject(panel, "Save corner hint scene layout");
+            panel.CaptureLayoutFromScene();
+            changed = true;
+        }
 
         if (GUILayout.Button("Load default sprites from Resources/CornerHint"))
         {
