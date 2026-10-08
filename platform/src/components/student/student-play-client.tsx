@@ -253,8 +253,8 @@ export function StudentPlayClient({
             ref={frameRef}
             className={
               isImmersive
-                ? "fixed inset-0 z-[120] h-[100dvh] w-[100vw] max-h-none max-w-none overflow-hidden rounded-none border-0 bg-black"
-                : "relative overflow-hidden rounded-xl border border-white/15 bg-black shadow-2xl shadow-black/70 [&:fullscreen]:h-screen [&:fullscreen]:w-screen [&:fullscreen]:max-h-none [&:fullscreen]:max-w-none [&:fullscreen]:rounded-none [&:fullscreen]:border-0"
+                ? "fixed inset-0 z-[120] flex h-[100dvh] w-[100vw] max-h-none max-w-none items-center justify-center overflow-hidden rounded-none border-0 bg-black"
+                : "relative overflow-hidden rounded-xl border border-white/15 bg-black shadow-2xl shadow-black/70 [&:fullscreen]:flex [&:fullscreen]:items-center [&:fullscreen]:justify-center [&:fullscreen]:h-screen [&:fullscreen]:w-screen [&:fullscreen]:max-h-none [&:fullscreen]:max-w-none [&:fullscreen]:rounded-none [&:fullscreen]:border-0"
             }
             style={
               isImmersive
@@ -284,7 +284,22 @@ export function StudentPlayClient({
               }}
               src={iframeSrc}
               title="Robot Coding Game"
-              className="absolute inset-0 block h-full w-full border-0 bg-black"
+              className={
+                isFullscreen
+                  ? "relative block border-0 bg-black"
+                  : "absolute inset-0 block h-full w-full border-0 bg-black"
+              }
+              style={
+                isFullscreen
+                  ? {
+                      // The game UI is laid out for 16:9 — letterbox instead of stretching to 16:10 / 4:3 screens.
+                      width:
+                        "min(100%, calc((100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) * 16 / 9))",
+                      aspectRatio: "16 / 9",
+                      maxHeight: "100%",
+                    }
+                  : undefined
+              }
               allow="autoplay; fullscreen; web-share"
               allowFullScreen
             />
