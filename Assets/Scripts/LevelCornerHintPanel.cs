@@ -684,6 +684,30 @@ public class LevelCornerHintPanel : MonoBehaviour
         _imageLoadRoutine = null;
     }
 
+    /// <summary>Loads a dashboard hint picture (shared cache with the corner panel). Calls back with null on failure.</summary>
+    public static IEnumerator LoadHintSprite(string imageUrl, Action<Sprite> onDone)
+    {
+        if (string.IsNullOrEmpty(imageUrl)) { onDone?.Invoke(null); yield break; }
+        string url = ResolveImageUrl(imageUrl);
+        if (UrlSpriteCache.TryGetValue(url, out Sprite cached)) { onDone?.Invoke(cached); yield break; }
+
+        using (var req = UnityWebRequestTexture.GetTexture(url))
+        {
+            yield return req.SendWebRequest();
+            if (req.result != UnityWebRequest.Result.Success)
+            {
+                Debug.LogWarning("[LevelCornerHintPanel] Image load failed: " + url + " — " + req.error);
+                onDone?.Invoke(null);
+                yield break;
+            }
+            var tex = DownloadHandlerTexture.GetContent(req);
+            if (tex == null) { onDone?.Invoke(null); yield break; }
+            var sprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100f);
+            UrlSpriteCache[url] = sprite;
+            onDone?.Invoke(sprite);
+        }
+    }
+
     private void EnsureHintAudioSource()
     {
         if (hintAudioSource != null && hintAudioSource.gameObject == gameObject)

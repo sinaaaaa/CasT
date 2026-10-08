@@ -25,6 +25,21 @@ public class WelcomePopupTextLayout
     [Range(-50f, 50f)] public float lineSpacing = 0f;
 }
 
+/// <summary>Where the dashboard "Picture for students" sits on the welcome popup (set in Inspector).</summary>
+[Serializable]
+public class WelcomePopupImageLayout
+{
+    [Tooltip("Picture area, anchors relative to the popup panel (0–1).")]
+    public Vector2 anchorMin = new Vector2(0.25f, 0.47f);
+    public Vector2 anchorMax = new Vector2(0.75f, 0.74f);
+    public Vector2 offsetMin = Vector2.zero;
+    public Vector2 offsetMax = Vector2.zero;
+
+    [Tooltip("Body text area used instead of the normal body anchors when a picture is shown.")]
+    public Vector2 bodyAnchorMinWithImage = new Vector2(0.08f, 0.29f);
+    public Vector2 bodyAnchorMaxWithImage = new Vector2(0.92f, 0.47f);
+}
+
 /// <summary>Let's go button placement on the welcome popup panel.</summary>
 [Serializable]
 public class WelcomePopupButtonLayout
@@ -92,6 +107,9 @@ public class ActionBlockIntroManager : MonoBehaviour
         fontStyle = FontStyles.Normal,
         color = new Color(0.2f, 0.28f, 0.38f, 1f),
     };
+
+    [Header("Welcome popup — picture (from dashboard)")]
+    public WelcomePopupImageLayout welcomePopupImage = new WelcomePopupImageLayout();
 
     [Header("Welcome popup — Let's go button")]
     [Tooltip("Assign a sprite here to style the popup button (shown in the Inspector on CharacterMove / ActionBlockIntroManager).")]
@@ -422,7 +440,9 @@ public class ActionBlockIntroManager : MonoBehaviour
             : "These are your action blocks. Tap Let's go! to start step 1.";
 
         CreateWelcomePopupText(panelRt, "Title", welcomePopupTitle, title);
-        CreateWelcomePopupText(panelRt, "Body", welcomePopupBody, body);
+        var bodyTmp = CreateWelcomePopupText(panelRt, "Body", welcomePopupBody, body);
+        if (hint != null && !string.IsNullOrEmpty(hint.imageUrl))
+            CreateWelcomePopupImage(panelRt, bodyTmp, hint.imageUrl);
 
         var btnLayout = welcomePopupButtonLayout ?? new WelcomePopupButtonLayout();
         var btnGo = new GameObject("LetsGoButton", typeof(RectTransform), typeof(Image), typeof(Button), typeof(CanvasGroup));
@@ -538,6 +558,47 @@ public class ActionBlockIntroManager : MonoBehaviour
         tmp.fontSizeMin = Mathf.Max(10f, layout.fontSize * 0.5f);
         tmp.overflowMode = TextOverflowModes.Overflow;
         return tmp;
+    }
+
+    /// <summary>
+    /// Adds the dashboard picture above the body text. The body moves into the "with image" area right
+    /// away so it doesn't jump when the download finishes; it moves back if the picture fails to load.
+    /// </summary>
+    private void CreateWelcomePopupImage(RectTransform panelRt, TextMeshProUGUI bodyTmp, string imageUrl)
+    {
+        var layout = welcomePopupImage ?? new WelcomePopupImageLayout();
+        var go = new GameObject("Picture", typeof(RectTransform), typeof(Image));
+        var rt = go.GetComponent<RectTransform>();
+        rt.SetParent(panelRt, false);
+        rt.anchorMin = layout.anchorMin;
+        rt.anchorMax = layout.anchorMax;
+        rt.offsetMin = layout.offsetMin;
+        rt.offsetMax = layout.offsetMax;
+        var img = go.GetComponent<Image>();
+        img.preserveAspect = true;
+        img.raycastTarget = false;
+        img.enabled = false;
+
+        if (bodyTmp != null)
+        {
+            bodyTmp.rectTransform.anchorMin = layout.bodyAnchorMinWithImage;
+            bodyTmp.rectTransform.anchorMax = layout.bodyAnchorMaxWithImage;
+        }
+
+        var popup = _welcomePopupRoot;
+        StartCoroutine(LevelCornerHintPanel.LoadHintSprite(imageUrl, sprite =>
+        {
+            if (img == null || popup == null || popup != _welcomePopupRoot) return;
+            if (sprite != null)
+            {
+                img.sprite = sprite;
+                img.enabled = true;
+                return;
+            }
+            Destroy(img.gameObject);
+            if (bodyTmp != null)
+                ApplyWelcomePopupTextRect(bodyTmp.rectTransform, welcomePopupBody);
+        }));
     }
 
     private static void ApplyWelcomePopupTextRect(RectTransform rt, WelcomePopupTextLayout layout)

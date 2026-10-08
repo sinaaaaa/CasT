@@ -16,7 +16,7 @@ export function HintImageUpload({
   imageUrl,
   onChange,
   label = "Picture for students (optional)",
-  hint = "Shown in the top-right panel in Unity. PNG or JPG, max 2 MB.",
+  hint = "Shown in the top-right panel in Unity (on the Introduction, in the Welcome card). PNG or JPG, max 2 MB.",
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
