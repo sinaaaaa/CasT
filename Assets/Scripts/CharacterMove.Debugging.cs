@@ -116,6 +116,7 @@ public partial class CharacterMove
     /// </summary>
     public void InsertActionFromDrag(DraggableActionBlock.ActionKind kind, int uiIndex)
     {
+        if (IsGuidedBlankChoiceLevel()) return;
         if (!DebugGating || !CanDragPaletteBlockToQueue(kind) || IsBagOnlyProgramMode())
         {
             InsertActionFromDragCore(kind, uiIndex);
@@ -275,6 +276,7 @@ public partial class CharacterMove
 
     public void TryReplaceQueuedBlock(GameObject target, DraggableActionBlock.ActionKind kind)
     {
+        if (IsGuidedBlankChoiceLevel()) return;
         if (kind == DraggableActionBlock.ActionKind.Repeat)
         {
             if (chatGPTResponseText != null)

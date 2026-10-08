@@ -152,6 +152,7 @@ public class ActionQueueDropZone : MonoBehaviour, IDropHandler, IPointerEnterHan
     public void TryAcceptPaletteDrop(PointerEventData eventData, DraggableActionBlock source)
     {
         if (source == null || characterMove == null) return;
+        if (characterMove.IsGuidedBlankChoiceLevel()) return;
         if (!characterMove.CanDragPaletteBlockToQueue(source.actionKind)) return;
         if (lastDropHandledFrame == Time.frameCount) return;
 
@@ -318,7 +319,14 @@ public class ActionQueueDropZone : MonoBehaviour, IDropHandler, IPointerEnterHan
 
     public void OnDrop(PointerEventData eventData)
     {
-        if (eventData.pointerDrag == null)
+        // Missing-arrow items: DraggableActionBlock.OnEndDrag fills the blue blank; the strip takes nothing.
+        var dragCm = characterMove;
+        if (dragCm == null && eventData.pointerDrag != null)
+        {
+            var src = eventData.pointerDrag.GetComponent<DraggableActionBlock>();
+            if (src != null) dragCm = src.characterMove;
+        }
+        if (eventData.pointerDrag == null || (dragCm != null && dragCm.IsGuidedBlankChoiceLevel()))
         {
             ResetHighlight();
             HideInsertionPreview(animate: false);
@@ -380,6 +388,7 @@ public class ActionQueueDropZone : MonoBehaviour, IDropHandler, IPointerEnterHan
     public void OnPointerEnter(PointerEventData eventData)
     {
         if (eventData.pointerDrag == null) return;
+        if (characterMove != null && characterMove.IsGuidedBlankChoiceLevel()) return;
         bool isDraggingActionInput =
             eventData.pointerDrag.GetComponent<DraggableActionBlock>() != null ||
             eventData.pointerDrag.GetComponent<DraggableCommandBagBlock>() != null ||

@@ -11013,7 +11013,7 @@ public partial class CharacterMove : MonoBehaviour
 
         var blankData = levelData.blanks[blankIndex];
         
-        // Enabled arrows are dragged into the blue slot (no tap-to-fill).
+        // Enabled arrows fill the blue slot by tap or by dragging onto it.
         SetupGuidedBlankArrow(blankLeftButton, "turn left", DraggableActionBlock.ActionKind.TurnLeft, blankData);
         SetupGuidedBlankArrow(blankRightButton, "turn right", DraggableActionBlock.ActionKind.TurnRight, blankData);
         SetupGuidedBlankArrow(blankForwardButton, "forward", DraggableActionBlock.ActionKind.Forward, blankData);
@@ -11038,11 +11038,8 @@ public partial class CharacterMove : MonoBehaviour
         button.gameObject.SetActive(true);
         button.interactable = blankData.enabledArrows != null && blankData.enabledArrows.Contains(label);
         button.onClick.RemoveAllListeners();
-        button.onClick.AddListener(() =>
-        {
-            if (waitingForGuidedInput && chatGPTResponseText != null)
-                chatGPTResponseText.text = "Drag the arrow into the blue box.";
-        });
+        // Unity skips onClick when the press turned into a drag, so tap and drag never both fire.
+        button.onClick.AddListener(() => OnGuidedBlankFilled(label));
 
         var drag = button.GetComponent<DraggableActionBlock>();
         if (drag == null) drag = button.gameObject.AddComponent<DraggableActionBlock>();
@@ -11060,6 +11057,16 @@ public partial class CharacterMove : MonoBehaviour
             case DraggableActionBlock.ActionKind.Forward: return "forward";
         }
         return null;
+    }
+
+    /// <summary>
+    /// Missing-arrow item (blue blank, not a Canvas lesson): the program strip is fixed and the only
+    /// thing an arrow can do is fill the blank — never insert or replace blocks in the strip.
+    /// </summary>
+    public bool IsGuidedBlankChoiceLevel()
+    {
+        LevelData ld = GetCurrentLevelData();
+        return UsesGuidedBlankFlow(ld) && !UsesCanvas(ld);
     }
 
     /// <summary>True while a blue blank slot is waiting for an arrow to be dragged into it.</summary>
@@ -11100,8 +11107,19 @@ public partial class CharacterMove : MonoBehaviour
     {
         var slot = CurrentGuidedBlankSlot();
         if (slot == null) return;
-        slot.transform.localScale = Vector3.one * (hovering ? 1.15f : 1f);
+        // Queue blocks are scaled-down prefabs (e.g. 0.11), so grow relative to the slot's own scale.
+        if (_guidedBlankHoverSlot != slot)
+        {
+            if (_guidedBlankHoverSlot != null)
+                _guidedBlankHoverSlot.transform.localScale = _guidedBlankBaseScale;
+            _guidedBlankHoverSlot = slot;
+            _guidedBlankBaseScale = slot.transform.localScale;
+        }
+        slot.transform.localScale = _guidedBlankBaseScale * (hovering ? 1.15f : 1f);
     }
+
+    private GameObject _guidedBlankHoverSlot;
+    private Vector3 _guidedBlankBaseScale = Vector3.one;
 
     /// <summary>Fills the blue slot when the arrow is released over it. False = dropped elsewhere.</summary>
     public bool TryDropOnGuidedBlank(Vector2 screenPosition, DraggableActionBlock.ActionKind kind)
@@ -11135,10 +11153,14 @@ public partial class CharacterMove : MonoBehaviour
 
     private void PlayWhichArrowAudio()
     {
-        GameInteractionSounds.PlayGuidedBlankPrompt();
+        // The item's own corner-hint narration replaces the built-in "which arrow?" clip (no overlap).
+        var hint = GetCurrentLevelData()?.cornerHint;
+        bool panelHasAudio = hint != null && hint.enabled && !string.IsNullOrEmpty(hint.audioUrl);
+        if (!panelHasAudio)
+            GameInteractionSounds.PlayGuidedBlankPrompt();
         if (chatGPTResponseText != null)
         {
-            chatGPTResponseText.text = "Drag the correct arrow into the blue box.";
+            chatGPTResponseText.text = "Tap or drag the correct arrow into the blue box.";
         }
     }
 
