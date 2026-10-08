@@ -41,6 +41,14 @@ public class FlagTaskTutorialController : MonoBehaviour
     [Range(1, 4)] public int handTapRepeatCount = 2;
     public float pauseBetweenHandTapsSeconds = 0.4f;
 
+    [Header("Free-pick flag demo")]
+    [Tooltip("Helper text at the bottom while the student has not placed a flag yet.")]
+    public string freePickHelperText = "Tap any square to place your flag.";
+    [Tooltip("The hand taps this many different tiles — never the correct cell or its neighbours.")]
+    [Range(2, 3)] public int demoTileCount = 3;
+    [Tooltip("If the student still hasn't tapped, replay the hand after this many seconds (0 = play once).")]
+    public float replayHandAfterIdleSeconds = 6f;
+
     [Header("Grid highlights")]
     [Tooltip("OFF by default — the solid white cell square confused kids.")]
     public bool showWorldCellPulse = false;
@@ -62,6 +70,7 @@ public class FlagTaskTutorialController : MonoBehaviour
     private int _lastCompletedTutorialSlot = -1;
     private bool _tutorialActive;
     private readonly List<GameObject> _pulseMarkers = new List<GameObject>();
+    private Vector2? _handLastLocal;
 
     public Vector2Int chosenFlagCell { get; private set; } = new Vector2Int(-1, -1);
 
@@ -263,12 +272,12 @@ public class FlagTaskTutorialController : MonoBehaviour
         tutorialCanvasGroup.interactable = false;
         tutorialCanvasGroup.blocksRaycasts = false;
 
-        bool freePick = characterMove != null && characterMove.PlayerPicksEndCellWithFlag();
+        bool designated = characterMove != null && characterMove.MustUseDesignatedEndCellForFlag();
         if (instructionText != null)
         {
-            instructionText.text = freePick
-                ? "Tap a tile to put your flag!"
-                : "Tap the glowing tile for your flag!";
+            instructionText.text = designated
+                ? "Tap the glowing tile for your flag!"
+                : freePickHelperText;
             instructionText.gameObject.SetActive(true);
         }
 
@@ -288,30 +297,48 @@ public class FlagTaskTutorialController : MonoBehaviour
 
         // Soft bounce on the tip chip so it feels alive.
         if (instructionBubble != null)
-            StartCoroutine(PulseTipChip(instructionBubble.rectTransform, tutorialVisibleSeconds + 2f));
+            StartCoroutine(PulseTipChip(instructionBubble.rectTransform, float.MaxValue));
 
-        List<Vector2Int> cells = PickDemoCells(1);
-        // No solid white world square — hand + soft UI ring is enough for kids.
+        // Designated tile: the glowing cell IS the only valid choice, so the hand may point at it.
+        // Free pick: tap a few unrelated tiles so the hand teaches "tap" without hinting the answer.
+        List<Vector2Int> cells = designated ? PickDemoCells(1) : PickNeutralDemoCells(demoTileCount);
+        if (cells.Count == 0)
+            cells.Add(new Vector2Int(characterMove.gridCols / 2, characterMove.gridRows / 2));
 
-        Vector2Int targetCell = cells.Count > 0
-            ? cells[0]
-            : new Vector2Int(characterMove.gridCols / 2, characterMove.gridRows / 2);
-
-        int taps = Mathf.Clamp(handTapRepeatCount, 1, 4);
-        for (int i = 0; i < taps; i++)
+        bool waitForPlacement = hideOnFirstPlacement;
+        while (ShouldRunForCurrentLevel() && !StudentHasPlaced())
         {
-            if (!ShouldRunForCurrentLevel()) break;
-            if (hideOnFirstPlacement && characterMove.IsFlagPlaced) break;
-            yield return AnimateHandTapToCell(targetCell);
-            if (i < taps - 1)
-                yield return new WaitForSeconds(pauseBetweenHandTapsSeconds);
+            _handLastLocal = null;
+            if (designated)
+            {
+                int taps = Mathf.Clamp(handTapRepeatCount, 1, 4);
+                for (int i = 0; i < taps && !StudentHasPlaced(); i++)
+                {
+                    yield return AnimateHandTapToCell(cells[0], previewFlag: true, tapCount: 2);
+                    if (i < taps - 1)
+                        yield return new WaitForSeconds(pauseBetweenHandTapsSeconds);
+                }
+            }
+            else
+            {
+                for (int i = 0; i < cells.Count && !StudentHasPlaced(); i++)
+                    yield return AnimateHandTapToCell(cells[i], previewFlag: false, tapCount: 1);
+            }
+            yield return FadeOutHand(0.3f);
+
+            if (!waitForPlacement || replayHandAfterIdleSeconds <= 0f) break;
+            float idle = 0f;
+            while (idle < replayHandAfterIdleSeconds && ShouldRunForCurrentLevel() && !StudentHasPlaced())
+            {
+                idle += Time.deltaTime;
+                yield return null;
+            }
         }
 
+        // Helper text stays until the first tap (Update hides everything on placement).
         float t = 0f;
-        while (t < tutorialVisibleSeconds)
+        while (ShouldRunForCurrentLevel() && !StudentHasPlaced() && (waitForPlacement || t < tutorialVisibleSeconds))
         {
-            if (!ShouldRunForCurrentLevel()) break;
-            if (hideOnFirstPlacement && characterMove.IsFlagPlaced) break;
             t += Time.deltaTime;
             yield return null;
         }
@@ -628,6 +655,58 @@ public class FlagTaskTutorialController : MonoBehaviour
         return results;
     }
 
+    /// <summary>
+    /// Free-pick demo tiles: valid flag cells spread across the grid, never the robot's cell, the correct
+    /// answer, or any tile touching the answer — so the hand cannot be read as a hint. Random each time.
+    /// </summary>
+    private List<Vector2Int> PickNeutralDemoCells(int count)
+    {
+        var results = new List<Vector2Int>();
+        if (characterMove == null) return results;
+
+        Vector2Int robot = characterMove.RobotGridPosition;
+        Vector2Int answer = characterMove.PredictProgramEndCellFromCurrentPose();
+        bool answerKnown = characterMove.CellInGridBounds(answer);
+
+        var candidates = new List<Vector2Int>();
+        for (int y = 0; y < characterMove.gridRows; y++)
+        {
+            for (int x = 0; x < characterMove.gridCols; x++)
+            {
+                var c = new Vector2Int(x, y);
+                if (c == robot || !characterMove.CanPlaceFlagOnCell(c)) continue;
+                if (answerKnown && Mathf.Max(Mathf.Abs(c.x - answer.x), Mathf.Abs(c.y - answer.y)) <= 1) continue;
+                candidates.Add(c);
+            }
+        }
+
+        for (int i = candidates.Count - 1; i > 0; i--)
+        {
+            int j = Random.Range(0, i + 1);
+            (candidates[i], candidates[j]) = (candidates[j], candidates[i]);
+        }
+
+        // Prefer tiles far apart; relax spacing on small grids.
+        for (int minGap = 3; minGap >= 1 && results.Count < count; minGap--)
+        {
+            foreach (var c in candidates)
+            {
+                if (results.Count >= count) break;
+                if (results.Contains(c)) continue;
+                bool farEnough = true;
+                foreach (var r in results)
+                {
+                    if (Mathf.Abs(c.x - r.x) + Mathf.Abs(c.y - r.y) < minGap) { farEnough = false; break; }
+                }
+                if (farEnough) results.Add(c);
+            }
+        }
+
+        // Left-to-right so the hand sweeps across the board instead of zig-zagging.
+        results.Sort((a, b) => a.x != b.x ? a.x.CompareTo(b.x) : b.y.CompareTo(a.y));
+        return results;
+    }
+
     private void SpawnPulseMarkers(List<Vector2Int> cells)
     {
         ClearPulseMarkers();
@@ -681,7 +760,30 @@ public class FlagTaskTutorialController : MonoBehaviour
         if (chip != null) chip.localScale = baseScale;
     }
 
-    private IEnumerator AnimateHandTapToCell(Vector2Int cell)
+    private bool StudentHasPlaced() => characterMove != null && characterMove.IsFlagPlaced;
+
+    private IEnumerator FadeOutHand(float duration)
+    {
+        if (handTapIcon != null && handTapIcon.gameObject.activeSelf)
+        {
+            float a0 = handTapIcon.color.a;
+            float t = 0f;
+            while (t < duration)
+            {
+                if (StudentHasPlaced()) break;
+                t += Time.deltaTime;
+                var c = handTapIcon.color;
+                c.a = Mathf.Lerp(a0, 0f, Mathf.Clamp01(t / Mathf.Max(0.001f, duration)));
+                handTapIcon.color = c;
+                yield return null;
+            }
+            handTapIcon.gameObject.SetActive(false);
+        }
+        if (tapRingIcon != null) tapRingIcon.gameObject.SetActive(false);
+        _handLastLocal = null;
+    }
+
+    private IEnumerator AnimateHandTapToCell(Vector2Int cell, bool previewFlag, int tapCount)
     {
         if (handTapIcon == null || tutorialRoot == null) yield break;
         Camera cam = ResolveCamera();
@@ -702,10 +804,13 @@ public class FlagTaskTutorialController : MonoBehaviour
         if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(parent, sp, uiCam, out Vector2 targetLocal))
             yield break;
 
-        Vector2 startLocal = targetLocal + new Vector2(70f, 55f);
+        // Glide from the previous tile when the hand is already on screen; otherwise drift in and fade up.
+        bool glide = _handLastLocal.HasValue && handTapIcon.gameObject.activeSelf;
+        Vector2 startLocal = glide ? _handLastLocal.Value : targetLocal + new Vector2(70f, 55f);
+        float startAlpha = glide ? handTapIcon.color.a : 0f;
         handTapIcon.gameObject.SetActive(true);
         handTapIcon.rectTransform.anchoredPosition = startLocal;
-        handTapIcon.color = new Color(1f, 1f, 1f, 0f);
+        handTapIcon.color = new Color(1f, 1f, 1f, startAlpha);
         handTapIcon.rectTransform.localScale = Vector3.one * 1.05f;
 
         if (tapRingIcon != null)
@@ -726,17 +831,25 @@ public class FlagTaskTutorialController : MonoBehaviour
             float e = EaseOutCubic(k);
             handTapIcon.rectTransform.anchoredPosition = Vector2.Lerp(startLocal, targetLocal, e);
             var c = handTapIcon.color;
-            c.a = Mathf.Lerp(0f, 1f, e);
+            c.a = Mathf.Lerp(startAlpha, 1f, e);
             handTapIcon.color = c;
             yield return null;
         }
+        _handLastLocal = targetLocal;
 
-        yield return AnimateTapRingBurst();
-        yield return TapPress(handTapIcon.rectTransform);
-        yield return PreviewFlagPopAtScreenPoint(sp);
-        yield return new WaitForSeconds(0.1f);
-        yield return AnimateTapRingBurst();
-        yield return TapPress(handTapIcon.rectTransform);
+        int taps = Mathf.Max(1, tapCount);
+        for (int i = 0; i < taps; i++)
+        {
+            if (hideOnFirstPlacement && characterMove.IsFlagPlaced) yield break;
+            yield return AnimateTapRingBurst();
+            yield return TapPress(handTapIcon.rectTransform);
+            if (i == 0 && previewFlag)
+                yield return PreviewFlagPopAtScreenPoint(sp);
+            if (i < taps - 1)
+                yield return new WaitForSeconds(0.1f);
+        }
+        if (!previewFlag)
+            yield return new WaitForSeconds(0.15f);
     }
 
     private IEnumerator AnimateTapRingBurst()

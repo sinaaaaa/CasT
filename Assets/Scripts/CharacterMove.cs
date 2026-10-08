@@ -8997,6 +8997,29 @@ public partial class CharacterMove : MonoBehaviour
     private bool VisitSequenceEndReached(LevelData levelData) =>
         RobotIsOnVisitEndCell() || visitedEndObjectThisLevel;
 
+    /// <summary>
+    /// Where the current program would leave the robot if it ran from where it stands now
+    /// (i.e. the correct flag cell before RUN). (-1,-1) when unknown.
+    /// </summary>
+    public Vector2Int PredictProgramEndCellFromCurrentPose()
+    {
+        LevelData ld = GetCurrentLevelData();
+        if (ld == null) return new Vector2Int(-1, -1);
+        Vector2Int savedPos = attemptStartGridPos;
+        Vector2Int savedFacing = attemptStartFacing;
+        attemptStartGridPos = robotGridPosition;
+        attemptStartFacing = facingDirection;
+        try
+        {
+            return ComputeSimulatedProgramEndCell(ld);
+        }
+        finally
+        {
+            attemptStartGridPos = savedPos;
+            attemptStartFacing = savedFacing;
+        }
+    }
+
     private Vector2Int ComputeSimulatedProgramEndCell(LevelData levelData)
     {
         if (levelData == null) return new Vector2Int(-1, -1);
