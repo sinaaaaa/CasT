@@ -6186,6 +6186,14 @@ public partial class CharacterMove : MonoBehaviour
     {
         if (isProcessing) return false;
         LevelData ld = GetCurrentLevelData();
+        if (IsAwaitingGuidedBlankDrop)
+        {
+            var blanks = ld?.blanks;
+            string label = GuidedBlankLabel(kind);
+            return blanks != null && currentBlankIndexInSequence < blanks.Count && label != null &&
+                   blanks[currentBlankIndexInSequence].enabledArrows != null &&
+                   blanks[currentBlankIndexInSequence].enabledArrows.Contains(label);
+        }
         if (ShouldLockProgramQueue(ld)) return false;
         if (IsActionBlockIntroActive && actionBlockIntro != null)
             return actionBlockIntro.AllowsPaletteDrag() && actionBlockIntro.AllowsKind(kind);
@@ -11005,54 +11013,132 @@ public partial class CharacterMove : MonoBehaviour
 
         var blankData = levelData.blanks[blankIndex];
         
-        // Enable only the specified arrow buttons for this blank
-        if (blankLeftButton != null)
-        {
-            blankLeftButton.gameObject.SetActive(true);
-            blankLeftButton.interactable = blankData.enabledArrows.Contains("turn left");
-            blankLeftButton.onClick.RemoveAllListeners();
-            blankLeftButton.onClick.AddListener(() => OnGuidedBlankFilled("turn left"));
-        }
-        if (blankRightButton != null)
-        {
-            blankRightButton.gameObject.SetActive(true);
-            blankRightButton.interactable = blankData.enabledArrows.Contains("turn right");
-            blankRightButton.onClick.RemoveAllListeners();
-            blankRightButton.onClick.AddListener(() => OnGuidedBlankFilled("turn right"));
-        }
-        if (blankForwardButton != null)
-        {
-            blankForwardButton.gameObject.SetActive(true);
-            blankForwardButton.interactable = blankData.enabledArrows.Contains("forward");
-            blankForwardButton.onClick.RemoveAllListeners();
-            blankForwardButton.onClick.AddListener(() => OnGuidedBlankFilled("forward"));
-        }
-        if (blankBackwardButton != null)
-        {
-            blankBackwardButton.gameObject.SetActive(true);
-            blankBackwardButton.interactable = blankData.enabledArrows.Contains("backward");
-            blankBackwardButton.onClick.RemoveAllListeners();
-            blankBackwardButton.onClick.AddListener(() => OnGuidedBlankFilled("backward"));
-        }
+        // Enabled arrows are dragged into the blue slot (no tap-to-fill).
+        SetupGuidedBlankArrow(blankLeftButton, "turn left", DraggableActionBlock.ActionKind.TurnLeft, blankData);
+        SetupGuidedBlankArrow(blankRightButton, "turn right", DraggableActionBlock.ActionKind.TurnRight, blankData);
+        SetupGuidedBlankArrow(blankForwardButton, "forward", DraggableActionBlock.ActionKind.Forward, blankData);
+        SetupGuidedBlankArrow(blankBackwardButton, "backward", DraggableActionBlock.ActionKind.Backward, blankData);
 
-        // Start pulsing the current blank slot
         if (blankIndex < blankSlotInstances.Count)
         {
-            StartCoroutine(PulseBlankSlot(blankSlotInstances[blankIndex]));
+            var slot = blankSlotInstances[blankIndex];
+            var slotImg = slot != null ? slot.GetComponent<Image>() : null;
+            if (slotImg != null) slotImg.color = Color.blue;
+            if (IsFirstGuidedBlankLevel())
+                StartCoroutine(PulseBlankSlot(slot));
         }
 
         waitingForGuidedInput = true;
         PlayWhichArrowAudio();
     }
 
+    private void SetupGuidedBlankArrow(Button button, string label, DraggableActionBlock.ActionKind kind, BlankData blankData)
+    {
+        if (button == null) return;
+        button.gameObject.SetActive(true);
+        button.interactable = blankData.enabledArrows != null && blankData.enabledArrows.Contains(label);
+        button.onClick.RemoveAllListeners();
+        button.onClick.AddListener(() =>
+        {
+            if (waitingForGuidedInput && chatGPTResponseText != null)
+                chatGPTResponseText.text = "Drag the arrow into the blue box.";
+        });
+
+        var drag = button.GetComponent<DraggableActionBlock>();
+        if (drag == null) drag = button.gameObject.AddComponent<DraggableActionBlock>();
+        drag.actionKind = kind;
+        drag.characterMove = this;
+    }
+
+    private static string GuidedBlankLabel(DraggableActionBlock.ActionKind kind)
+    {
+        switch (kind)
+        {
+            case DraggableActionBlock.ActionKind.TurnLeft: return "turn left";
+            case DraggableActionBlock.ActionKind.TurnRight: return "turn right";
+            case DraggableActionBlock.ActionKind.Backward: return "backward";
+            case DraggableActionBlock.ActionKind.Forward: return "forward";
+        }
+        return null;
+    }
+
+    /// <summary>True while a blue blank slot is waiting for an arrow to be dragged into it.</summary>
+    public bool IsAwaitingGuidedBlankDrop =>
+        waitingForGuidedInput && !isProcessing && UsesGuidedBlankFlow(GetCurrentLevelData());
+
+    private GameObject CurrentGuidedBlankSlot()
+    {
+        if (blankSlotInstances == null || currentBlankIndexInSequence < 0 ||
+            currentBlankIndexInSequence >= blankSlotInstances.Count)
+            return null;
+        return blankSlotInstances[currentBlankIndexInSequence];
+    }
+
+    /// <summary>Pointer is over (or close to) the current blue blank slot.</summary>
+    public bool IsOverGuidedBlankSlot(Vector2 screenPosition)
+    {
+        var slot = CurrentGuidedBlankSlot();
+        if (slot == null) return false;
+        var rt = slot.GetComponent<RectTransform>();
+        if (rt == null) return false;
+        var canvas = rt.GetComponentInParent<Canvas>();
+        Camera cam = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
+
+        var corners = new Vector3[4];
+        rt.GetWorldCorners(corners);
+        Vector2 min = RectTransformUtility.WorldToScreenPoint(cam, corners[0]);
+        Vector2 max = RectTransformUtility.WorldToScreenPoint(cam, corners[2]);
+        Vector2 size = max - min;
+        // Generous target so small fingers don't miss the box.
+        Vector2 pad = size * 0.35f;
+        var hit = new Rect(min - pad, size + pad * 2f);
+        return hit.Contains(screenPosition);
+    }
+
+    /// <summary>Enlarges the blue slot while a dragged arrow hovers over it.</summary>
+    public void SetGuidedBlankDropHover(bool hovering)
+    {
+        var slot = CurrentGuidedBlankSlot();
+        if (slot == null) return;
+        slot.transform.localScale = Vector3.one * (hovering ? 1.15f : 1f);
+    }
+
+    /// <summary>Fills the blue slot when the arrow is released over it. False = dropped elsewhere.</summary>
+    public bool TryDropOnGuidedBlank(Vector2 screenPosition, DraggableActionBlock.ActionKind kind)
+    {
+        SetGuidedBlankDropHover(false);
+        if (!IsAwaitingGuidedBlankDrop) return false;
+        string label = GuidedBlankLabel(kind);
+        if (label == null) return false;
+        if (!IsOverGuidedBlankSlot(screenPosition))
+        {
+            if (chatGPTResponseText != null)
+                chatGPTResponseText.text = "Drop the arrow into the blue box.";
+            return false;
+        }
+        OnGuidedBlankFilled(label);
+        return true;
+    }
+
+    /// <summary>The attention pulse only plays on the first item (in play order) that has a blue blank.</summary>
+    private bool IsFirstGuidedBlankLevel()
+    {
+        if (allLevelsData == null) return false;
+        for (int i = 0; i < allLevelsData.Count; i++)
+        {
+            var ld = allLevelsData[i];
+            if (ld == null || !ld.visible || ld.blanks == null || ld.blanks.Count == 0 || !UsesGuidedBlankFlow(ld)) continue;
+            return i == currentLevel - 1;
+        }
+        return false;
+    }
 
     private void PlayWhichArrowAudio()
     {
         GameInteractionSounds.PlayGuidedBlankPrompt();
-        // Optionally, show a text prompt as well
         if (chatGPTResponseText != null)
         {
-            chatGPTResponseText.text = "Which arrow belongs here?";
+            chatGPTResponseText.text = "Drag the correct arrow into the blue box.";
         }
     }
 
@@ -11406,25 +11492,47 @@ public partial class CharacterMove : MonoBehaviour
             chatGPTResponseText.text = "Try again! Which arrow belongs here?";
     }
 
+    /// <summary>
+    /// Brief attention pulse on the blue blank (first blank item only): a glowing outline and a lighter
+    /// blue flash, three beats, starting once the level fade has cleared. Ends solid blue.
+    /// </summary>
     private IEnumerator PulseBlankSlot(GameObject slot)
     {
         if (slot == null) yield break;
-        Color colorA = Color.blue;
-        Color colorB = Color.white;
-        float flashSpeed = 2.5f; // Flash speed
-        float t = 0f;
         Image img = slot.GetComponent<Image>();
-        while (waitingForGuidedInput && slot != null)
+        if (img == null) yield break;
+
+        float coverWait = 0f;
+        while (LevelTransitionController.ShouldMuteGameplayAudio() && coverWait < 6f)
         {
-            t += Time.deltaTime;
-            // Flash
-            float flash = (Mathf.Sin(t * flashSpeed) + 1f) / 2f;
-            if (img != null)
-                img.color = Color.Lerp(colorA, colorB, flash);
+            coverWait += Time.unscaledDeltaTime;
             yield return null;
         }
-        if (slot != null && img != null)
-            img.color = colorA;
+        yield return new WaitForSeconds(0.3f);
+
+        Color baseBlue = Color.blue;
+        Color flashBlue = new Color(0.45f, 0.75f, 1f, 1f);
+        var outline = slot.GetComponent<Outline>();
+        if (outline == null) outline = slot.AddComponent<Outline>();
+        outline.effectDistance = new Vector2(5f, -5f);
+        outline.enabled = true;
+
+        const int beats = 3;
+        const float beatSeconds = 0.8f;
+        float t = 0f;
+        while (t < beats * beatSeconds && waitingForGuidedInput && slot != null)
+        {
+            t += Time.deltaTime;
+            float wave = (1f - Mathf.Cos(t / beatSeconds * Mathf.PI * 2f)) * 0.5f;
+            img.color = Color.Lerp(baseBlue, flashBlue, wave);
+            outline.effectColor = new Color(1f, 0.92f, 0.2f, wave);
+            yield return null;
+        }
+
+        if (slot == null) yield break;
+        if (outline != null) outline.enabled = false;
+        if (waitingForGuidedInput && img != null)
+            img.color = baseBlue;
     }
 
     public GameObject wrongAnswerPopup; // Assign in Inspector

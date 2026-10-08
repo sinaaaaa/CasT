@@ -157,13 +157,28 @@ public class DraggableActionBlock : MonoBehaviour, IBeginDragHandler, IDragHandl
     {
         if (!isDragging || ghostInstance == null) return;
         UpdateGhostPosition(eventData);
+        if (characterMove != null && characterMove.IsAwaitingGuidedBlankDrop)
+        {
+            characterMove.SetGuidedBlankDropHover(characterMove.IsOverGuidedBlankSlot(eventData.position));
+            return;
+        }
         UpdateDropZoneHover(eventData);
     }
 
     public void OnEndDrag(PointerEventData eventData)
     {
+        bool wasDragging = isDragging;
         isDragging = false;
         UiDragState.EndDrag();
+
+        // Missing-arrow items: the only drop target is the blue blank slot, never the strip itself.
+        if (characterMove != null && characterMove.IsAwaitingGuidedBlankDrop)
+        {
+            if (wasDragging)
+                characterMove.TryDropOnGuidedBlank(eventData.position, actionKind);
+            DestroyGhost();
+            return;
+        }
 
         ActionQueueDropZone zone = ResolveDropZone(eventData);
         if (zone != null)
@@ -174,6 +189,11 @@ public class DraggableActionBlock : MonoBehaviour, IBeginDragHandler, IDragHandl
             lastHoveredZone.HideInsertionPreview();
             lastHoveredZone = null;
         }
+        DestroyGhost();
+    }
+
+    private void DestroyGhost()
+    {
         if (ghostInstance != null)
         {
             Destroy(ghostInstance);
