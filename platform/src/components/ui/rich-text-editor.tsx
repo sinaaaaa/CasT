@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
-import { EditorContent, useEditor } from "@tiptap/react";
+import { useEffect, useRef, useState } from "react";
+import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import { TextStyle } from "@tiptap/extension-text-style";
@@ -152,6 +152,91 @@ function ToolbarButton({
 
 function Divider() {
   return <span className="mx-0.5 h-5 w-px shrink-0 bg-slate-200" aria-hidden />;
+}
+
+function toHex6(raw?: string | null): string | null {
+  if (!raw) return null;
+  const c = raw.trim();
+  if (/^#[0-9a-f]{6}$/i.test(c)) return c.toUpperCase();
+  if (/^#[0-9a-f]{8}$/i.test(c)) return c.slice(0, 7).toUpperCase();
+  if (/^#[0-9a-f]{3}$/i.test(c)) {
+    return `#${c[1]}${c[1]}${c[2]}${c[2]}${c[3]}${c[3]}`.toUpperCase();
+  }
+  const rgb = c.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+  if (rgb) {
+    const hex = (n: string) => Number(n).toString(16).padStart(2, "0");
+    return `#${hex(rgb[1])}${hex(rgb[2])}${hex(rgb[3])}`.toUpperCase();
+  }
+  return null;
+}
+
+/** Native color wheel + RGB hex field. Restores the editor selection after the picker steals focus. */
+function ColorWheel({
+  editor,
+  value,
+  fallback = "#FACC15",
+  title,
+  onPick,
+}: {
+  editor: Editor;
+  value?: string | null;
+  fallback?: string;
+  title: string;
+  onPick: (hex: string) => void;
+}) {
+  const rangeRef = useRef<{ from: number; to: number } | null>(null);
+  const hex = toHex6(value) ?? fallback;
+  const [typed, setTyped] = useState(hex);
+
+  useEffect(() => {
+    setTyped(hex);
+  }, [hex]);
+
+  function captureRange() {
+    const { from, to } = editor.state.selection;
+    rangeRef.current = { from, to };
+  }
+
+  function apply(next: string) {
+    const normalized = toHex6(next);
+    if (!normalized) return;
+    const range = rangeRef.current;
+    if (range) editor.chain().focus().setTextSelection(range).run();
+    onPick(normalized);
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1" title={title}>
+      <label className="relative inline-flex h-6 w-6 cursor-pointer overflow-hidden rounded-md border border-slate-300 shadow-sm">
+        <span className="pointer-events-none absolute inset-0" style={{ backgroundColor: hex }} />
+        <input
+          type="color"
+          aria-label={title}
+          value={hex}
+          onMouseDown={captureRange}
+          onChange={(e) => apply(e.target.value)}
+          className="absolute inset-0 cursor-pointer opacity-0"
+        />
+      </label>
+      <input
+        type="text"
+        inputMode="text"
+        spellCheck={false}
+        aria-label={`${title} RGB hex`}
+        placeholder="#RRGGBB"
+        value={typed}
+        onMouseDown={captureRange}
+        onFocus={captureRange}
+        onChange={(e) => {
+          const v = e.target.value;
+          setTyped(v);
+          if (toHex6(v)) apply(v);
+        }}
+        onBlur={() => setTyped(hex)}
+        className="h-6 w-[4.6rem] rounded-md border border-slate-200 bg-white px-1 font-mono text-[10px] uppercase tracking-tight text-slate-700 outline-none focus:border-slate-400"
+      />
+    </span>
+  );
 }
 
 export function RichTextEditor({
@@ -329,6 +414,15 @@ export function RichTextEditor({
               style={{ backgroundColor: c }}
             />
           ))}
+          <ColorWheel
+            editor={editor}
+            title="Custom text color"
+            fallback="#0F172A"
+            value={editor.getAttributes("textStyle").color}
+            onPick={(hex) => {
+              editor.chain().focus().setColor(hex).run();
+            }}
+          />
         </div>
 
         <Divider />
@@ -352,6 +446,15 @@ export function RichTextEditor({
               style={{ backgroundColor: c }}
             />
           ))}
+          <ColorWheel
+            editor={editor}
+            title="Custom highlight color"
+            fallback="#FEF08A"
+            value={editor.getAttributes("highlight").color}
+            onPick={(hex) => {
+              editor.chain().focus().setHighlight({ color: hex }).run();
+            }}
+          />
         </div>
 
         <Divider />

@@ -8849,6 +8849,7 @@ public partial class CharacterMove : MonoBehaviour
     {
         if (tmp == null) return;
         tmp.richText = true;
+        tmp.extraPadding = true;
         tmp.text = message ?? "";
     }
 

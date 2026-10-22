@@ -119,7 +119,7 @@ public static class HtmlToTmpRichText
                 if (closing) CloseMark(stack, sb, "mark");
                 else
                 {
-                    string color = ExtractMarkColor(attrs) ?? "#FFE566";
+                    string color = MarkColorForTmp(ExtractMarkColor(attrs) ?? "#FFE566");
                     OpenMark(stack, sb, "mark", color);
                 }
                 continue;
@@ -257,23 +257,51 @@ public static class HtmlToTmpRichText
         return dict;
     }
 
+    /// <summary>
+    /// TMP <c>mark</c> paints an overlay ON TOP of the glyphs. 6-digit hex is treated as fully
+    /// opaque, which hides the letters. Always emit #RRGGBBAA with a highlighter-like alpha.
+    /// </summary>
+    static string MarkColorForTmp(string hex)
+    {
+        if (string.IsNullOrEmpty(hex)) hex = "#FFE566A0";
+        hex = hex.Trim().ToUpperInvariant();
+        if (hex.Length == 9 && hex[0] == '#')
+        {
+            string a = hex.Substring(7, 2);
+            if (a == "FF") return hex.Substring(0, 7) + "A0";
+            return hex;
+        }
+        if (hex.Length == 7 && hex[0] == '#')
+            return hex + "A0";
+        return "#FFE566A0";
+    }
+
     static string NormalizeColor(string raw)
     {
         if (string.IsNullOrWhiteSpace(raw)) return null;
         string c = raw.Trim();
+        if (Regex.IsMatch(c, @"^#[0-9a-fA-F]{8}$")) return c.ToUpperInvariant();
         if (Regex.IsMatch(c, @"^#[0-9a-fA-F]{6}$")) return c.ToUpperInvariant();
         if (Regex.IsMatch(c, @"^#[0-9a-fA-F]{3}$"))
         {
             char r = c[1], g = c[2], b = c[3];
             return $"#{r}{r}{g}{g}{b}{b}".ToUpperInvariant();
         }
-        var rgb = Regex.Match(c, @"rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)", RegexOptions.IgnoreCase);
+        var rgb = Regex.Match(c, @"rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([0-9.]+))?", RegexOptions.IgnoreCase);
         if (rgb.Success)
         {
             int R = int.Parse(rgb.Groups[1].Value);
             int G = int.Parse(rgb.Groups[2].Value);
             int B = int.Parse(rgb.Groups[3].Value);
-            return $"#{R:X2}{G:X2}{B:X2}";
+            string hex = $"#{R:X2}{G:X2}{B:X2}";
+            if (rgb.Groups[4].Success &&
+                float.TryParse(rgb.Groups[4].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out float a))
+            {
+                a = Mathf.Clamp01(a);
+                if (a < 0.999f)
+                    hex += Mathf.RoundToInt(a * 255f).ToString("X2");
+            }
+            return hex;
         }
         return null;
     }

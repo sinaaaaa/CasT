@@ -118,6 +118,7 @@ public class CanvasLessonPanel : MonoBehaviour
             // Let TipTap → TMP tags control weight/color (don't force Bold on the whole field).
             promptText.fontStyle = FontStyles.Normal;
             promptText.richText = true;
+            promptText.extraPadding = true;
             promptText.text = HtmlToTmpRichText.Convert(lesson.prompt ?? "");
             promptText.gameObject.SetActive(!string.IsNullOrWhiteSpace(lesson.prompt));
         }

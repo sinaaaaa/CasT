@@ -114,6 +114,7 @@ public static class CornerHintTypographyApplier
         tmp.wordSpacing = style.wordSpacing;
         tmp.enableWordWrapping = style.enableWordWrapping;
         tmp.richText = true;
+        tmp.extraPadding = true;
     }
 }
 

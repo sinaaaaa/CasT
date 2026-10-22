@@ -551,6 +551,7 @@ public class ActionBlockIntroManager : MonoBehaviour
         var tmp = go.GetComponent<TextMeshProUGUI>();
         ApplyWelcomePopupTextStyle(tmp, layout);
         tmp.richText = true;
+        tmp.extraPadding = true;
         tmp.text = HtmlToTmpRichText.Convert(text, relativeFontSizes: true);
         // Long dashboard text shrinks to fit the card instead of spilling past it.
         tmp.enableAutoSizing = true;

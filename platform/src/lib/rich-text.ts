@@ -46,6 +46,7 @@ function parseStyle(style: string | undefined): Record<string, string> {
 
 function normalizeColor(raw: string): string | null {
   const c = raw.trim();
+  if (/^#[0-9a-f]{8}$/i.test(c)) return c.toUpperCase();
   if (/^#[0-9a-f]{6}$/i.test(c)) return c.toUpperCase();
   if (/^#[0-9a-f]{3}$/i.test(c)) {
     const r = c[1];
@@ -53,12 +54,25 @@ function normalizeColor(raw: string): string | null {
     const b = c[3];
     return `#${r}${r}${g}${g}${b}${b}`.toUpperCase();
   }
-  const rgb = c.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+  const rgb = c.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([0-9.]+))?/i);
   if (rgb) {
     const hex = (n: string) => Number(n).toString(16).padStart(2, "0");
-    return `#${hex(rgb[1])}${hex(rgb[2])}${hex(rgb[3])}`.toUpperCase();
+    let out = `#${hex(rgb[1])}${hex(rgb[2])}${hex(rgb[3])}`.toUpperCase();
+    if (rgb[4] != null) {
+      const a = Math.max(0, Math.min(1, Number(rgb[4])));
+      if (a < 0.999) out += Math.round(a * 255).toString(16).padStart(2, "0").toUpperCase();
+    }
+    return out;
   }
   return null;
+}
+
+/** TMP mark is an overlay on top of glyphs — keep it translucent so the letters stay readable. */
+function markColorForTmp(hex: string): string {
+  const c = (hex || "#FFE566").toUpperCase();
+  if (/^#[0-9A-F]{8}$/.test(c)) return c.endsWith("FF") ? `${c.slice(0, 7)}A0` : c;
+  if (/^#[0-9A-F]{6}$/.test(c)) return `${c}A0`;
+  return "#FFE566A0";
 }
 
 function cssSizeToTmp(px: string): number {
@@ -167,7 +181,7 @@ export function htmlToTmpRichText(html: string | null | undefined): string {
         const colorAttr = attrs.match(/data-color=["']([^"']+)["']/i)?.[1];
         const style = parseStyle(attrs.match(/style=["']([^"']*)["']/i)?.[1]);
         const bg = colorAttr || style["background-color"] || "#FFE566";
-        openMark("mark", normalizeColor(bg) ?? "#FFE566");
+        openMark("mark", markColorForTmp(normalizeColor(bg) ?? "#FFE566"));
       }
       continue;
     }

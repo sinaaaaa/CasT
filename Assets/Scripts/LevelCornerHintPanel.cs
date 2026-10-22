@@ -291,6 +291,7 @@ public class LevelCornerHintPanel : MonoBehaviour
         {
             bodyText.fontStyle = FontStyles.Normal;
             bodyText.richText = true;
+            bodyText.extraPadding = true;
             bodyText.text = HtmlToTmpRichText.Convert(hint.body ?? "");
             bodyText.gameObject.SetActive(!string.IsNullOrEmpty(bodyText.text));
         }
