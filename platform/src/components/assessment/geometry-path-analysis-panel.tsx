@@ -73,11 +73,13 @@ export function GeometryPathAnalysisPanel({
     <Card className="overflow-hidden border-slate-200/70 shadow-sm">
       <AssessmentPanelHeader
         icon={Hexagon}
-        title="Geometry Path"
+        title={result.studentTask === "DRAW_PATH" ? "Draw-path prediction" : "Geometry Path"}
         subtitle={
-          result.requiresDestination
-            ? "Shape tracing and final destination — one activity."
-            : "Target edges vs the path the robot traveled."
+          result.studentTask === "DRAW_PATH"
+            ? "Student drawing vs the path the yellow-strip program takes. RUN shows how the program works."
+            : result.requiresDestination
+              ? "Shape tracing and final destination — one activity."
+              : "Target edges vs the path the robot traveled."
         }
         badges={
           <Badge variant="outline" className={cn("font-semibold", outcomeClass)}>
@@ -89,7 +91,7 @@ export function GeometryPathAnalysisPanel({
         <section className="rounded-xl border border-slate-200/70 bg-slate-50/40 p-4">
           <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-900">
             <Map className="h-4 w-4 text-slate-500" />
-            Target vs student path
+            {result.studentTask === "DRAW_PATH" ? "Program path vs drawing" : "Target vs student path"}
           </div>
           <svg
             viewBox={`0 0 ${GRID_COLS} ${GRID_ROWS}`}
@@ -167,13 +169,16 @@ export function GeometryPathAnalysisPanel({
           </svg>
           <div className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1.5 text-[11px] text-slate-600">
             <span className="inline-flex items-center gap-1.5">
-              <span className="h-0.5 w-4 rounded bg-emerald-500" /> Traced correctly
+              <span className="h-0.5 w-4 rounded bg-emerald-500" />{" "}
+              {result.studentTask === "DRAW_PATH" ? "Drawn correctly" : "Traced correctly"}
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <span className="h-0.5 w-4 rounded border border-dashed border-violet-400 bg-violet-200" /> Missed
+              <span className="h-0.5 w-4 rounded border border-dashed border-violet-400 bg-violet-200" />{" "}
+              {result.studentTask === "DRAW_PATH" ? "Missed program edge" : "Missed"}
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <span className="h-0.5 w-4 rounded bg-rose-500" /> Off the shape
+              <span className="h-0.5 w-4 rounded bg-rose-500" />{" "}
+              {result.studentTask === "DRAW_PATH" ? "Extra drawn edge" : "Off the shape"}
             </span>
             {startCell && (
               <span className="inline-flex items-center gap-1.5">
@@ -204,15 +209,23 @@ export function GeometryPathAnalysisPanel({
 
           <div className="grid grid-cols-2 gap-3">
             <MetricTile
-              label="Edges traced"
+              label={result.studentTask === "DRAW_PATH" ? "Program edges drawn" : "Edges traced"}
               value={`${result.completedEdgeCount}/${result.targetEdgeCount}`}
-              sub={`${result.pathCompletionPct}% of the shape`}
+              sub={
+                result.studentTask === "DRAW_PATH"
+                  ? `${result.pathCompletionPct}% of the program path`
+                  : `${result.pathCompletionPct}% of the shape`
+              }
               tone={result.completedEdgeCount === result.targetEdgeCount ? "success" : "warning"}
             />
             <MetricTile
-              label="Off-shape edges"
+              label={result.studentTask === "DRAW_PATH" ? "Extra drawn edges" : "Off-shape edges"}
               value={String(result.extraEdgeCount)}
-              sub={`${result.pathAccuracyPct}% of traveled edges were on the shape`}
+              sub={
+                result.studentTask === "DRAW_PATH"
+                  ? `${result.pathAccuracyPct}% of drawn edges were on the program path`
+                  : `${result.pathAccuracyPct}% of traveled edges were on the shape`
+              }
               tone={result.extraEdgeCount > 0 ? "warning" : "default"}
             />
             {result.requiresDestination ? (
@@ -232,9 +245,13 @@ export function GeometryPathAnalysisPanel({
               </>
             ) : (
               <MetricTile
-                label="Shape finished"
-                value={result.shapeCompleted ? "Yes" : "No"}
-                tone={result.shapeCompleted ? "success" : "warning"}
+                label={result.studentTask === "DRAW_PATH" ? "Prediction complete" : "Shape finished"}
+                value={result.shapeCompleted && result.extraEdgeCount === 0 ? "Yes" : result.shapeCompleted ? "Extra edges" : "No"}
+                tone={
+                  result.shapeCompleted && result.extraEdgeCount === 0
+                    ? "success"
+                    : "warning"
+                }
               />
             )}
             <MetricTile
@@ -258,7 +275,9 @@ export function GeometryPathAnalysisPanel({
 
           {studentProgram && studentProgram.length > 0 && (
             <section className="rounded-xl border border-slate-200/60 bg-white p-4">
-              <h3 className="text-sm font-semibold text-slate-900">Student program</h3>
+              <h3 className="text-sm font-semibold text-slate-900">
+                {result.studentTask === "DRAW_PATH" ? "Shown program" : "Student program"}
+              </h3>
               <p className="mt-2 break-words font-mono text-xs text-slate-700">
                 {studentProgram.join(" → ")}
               </p>

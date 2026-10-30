@@ -61,14 +61,17 @@ export const DEFAULT_DEBUGGING_CONFIG: DebuggingConfig = {
 };
 
 type ConfigLike = {
-  geometryPath?: { seedStarterProgram?: boolean } | null;
+  geometryPath?: { seedStarterProgram?: boolean; studentTask?: string } | null;
   debuggingConfig?: Partial<DebuggingConfig> | null;
 };
 
 /** Debugging items: edit-the-starter items, including geometry with a seeded starter. */
 export function supportsDebuggingConfig(levelType: LevelType | null | undefined, config: ConfigLike): boolean {
   if (levelType === LevelType.DRAG_EDIT_PROGRAM) return true;
-  if (levelType === LevelType.GEOMETRY_PATH) return !!config.geometryPath?.seedStarterProgram;
+  if (levelType === LevelType.GEOMETRY_PATH) {
+    if ((config.geometryPath?.studentTask ?? "PROGRAM") === "DRAW_PATH") return false;
+    return !!config.geometryPath?.seedStarterProgram;
+  }
   return false;
 }
 

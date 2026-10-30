@@ -33,6 +33,10 @@ export const geometryAfterShapeBehaviorSchema = z.enum([
 ]);
 export type GeometryAfterShapeBehavior = z.infer<typeof geometryAfterShapeBehaviorSchema>;
 
+/** What the student does on a Geometry Path item. */
+export const geometryStudentTaskSchema = z.enum(["PROGRAM", "DRAW_PATH"]);
+export type GeometryStudentTask = z.infer<typeof geometryStudentTaskSchema>;
+
 export const pathSegmentSchema = z.object({
   from: z.object({ x: z.number().int(), y: z.number().int() }),
   to: z.object({ x: z.number().int(), y: z.number().int() }),
@@ -85,8 +89,14 @@ export const geometryPathConfigSchema = z.object({
     commandBags: false,
   }),
   /**
+   * PROGRAM: students write a program to trace the glowing shape.
+   * DRAW_PATH: the program is shown read-only; students draw that path on the grid (prediction).
+   */
+  studentTask: geometryStudentTaskSchema.default("PROGRAM"),
+  /**
    * When true, config.guidedActions is a starter program seeded into the yellow strip
    * that students edit (like Edit Starter Program). When false, students start blank.
+   * DRAW_PATH always shows the authored program (this flag is forced on).
    */
   seedStarterProgram: z.boolean().default(false),
   /** Optional structure requirements (used with PROGRAM_STRUCTURE / teacher summary). */
@@ -205,6 +215,7 @@ export const DEFAULT_GEOMETRY_PATH: GeometryPathConfig = {
     actionChunks: false,
     commandBags: false,
   },
+  studentTask: "PROGRAM",
   seedStarterProgram: false,
   requireRepeat: false,
   requireActionChunk: false,
@@ -424,19 +435,32 @@ export function geometryStarterPalette(tools: GeometryPathTools | null | undefin
   };
 }
 
+export function isGeometryDrawPath(
+  gp: Pick<GeometryPathConfig, "studentTask"> | null | undefined
+): boolean {
+  return (gp?.studentTask ?? "PROGRAM") === "DRAW_PATH";
+}
+
 /** Starter tokens kept for a Geometry Path item (blank slots are not supported there). */
 export function sanitizeGeometryStarter(
-  gp: Pick<GeometryPathConfig, "seedStarterProgram"> | null | undefined,
+  gp: Pick<GeometryPathConfig, "seedStarterProgram" | "studentTask"> | null | undefined,
   guidedActions: string[] | null | undefined
 ): string[] | undefined {
-  if (!gp?.seedStarterProgram || !guidedActions?.length) return undefined;
+  const keepProgram = !!gp?.seedStarterProgram || isGeometryDrawPath(gp);
+  if (!keepProgram || !guidedActions?.length) return undefined;
   const kept = guidedActions.filter((t) => t && t.trim().toLowerCase() !== "blank");
   return kept.length ? kept : undefined;
 }
 
-export function geometryPathReady(config: { geometryPath?: GeometryPathConfig | null }): boolean {
+export function geometryPathReady(config: {
+  geometryPath?: GeometryPathConfig | null;
+  guidedActions?: string[] | null;
+}): boolean {
   const gp = config.geometryPath;
   if (!gp?.enabled) return false;
+  if (isGeometryDrawPath(gp)) {
+    return (sanitizeGeometryStarter(gp, config.guidedActions)?.length ?? 0) > 0;
+  }
   if ((gp.segments?.length ?? 0) === 0) return false;
   if (gp.afterShapeBehavior === "CONTINUE_TO_DESTINATION" && !gp.finishCell) return false;
   return true;
@@ -493,46 +517,59 @@ export function buildGeometryAuthoringSummary(config: {
         : "destination not set"
     : null;
 
+  const drawPath = isGeometryDrawPath(gp);
   const requirements: string[] = [];
-  if (gp?.validationMode !== "FINAL_POSITION" && gp?.validationMode !== "FINAL_POSITION_DIRECTION") {
-    requirements.push("Trace all target edges");
-  }
-  if (requiresDestination) {
-    requirements.push(
-      destObj ? `Reach the ${destObj}` : destCell ? `Reach ${destCell}` : "Reach the final destination"
-    );
-    if (geometryRequiresFinishFacing(gp) && gp?.finishFacing) {
-      requirements.push(`Face ${facingToLabel(gp.finishFacing)} at the destination`);
+  if (drawPath) {
+    requirements.push("Draw every edge the program travels");
+    requirements.push("No extra edges");
+  } else {
+    if (gp?.validationMode !== "FINAL_POSITION" && gp?.validationMode !== "FINAL_POSITION_DIRECTION") {
+      requirements.push("Trace all target edges");
     }
+    if (requiresDestination) {
+      requirements.push(
+        destObj ? `Reach the ${destObj}` : destCell ? `Reach ${destCell}` : "Reach the final destination"
+      );
+      if (geometryRequiresFinishFacing(gp) && gp?.finishFacing) {
+        requirements.push(`Face ${facingToLabel(gp.finishFacing)} at the destination`);
+      }
+    }
+    if (gp?.requireRepeat) requirements.push("Use Repeat at least once");
+    if (gp?.requireActionChunk) requirements.push("Use an Action Chunk");
+    if (gp?.requireCommandBag) requirements.push("Use a Command Bag");
+    if (gp?.validationMode === "EXACT_PATH") requirements.push("No extra path segments");
   }
-  if (gp?.requireRepeat) requirements.push("Use Repeat at least once");
-  if (gp?.requireActionChunk) requirements.push("Use an Action Chunk");
-  if (gp?.requireCommandBag) requirements.push("Use a Command Bag");
-  if (gp?.validationMode === "EXACT_PATH") requirements.push("No extra path segments");
 
   const shapeLabel = gp?.shapeType ? GEOMETRY_SHAPE_LABELS[gp.shapeType] : "Custom";
-  const goalLabel = requiresDestination
-    ? `Trace the ${shapeLabel.toLowerCase()}, then reach ${
-        destObj ? `the ${destObj}` : destCell ? destCell : "the destination"
-      }`
-    : `Trace the ${shapeLabel.toLowerCase()}`;
+  const goalLabel = drawPath
+    ? "Draw the path this program will take"
+    : requiresDestination
+      ? `Trace the ${shapeLabel.toLowerCase()}, then reach ${
+          destObj ? `the ${destObj}` : destCell ? destCell : "the destination"
+        }`
+      : `Trace the ${shapeLabel.toLowerCase()}`;
 
-  const gradeLabel = requiresDestination
-    ? gp?.validationMode === "FINAL_POSITION" || gp?.validationMode === "FINAL_POSITION_DIRECTION"
-      ? GEOMETRY_VALIDATION_LABELS[gp.validationMode]
-      : "Geometry + Final Destination"
-    : gp?.validationMode
-      ? GEOMETRY_VALIDATION_LABELS[gp.validationMode]
-      : GEOMETRY_VALIDATION_LABELS.TRACE_TARGET;
+  const gradeLabel = drawPath
+    ? "Drawn path matches the program"
+    : requiresDestination
+      ? gp?.validationMode === "FINAL_POSITION" || gp?.validationMode === "FINAL_POSITION_DIRECTION"
+        ? GEOMETRY_VALIDATION_LABELS[gp.validationMode]
+        : "Geometry + Final Destination"
+      : gp?.validationMode
+        ? GEOMETRY_VALIDATION_LABELS[gp.validationMode]
+        : GEOMETRY_VALIDATION_LABELS.TRACE_TARGET;
 
   const start = config.robotStartPosition ?? { x: 0, y: 0 };
   const starter = sanitizeGeometryStarter(gp, config.guidedActions);
-  const starterLabel = gp?.seedStarterProgram
+  const starterLabel = drawPath
     ? starter
-      ? `Starter program (${starter.length} block${starter.length === 1 ? "" : "s"})`
-      : "Starter program (empty)"
-    : "Blank program";
-
+      ? `Shown program (${starter.length} block${starter.length === 1 ? "" : "s"}) — students draw the path`
+      : "Shown program (empty)"
+    : gp?.seedStarterProgram
+      ? starter
+        ? `Starter program (${starter.length} block${starter.length === 1 ? "" : "s"})`
+        : "Starter program (empty)"
+      : "Blank program";
   return {
     shapeLabel,
     edgeCount: gp?.segments?.length ?? 0,

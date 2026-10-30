@@ -58,16 +58,16 @@ public class CommandBagPaletteController : MonoBehaviour
     LevelData _level;
     RectTransform _listRoot;
     RectTransform _contentRoot;
+    bool _drawToolsMode;
 
     public string OpenBagId => _openBagId;
 
-    /// <summary>True when the blue Command Bag panel is showing bags.</summary>
+    /// <summary>True when the blue Command Bag panel is showing bags or DRAW_PATH tools.</summary>
     public bool IsPanelVisible =>
         paletteParent != null &&
         paletteParent.gameObject.activeInHierarchy &&
-        _level != null &&
-        _level.commandBags != null &&
-        _level.commandBags.Count > 0;
+        (_drawToolsMode ||
+         (_level != null && _level.commandBags != null && _level.commandBags.Count > 0));
 
     /// <summary>
     /// Actual screen-width fraction used by the blue sidebar (measured from the panel rect).
@@ -103,6 +103,7 @@ public class CommandBagPaletteController : MonoBehaviour
 
     public void Clear()
     {
+        _drawToolsMode = false;
         ClearSpawnedOnly();
         _openBagId = null;
         _level = null;
@@ -136,6 +137,7 @@ public class CommandBagPaletteController : MonoBehaviour
 
     public void Rebuild(LevelData level)
     {
+        _drawToolsMode = false;
         SyncPanelSizeFromCharacterMove();
 
         // Card height hugs content (title + preview) — no empty filler.
@@ -211,6 +213,23 @@ public class CommandBagPaletteController : MonoBehaviour
     }
 
     /// <summary>
+    /// DRAW_PATH: keep the scene's existing blue bar. Do not spawn a second panel or cards.
+    /// Pencil / eraser GameObjects are wired by CharacterMove.
+    /// </summary>
+    public void ActivateExistingBlueBarForDrawPath()
+    {
+        _drawToolsMode = true;
+        _level = characterMove != null ? characterMove.GetCurrentLevelData() : _level;
+        if (characterMove != null && characterMove.commandBagPanel != null &&
+            !IsUnderYellowStripCanvas(characterMove.commandBagPanel))
+            paletteParent = characterMove.commandBagPanel;
+
+        SetBagCanvasActive(true);
+        if (paletteParent != null)
+            paletteParent.gameObject.SetActive(true);
+    }
+
+    /// <summary>
     /// Designer layout:
     /// • Few bags → blue panel hugs content (no empty blue void at the bottom).
     /// • Many bags / short screens → panel uses max safe height and scrolls.
@@ -225,7 +244,7 @@ public class CommandBagPaletteController : MonoBehaviour
         {
             if (_spawned[i] == null) continue;
             string n = _spawned[i].name ?? "";
-            if (n.StartsWith("Bag_") || n.StartsWith("Chunk_"))
+            if (n.StartsWith("Bag_") || n.StartsWith("Chunk_") || n.StartsWith("DrawTool_"))
                 bagCount++;
         }
 
@@ -805,7 +824,10 @@ public class CommandBagPaletteController : MonoBehaviour
 
     void Update()
     {
-        if (!Application.isPlaying || characterMove == null || _level == null) return;
+        if (!Application.isPlaying || characterMove == null) return;
+        if (_drawToolsMode)
+            return;
+        if (_level == null) return;
         if (_contentRoot == null || _spawned.Count == 0) return;
 
         var cm = characterMove;

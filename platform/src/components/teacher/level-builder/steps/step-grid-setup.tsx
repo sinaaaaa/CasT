@@ -36,7 +36,7 @@ export function StepGridSetup({ config, onChange, currentLevelId, levelType }: P
         title={isGeometry ? "Design the geometry path" : "Design the board"}
         subtitle={
           isGeometry
-            ? "Shape → start & direction → assessment → behavior. The grid is the hero."
+            ? "Choose write-a-program or draw-the-path, then define the shape and start."
             : "Grid, number line, or canvas."
         }
         accent="teal"

@@ -11,6 +11,7 @@ import {
   Flag,
   MapPin,
   Pencil,
+  PencilLine,
   Redo2,
   RotateCcw,
   Sparkles,
@@ -30,7 +31,9 @@ import {
   generateShapeSegments,
   geometryRequiresDestination,
   hasSegment,
+  isGeometryDrawPath,
   removeSegment,
+  sanitizeGeometryStarter,
   segmentKey,
   syncGeometryPathToolsToConfig,
   type GeometryAfterShapeBehavior,
@@ -39,6 +42,7 @@ import {
   type GeometryValidationMode,
   type PathSegment,
 } from "@/lib/geometry-path";
+import { geometryProgramPathSegments } from "@/lib/geometry-program-path";
 import { GRID_COLS, GRID_ROWS, OBJECT_PALETTE } from "@/lib/level-editor-constants";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -78,6 +82,7 @@ function patchGeometry(
     validationMode: "TRACE_TARGET",
     afterShapeBehavior: "SHAPE_COMPLETE",
     requireFinishFacing: false,
+    studentTask: "PROGRAM",
     seedStarterProgram: false,
     requireRepeat: false,
     requireActionChunk: false,
@@ -349,6 +354,26 @@ export function GeometryPathEditor({ config, onChange }: Props) {
   }
 
   const summary = useMemo(() => buildGeometryAuthoringSummary(config), [config]);
+  const drawPath = isGeometryDrawPath(gp);
+  const predictedSegments = useMemo(
+    () => (drawPath ? geometryProgramPathSegments(config) : []),
+    [drawPath, config]
+  );
+  const displaySegments = segments.length > 0 ? segments : predictedSegments;
+  const predictedKeys = useMemo(
+    () => new Set(predictedSegments.map((s) => segmentKey(s.from, s.to))),
+    [predictedSegments]
+  );
+  const authoredKeys = useMemo(
+    () => new Set(segments.map((s) => segmentKey(s.from, s.to))),
+    [segments]
+  );
+  const programMatchesShape =
+    drawPath &&
+    authoredKeys.size > 0 &&
+    predictedKeys.size > 0 &&
+    authoredKeys.size === predictedKeys.size &&
+    [...authoredKeys].every((k) => predictedKeys.has(k));
   const mode = (gp?.validationMode ?? "TRACE_TARGET") as GeometryValidationMode;
   const shape = (gp?.shapeType ?? "SQUARE") as GeometryShapeType;
   const afterShape = (gp?.afterShapeBehavior ?? "SHAPE_COMPLETE") as GeometryAfterShapeBehavior;
@@ -374,26 +399,131 @@ export function GeometryPathEditor({ config, onChange }: Props) {
     </label>
   );
 
+  function setStudentTask(next: "PROGRAM" | "DRAW_PATH") {
+    if ((gp?.studentTask ?? "PROGRAM") === next) return;
+    const seeded = next === "DRAW_PATH" ? true : !!gp?.seedStarterProgram;
+    const actions =
+      sanitizeGeometryStarter({ ...gp, seedStarterProgram: seeded, studentTask: next }, config.guidedActions) ??
+      (next === "DRAW_PATH" ? ["forward", "turn left", "forward"] : config.guidedActions);
+    if (next === "DRAW_PATH") setDrawMode("draw");
+    const nextHint =
+      next === "DRAW_PATH"
+        ? {
+            enabled: true,
+            title: config.cornerHint?.title || "Draw the path",
+            body:
+              config.cornerHint?.body && config.cornerHint.body !== "Make the robot follow the glowing path."
+                ? config.cornerHint.body
+                : "Look at the yellow-strip program, then draw the path it will take on the grid. Press RUN to watch the robot follow it.",
+            imageUrl: config.cornerHint?.imageUrl,
+            audioUrl: config.cornerHint?.audioUrl,
+            playAudioAutomatically: config.cornerHint?.playAudioAutomatically,
+          }
+        : config.cornerHint;
+    const shapePatch =
+      next === "DRAW_PATH" && !(gp?.segments?.length)
+        ? {
+            shapeType: (gp?.shapeType && gp.shapeType !== "CUSTOM" ? gp.shapeType : "SQUARE") as GeometryShapeType,
+            segments: generateShapeSegments(
+              gp?.shapeType && gp.shapeType !== "CUSTOM" ? gp.shapeType : "SQUARE",
+              gp?.templateOrigin ?? config.robotStartPosition ?? { x: 1, y: 1 },
+              gp?.templateSize ?? 2,
+              gp?.templateWidth ?? 3,
+              gp?.templateHeight ?? 2
+            ),
+          }
+        : {};
+    onChange({
+      ...patchGeometry(config, {
+        studentTask: next,
+        seedStarterProgram: seeded,
+        keepShapeVisibleDuringRun: next === "DRAW_PATH" ? false : gp?.keepShapeVisibleDuringRun,
+        afterShapeBehavior: next === "DRAW_PATH" ? "SHAPE_COMPLETE" : gp?.afterShapeBehavior,
+        validationMode: next === "DRAW_PATH" ? "EXACT_PATH" : gp?.validationMode,
+        ...shapePatch,
+      }),
+      guidedActions: actions,
+      ...(nextHint ? { cornerHint: nextHint } : {}),
+    });
+  }
+
   return (
     <div className="space-y-6">
+      <div className="grid gap-3 sm:grid-cols-2">
+        {(
+          [
+            {
+              id: "PROGRAM" as const,
+              title: "Write a program",
+              description: "Students build a program that traces the glowing shape.",
+              Icon: Pencil,
+            },
+            {
+              id: "DRAW_PATH" as const,
+              title: "Draw the path (prediction)",
+              description: "The program is shown in the yellow strip. Students draw that path on the grid, then press RUN to see the robot follow it.",
+              Icon: PencilLine,
+            },
+          ] as const
+        ).map(({ id, title, description, Icon }) => {
+          const on = (gp?.studentTask ?? "PROGRAM") === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setStudentTask(id)}
+              className={cn(
+                "flex items-start gap-3 rounded-2xl border p-4 text-left transition",
+                on
+                  ? "border-violet-400 bg-violet-50/70 ring-2 ring-violet-100"
+                  : "border-slate-200 bg-white hover:border-slate-300"
+              )}
+            >
+              <span
+                className={cn(
+                  "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
+                  on ? "bg-violet-600 text-white" : "bg-slate-100 text-slate-500"
+                )}
+              >
+                <Icon className="h-5 w-5" />
+              </span>
+              <span>
+                <span className="block text-sm font-semibold text-slate-900">{title}</span>
+                <span className="mt-1 block text-xs leading-relaxed text-slate-600">{description}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.85fr)]">
         {/* —— Canvas hero —— */}
         <div className="space-y-3 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h3 className="text-base font-bold text-slate-900">Path canvas</h3>
+              <h3 className="text-base font-bold text-slate-900">
+                {drawPath ? "Shape this program will take" : "Path canvas"}
+              </h3>
               <p className="mt-0.5 text-xs text-slate-500">
-                Draw edges between cells. This glowing path is what students must trace.
+                {drawPath
+                  ? "Define the shape the same way as Write a program. Students do not see it — they look at the yellow-strip program and draw this path."
+                  : "Draw edges between cells. This glowing path is what students must trace."}
               </p>
             </div>
             <div className="flex flex-wrap gap-1.5">
               {(
-                [
-                  ["draw", Pencil, "Draw"],
-                  ["erase", Eraser, "Erase"],
-                  ["start", MapPin, "Start"],
-                  ["destination", Flag, "Destination"],
-                ] as const
+                (drawPath
+                  ? ([
+                      ["draw", Pencil, "Draw"],
+                      ["erase", Eraser, "Erase"],
+                      ["start", MapPin, "Start"],
+                    ] as const)
+                  : ([
+                      ["draw", Pencil, "Draw"],
+                      ["erase", Eraser, "Erase"],
+                      ["start", MapPin, "Start"],
+                      ["destination", Flag, "Destination"],
+                    ] as const))
               ).map(([id, Icon, label]) => (
                 <button
                   key={id}
@@ -489,7 +619,7 @@ export function GeometryPathEditor({ config, onChange }: Props) {
                 })
               )}
 
-              {segments.map((seg) => {
+              {displaySegments.map((seg) => {
                 const a = cellCenterSvg(seg.from.x, seg.from.y);
                 const b = cellCenterSvg(seg.to.x, seg.to.y);
                 const k = segmentKey(seg.from, seg.to);
@@ -530,6 +660,29 @@ export function GeometryPathEditor({ config, onChange }: Props) {
                   </g>
                 );
               })}
+
+              {drawPath &&
+                segments.length > 0 &&
+                predictedSegments.map((seg) => {
+                  const a = cellCenterSvg(seg.from.x, seg.from.y);
+                  const b = cellCenterSvg(seg.to.x, seg.to.y);
+                  const k = segmentKey(seg.from, seg.to);
+                  const onShape = authoredKeys.has(k);
+                  return (
+                    <line
+                      key={`pred-${k}`}
+                      x1={a.cx}
+                      y1={a.cy}
+                      x2={b.cx}
+                      y2={b.cy}
+                      stroke={trailColor}
+                      strokeWidth={onShape ? 0.07 : 0.11}
+                      strokeLinecap="round"
+                      strokeDasharray={onShape ? undefined : "0.14 0.1"}
+                      opacity={onShape ? 0.35 : 0.95}
+                    />
+                  );
+                })}
 
               {anchor && (
                 <circle
@@ -599,10 +752,46 @@ export function GeometryPathEditor({ config, onChange }: Props) {
             </svg>
           </div>
 
+          {drawPath && (
+            <div
+              className={cn(
+                "flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2 text-xs",
+                programMatchesShape
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                  : predictedSegments.length === 0
+                    ? "border-amber-200 bg-amber-50 text-amber-900"
+                    : "border-sky-200 bg-sky-50 text-sky-950"
+              )}
+            >
+              <span>
+                {programMatchesShape
+                  ? "The yellow-strip program will draw this shape."
+                  : predictedSegments.length === 0
+                    ? "Write a program with at least one move so this shape has a predicted path."
+                    : segments.length === 0
+                      ? "No shape yet — pick a template or draw edges. Cyan is what the program will do."
+                      : "Cyan dashed line is what the program will draw. Align the program with this shape."}
+              </span>
+              {predictedSegments.length > 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 rounded-lg"
+                  onClick={() => pushSegments(predictedSegments, "CUSTOM")}
+                >
+                  Use program path as shape
+                </Button>
+              )}
+            </div>
+          )}
+
           <div className="flex flex-wrap items-center gap-4 text-[11px] text-slate-500">
             <span className="inline-flex items-center gap-1.5">
               <span className="h-0.5 w-5 rounded" style={{ background: shapeColor, opacity: 0.85 }} />
-              Geometry path ({summary.edgeCount} edges)
+              {drawPath
+                ? `Shape students should draw (${segments.length || predictedSegments.length} edges)`
+                : `Geometry path (${summary.edgeCount} edges)`}
             </span>
             <span className="inline-flex items-center gap-1.5">
               <span className="h-2.5 w-2.5 rounded-full bg-orange-500" />
@@ -617,14 +806,21 @@ export function GeometryPathEditor({ config, onChange }: Props) {
             )}
             <span className="inline-flex items-center gap-1.5">
               <span className="h-0.5 w-5 rounded" style={{ background: trailColor }} />
-              Student trail color
+              {drawPath ? "Path the program will take" : "Student trail color"}
             </span>
           </div>
         </div>
 
         {/* —— Config panel —— */}
         <div className="space-y-4 xl:max-h-[calc(100vh-12rem)] xl:overflow-y-auto xl:pr-1">
-          <Section title="Shape" description="Pick a template, then tune size. Switch to Custom to draw freely.">
+          <Section
+            title="Shape"
+            description={
+              drawPath
+                ? "Pick the shape this program should take. Students predict it from the yellow-strip program."
+                : "Pick a template, then tune size. Switch to Custom to draw freely."
+            }
+          >
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {(Object.keys(GEOMETRY_SHAPE_LABELS) as GeometryShapeType[]).map((id) => {
                 const selected = shape === id;
@@ -753,6 +949,7 @@ export function GeometryPathEditor({ config, onChange }: Props) {
             </p>
           </Section>
 
+          {!drawPath && (
           <Section
             title="After tracing the shape"
             description="Some activities end on the shape. Others continue to a final destination."
@@ -900,7 +1097,9 @@ export function GeometryPathEditor({ config, onChange }: Props) {
               </div>
             )}
           </Section>
+          )}
 
+          {!drawPath && (
           <Section title="Assessment" description="Uses the existing How to grade modes — graded in Unity and stored with the attempt.">
             <label className="block space-y-1.5">
               <span className="text-xs font-semibold text-slate-700">How to grade</span>
@@ -962,6 +1161,7 @@ export function GeometryPathEditor({ config, onChange }: Props) {
               )}
             </div>
           </Section>
+          )}
 
           <Section title="Behavior" description="What students see while the robot runs.">
             <label className="flex items-start gap-2 text-xs text-slate-700">
@@ -978,6 +1178,7 @@ export function GeometryPathEditor({ config, onChange }: Props) {
                 </span>
               </span>
             </label>
+            {!drawPath && (
             <label className="flex items-start gap-2 text-xs text-slate-700">
               <input
                 type="checkbox"
@@ -994,13 +1195,9 @@ export function GeometryPathEditor({ config, onChange }: Props) {
                 </span>
               </span>
             </label>
+            )}
             <div className="grid grid-cols-2 gap-2 pt-1">
-              {(
-                [
-                  ["targetColor", "Shape line"],
-                  ["trailColor", "Robot line"],
-                ] as const
-              ).map(([key, label]) => {
+              {(([["targetColor", "Shape line"], ["trailColor", drawPath ? "Program path" : "Robot line"]] as const)).map(([key, label]) => {
                 const value = (gp?.[key] as string | undefined) ?? DEFAULT_GEOMETRY_COLORS[key];
                 return (
                   <label
@@ -1084,7 +1281,17 @@ export function GeometryPathEditor({ config, onChange }: Props) {
             </p>
           </div>
 
-          {summary.edgeCount === 0 && (
+          {drawPath && predictedSegments.length === 0 && (
+            <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              Write a program with at least one move so students have a path to draw.
+            </p>
+          )}
+          {drawPath && segments.length === 0 && (
+            <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              Pick a shape template or draw the path this program should take.
+            </p>
+          )}
+          {!drawPath && summary.edgeCount === 0 && (
             <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
               Draw or select a Geometry Path before publishing.
             </p>

@@ -576,6 +576,14 @@ public class GameAssessmentClient : MonoBehaviour
         public int geometryFinalFacingX;
         public int geometryFinalFacingY;
         public bool geometryHasTelemetry;
+        /// <summary>DRAW_PATH: edges the student drew on the grid.</summary>
+        public string[] geometryDrawnKeys;
+        /// <summary>DRAW_PATH: edges the shown program actually travels.</summary>
+        public string[] geometryExpectedKeys;
+        /// <summary>DRAW_PATH: edges the robot traveled during RUN (how the program works).</summary>
+        public string[] geometryRobotTraveledKeys;
+        /// <summary>PROGRAM or DRAW_PATH.</summary>
+        public string geometryStudentTask;
         /// <summary>Yellow strip at level load, with bag:id / chunk:id kept as single tokens.</summary>
         public string[] programStructureInitial;
         /// <summary>Yellow strip at the last RUN, with bag:id / chunk:id kept as single tokens.</summary>

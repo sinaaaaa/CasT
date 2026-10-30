@@ -18,6 +18,7 @@ import {
   visitSequenceReady,
   geometryPathReady,
   buildGeometryAuthoringSummary,
+  isGeometryDrawPath,
   type LevelGameplayConfig,
 } from "@/lib/level-config";
 import { Badge } from "@/components/ui/badge";
@@ -73,7 +74,9 @@ export function StepPreviewPublish({
           : objectCount > 0 || levelType === LevelType.FLAG_PLACEMENT,
       label:
         levelType === LevelType.GEOMETRY_PATH
-          ? "Geometry path has at least one edge"
+          ? isGeometryDrawPath(config.geometryPath)
+            ? "Shown program is set so students can draw its path"
+            : "Geometry path has at least one edge"
           : "Grid has objects or flag mode",
     },
     {

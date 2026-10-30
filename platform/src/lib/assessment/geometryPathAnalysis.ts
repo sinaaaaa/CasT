@@ -9,11 +9,14 @@ import { isGeometryPathLevel } from "@/lib/assessment/assessmentConfig";
 import {
   geometryRequiresDestination,
   geometryRequiresFinishFacing,
+  isGeometryDrawPath,
   segmentKey,
   type GeometryAfterShapeBehavior,
+  type GeometryStudentTask,
   type GeometryValidationMode,
   type PathSegment,
 } from "@/lib/geometry-path";
+import { geometryProgramPathSegments } from "@/lib/geometry-program-path";
 import { parseGeometryPathTelemetry } from "@/lib/attempt-mistakes";
 import { resolveProgramStructureFlags } from "@/lib/assessment/programStructureAnalysis";
 
@@ -36,6 +39,7 @@ export type GeometryCombinedOutcome =
 
 export type GeometryPathAnalysisResult = {
   available: boolean;
+  studentTask: GeometryStudentTask;
   validationMode: GeometryValidationMode;
   afterShapeBehavior: GeometryAfterShapeBehavior;
   requiresDestination: boolean;
@@ -108,11 +112,13 @@ export function buildGeometryPathAnalysisFromAttempt(args: {
   return analyzeGeometryPathAttempt({
     config: args.config,
     levelType: args.levelType,
-    traveledKeys: tel?.traveledKeys ?? null,
+    traveledKeys: tel?.traveledKeys ?? tel?.drawnKeys ?? null,
     completedKeys: tel?.completedKeys ?? null,
     travelOrder: tel?.travelOrder ?? null,
     finalCell: tel?.finalCell ?? null,
     finalFacing: tel?.finalFacing ?? null,
+    expectedKeys: tel?.expectedKeys ?? null,
+    studentTask: tel?.studentTask ?? null,
     passed: args.passed,
   });
 }
@@ -128,14 +134,27 @@ export function analyzeGeometryPathAttempt(args: {
   travelOrder?: string[] | null;
   finalCell?: { x: number; y: number } | null;
   finalFacing?: { x: number; y: number } | null;
+  expectedKeys?: string[] | null;
+  studentTask?: GeometryStudentTask | null;
   passed?: boolean | null;
 }): GeometryPathAnalysisResult {
   const gp = args.config.geometryPath;
-  const available = isGeometryPathLevel(args.config, args.levelType) && !!gp?.segments?.length;
-  const mode = (gp?.validationMode ?? "TRACE_TARGET") as GeometryValidationMode;
+  const studentTask: GeometryStudentTask =
+    args.studentTask === "DRAW_PATH" || isGeometryDrawPath(gp) ? "DRAW_PATH" : "PROGRAM";
+  const drawPath = studentTask === "DRAW_PATH";
+  const predicted = drawPath ? geometryProgramPathSegments(args.config) : [];
+  const expectedFromKeys = (args.expectedKeys ?? []).filter(Boolean);
+  const targetSegments: PathSegment[] = drawPath
+    ? expectedFromKeys.length
+      ? expectedFromKeys.map(keyToSegment).filter((s): s is PathSegment => s != null)
+      : predicted
+    : (gp?.segments ?? []);
+  const available =
+    isGeometryPathLevel(args.config, args.levelType) && (drawPath || targetSegments.length > 0);
+  const mode = (drawPath ? "EXACT_PATH" : gp?.validationMode ?? "TRACE_TARGET") as GeometryValidationMode;
   const afterShapeBehavior = (gp?.afterShapeBehavior ?? "SHAPE_COMPLETE") as GeometryAfterShapeBehavior;
-  const requiresDestination = geometryRequiresDestination(gp);
-  const target = undirectedKeys(gp?.segments ?? []);
+  const requiresDestination = !drawPath && geometryRequiresDestination(gp);
+  const target = undirectedKeys(targetSegments);
   const targetEdgeCount = target.size;
 
   const traveled = new Set([
@@ -147,7 +166,7 @@ export function analyzeGeometryPathAttempt(args: {
   let completedEdgeCount = 0;
   const edges: GeometryEdgeVisual[] = [];
 
-  for (const seg of gp?.segments ?? []) {
+  for (const seg of targetSegments) {
     const key = segmentKey(seg.from, seg.to);
     const done = traveled.has(key);
     if (done) completedEdgeCount++;
@@ -265,12 +284,15 @@ export function analyzeGeometryPathAttempt(args: {
           ? "destination missed"
           : "destination not evaluated";
     summary = `${geoPart}; ${destPart}. Extra edges: ${extraEdgeCount}.`;
+  } else if (drawPath) {
+    summary = `Drew ${completedEdgeCount}/${targetEdgeCount} program edges (${pathCompletionPct}%). Extra edges: ${extraEdgeCount}.`;
   } else {
     summary = `Completed ${completedEdgeCount}/${targetEdgeCount} target edges (${pathCompletionPct}%). Extra edges: ${extraEdgeCount}.`;
   }
 
   return {
     available,
+    studentTask,
     validationMode: mode,
     afterShapeBehavior,
     requiresDestination,
@@ -302,15 +324,22 @@ export function analyzeGeometryPathAttempt(args: {
 }
 
 /** Server-side pass check from stored telemetry (mirrors Unity validation modes). */
+function keyToSegment(key: string): PathSegment | null {
+  const parsed = parseKey(key);
+  if (!parsed) return null;
+  return { from: parsed.from, to: parsed.to };
+}
+
 export function resolveGeometryPathPassed(args: {
   config: LevelGameplayConfig;
   mistakes: unknown;
   programTokens?: string[];
 }): boolean | null {
   const gp = args.config.geometryPath;
-  if (!gp?.segments?.length) return null;
   const tel = parseGeometryPathTelemetry(args.mistakes);
   if (!tel) return null;
+  const drawPath = tel.studentTask === "DRAW_PATH" || isGeometryDrawPath(gp);
+  if (!drawPath && !gp?.segments?.length) return null;
 
   const analysis = analyzeGeometryPathAttempt({
     config: args.config,
@@ -319,8 +348,16 @@ export function resolveGeometryPathPassed(args: {
     travelOrder: tel.travelOrder,
     finalCell: tel.finalCell,
     finalFacing: tel.finalFacing,
+    expectedKeys: tel.expectedKeys,
+    studentTask: tel.studentTask,
   });
 
+  if (drawPath) {
+    if (!analysis.hasTelemetry && tel.finalCell == null) return null;
+    return analysis.shapeCompleted && analysis.extraEdgeCount === 0 && analysis.targetEdgeCount > 0;
+  }
+
+  if (!gp) return null;
   if (!analysis.hasTelemetry && tel.finalCell == null) return null;
 
   const mode = analysis.validationMode;

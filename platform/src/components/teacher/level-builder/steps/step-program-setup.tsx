@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { LevelType } from "@prisma/client";
+import { isGeometryDrawPath } from "@/lib/geometry-path";
 import { Blocks, CheckCircle2 } from "lucide-react";
 import type { LevelGameplayConfig } from "@/lib/level-config";
 import { isCanvasLayout } from "@/lib/level-config";
@@ -96,17 +97,26 @@ export function StepProgramSetup({ levelType, config, onChange }: Props) {
   if (levelType === LevelType.GEOMETRY_PATH) {
     const tools = config.geometryPath?.tools;
     const showBags = tools?.commandBags || tools?.actionChunks;
+    const drawPath = isGeometryDrawPath(config.geometryPath);
     return (
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
         <ItemBuilderStepFrame
           icon={Blocks}
-          title="Student programming tools"
-          subtitle="Choose how students build programs to trace the geometry — then author Chunks or Bags if needed."
+          title={drawPath ? "Program students will see" : "Student programming tools"}
+          subtitle={
+            drawPath
+              ? "Write the program shown in the yellow strip. Students draw that path on the grid."
+              : "Choose how students build programs to trace the geometry — then author Chunks or Bags if needed."
+          }
           accent="violet"
         />
         <ItemBuilderPanel
           title="Available tools"
-          description="Students only see what you turn on. Presets speed up common setups."
+          description={
+            drawPath
+              ? "Choose which blocks you can put in the shown program (arrows, Repeat, Chunks, Bags)."
+              : "Students only see what you turn on. Presets speed up common setups."
+          }
         >
           <GeometryPathToolsEditor config={config} onChange={onChange} />
         </ItemBuilderPanel>
@@ -124,8 +134,12 @@ export function StepProgramSetup({ levelType, config, onChange }: Props) {
           </p>
         )}
         <ItemBuilderPanel
-          title="Starting program"
-          description="Start students with a blank program, or seed a starter program they edit to trace the shape."
+          title={drawPath ? "Shown program" : "Starting program"}
+          description={
+            drawPath
+              ? "This program is locked in the yellow strip. Students predict it by drawing on the grid."
+              : "Start students with a blank program, or seed a starter program they edit to trace the shape."
+          }
         >
           <GeometryStarterProgramEditor config={config} onChange={onChange} />
         </ItemBuilderPanel>

@@ -21,6 +21,8 @@ public class GeometryPathController : MonoBehaviour
     public Color trailColor = new Color(0.05f, 0.78f, 1f, 1f);
     public Color offPathColor = new Color(1f, 0.32f, 0.28f, 1f);
     public Color targetGlowColor = new Color(0.85f, 0.70f, 1f, 0.18f);
+    public Color studentDrawColor = new Color(1f, 0.82f, 0.12f, 0.95f);
+    public Color studentEraseColor = new Color(1f, 0.42f, 0.58f, 0.95f);
 
     [Header("Motion / UX")]
     [Range(0.08f, 0.6f)] public float trailDrawDuration = 0.22f;
@@ -33,16 +35,37 @@ public class GeometryPathController : MonoBehaviour
     readonly List<LineRenderer> _targetLines = new List<LineRenderer>();
     readonly List<LineRenderer> _targetGlowLines = new List<LineRenderer>();
     readonly List<LineRenderer> _trailLines = new List<LineRenderer>();
+    readonly List<LineRenderer> _drawnLines = new List<LineRenderer>();
     readonly HashSet<string> _completedKeys = new HashSet<string>();
     readonly HashSet<string> _traveledKeys = new HashSet<string>();
     readonly List<string> _travelOrder = new List<string>();
+    readonly HashSet<string> _drawnKeys = new HashSet<string>();
+    readonly List<string> _drawnOrder = new List<string>();
+    readonly HashSet<string> _expectedKeys = new HashSet<string>();
     /// <summary>Frozen after EndRunTracking so Try Again restore does not wipe report telemetry.</summary>
     string[] _lastTraveledKeys = System.Array.Empty<string>();
     string[] _lastCompletedKeys = System.Array.Empty<string>();
     string[] _lastTravelOrder = System.Array.Empty<string>();
+    string[] _lastDrawnKeys = System.Array.Empty<string>();
+    string[] _lastExpectedKeys = System.Array.Empty<string>();
+    string[] _lastRobotTraveledKeys = System.Array.Empty<string>();
     Vector2Int _lastRobotCell;
     Vector2Int _lastRobotFacing;
     GameObject _startMarker;
+    GameObject _hoverMarker;
+    GameObject _drawStartMarker;
+    GameObject _penMarker;
+    GameObject _toolCursor;
+    Sprite _pencilCursorSprite;
+    Sprite _eraserCursorSprite;
+    LineRenderer _previewLine;
+    readonly List<GameObject> _nodeMarkers = new List<GameObject>();
+    readonly List<GameObject> _neighborPads = new List<GameObject>();
+    static readonly Vector2Int[] OrthoDirs =
+    {
+        new Vector2Int(1, 0), new Vector2Int(-1, 0),
+        new Vector2Int(0, 1), new Vector2Int(0, -1)
+    };
     Material _lineMat;
     Material _trailMat;
     bool _runActive;
@@ -65,8 +88,15 @@ public class GeometryPathController : MonoBehaviour
         if (_root != null) Destroy(_root.gameObject);
     }
 
+    public bool IsDrawPathTask => _config != null && _config.IsDrawPathTask;
+
     public bool IsActive =>
-        _config != null && _config.enabled && _config.segments != null && _config.segments.Count > 0;
+        _config != null && _config.enabled &&
+        (IsDrawPathTask || (_config.segments != null && _config.segments.Count > 0));
+
+    public bool AllowStudentDrawing => IsActive && IsDrawPathTask && !_runActive;
+
+    public bool HasStudentDrawing => _drawnKeys.Count > 0;
 
     public void BindLevel(LevelData level)
     {
@@ -85,8 +115,20 @@ public class GeometryPathController : MonoBehaviour
         }
         ResolveCharacterMove();
         ApplyConfigVisuals();
-        ForceRebuildTargetOverlay(playIntro: true);
-        Debug.Log($"[GeometryPath] Drew {_config.segments.Count} target edges.");
+        if (IsDrawPathTask)
+        {
+            EnsureRoot();
+            ShowRoot(true);
+            EnsureDrawScaffold();
+            if (gameObject.activeInHierarchy && _pulseCo == null)
+                _pulseCo = StartCoroutine(IdlePulseLoop());
+            Debug.Log("[GeometryPath] DRAW_PATH: program is shown; student draws the predicted path.");
+        }
+        else
+        {
+            ForceRebuildTargetOverlay(playIntro: true);
+            Debug.Log($"[GeometryPath] Drew {_config.segments.Count} target edges.");
+        }
     }
 
     /// <summary>
@@ -111,12 +153,28 @@ public class GeometryPathController : MonoBehaviour
             return;
         }
 
+        if (IsDrawPathTask)
+        {
+            ClearStudentDrawing();
+            EnsureRoot();
+            ShowRoot(true);
+            SetTargetOverlayVisible(false);
+            EnsureDrawScaffold();
+            SetDrawScaffoldVisible(true);
+            RebuildDrawnOverlay();
+            if (gameObject.activeInHierarchy && _pulseCo == null)
+                _pulseCo = StartCoroutine(IdlePulseLoop());
+            Debug.Log("[GeometryPath] DRAW_PATH new attempt: drawing cleared.");
+            return;
+        }
+
         ForceRebuildTargetOverlay(playIntro: true);
         Debug.Log($"[GeometryPath] Restored shape for new attempt ({_targetLines.Count} edges).");
     }
 
     public void ResetAttempt()
     {
+        ClearStudentDrawing();
         LevelData ld = _cm != null ? _cm.GetCurrentLevelData() : null;
         RestoreForNewAttempt(ld);
     }
@@ -138,8 +196,14 @@ public class GeometryPathController : MonoBehaviour
         ClearTrailVisuals();
         EnsureRoot();
         ShowRoot(true);
+        if (IsDrawPathTask)
+        {
+            RebuildDrawnOverlay();
+            SetDrawScaffoldVisible(false);
+            ClearDrawPointerPreview();
+        }
 
-        bool keepShape = _config != null && _config.keepShapeVisibleDuringRun;
+        bool keepShape = _config != null && _config.keepShapeVisibleDuringRun && !IsDrawPathTask;
         if (keepShape)
         {
             EnsureTargetOverlay();
@@ -162,7 +226,9 @@ public class GeometryPathController : MonoBehaviour
         SnapshotRunTelemetry();
         _runActive = false;
         ShowRoot(true);
-        bool keepShape = _config != null && _config.keepShapeVisibleDuringRun;
+        if (IsDrawPathTask)
+            SetDrawScaffoldVisible(true);
+        bool keepShape = _config != null && _config.keepShapeVisibleDuringRun && !IsDrawPathTask;
         if (keepShape)
         {
             EnsureTargetOverlay();
@@ -179,11 +245,27 @@ public class GeometryPathController : MonoBehaviour
     /// <summary>Freeze traveled/completed edges for platform level-end (before restore clears live sets).</summary>
     public void SnapshotRunTelemetry(Vector2Int? robotCell = null, Vector2Int? robotFacing = null)
     {
-        _lastTraveledKeys = new string[_traveledKeys.Count];
-        _traveledKeys.CopyTo(_lastTraveledKeys);
-        _lastCompletedKeys = new string[_completedKeys.Count];
-        _completedKeys.CopyTo(_lastCompletedKeys);
-        _lastTravelOrder = _travelOrder.ToArray();
+        if (IsDrawPathTask)
+        {
+            _lastDrawnKeys = HashSetToArray(_drawnKeys);
+            _lastExpectedKeys = HashSetToArray(_expectedKeys);
+            _lastRobotTraveledKeys = HashSetToArray(_traveledKeys);
+            _lastTraveledKeys = _lastDrawnKeys;
+            var completed = new HashSet<string>();
+            foreach (var k in _drawnKeys)
+                if (_expectedKeys.Contains(k)) completed.Add(k);
+            _lastCompletedKeys = HashSetToArray(completed);
+            _lastTravelOrder = _drawnOrder.ToArray();
+        }
+        else
+        {
+            _lastTraveledKeys = HashSetToArray(_traveledKeys);
+            _lastCompletedKeys = HashSetToArray(_completedKeys);
+            _lastTravelOrder = _travelOrder.ToArray();
+            _lastDrawnKeys = System.Array.Empty<string>();
+            _lastExpectedKeys = System.Array.Empty<string>();
+            _lastRobotTraveledKeys = System.Array.Empty<string>();
+        }
         if (robotCell.HasValue) _lastRobotCell = robotCell.Value;
         if (robotFacing.HasValue) _lastRobotFacing = robotFacing.Value;
     }
@@ -197,6 +279,10 @@ public class GeometryPathController : MonoBehaviour
     public string[] GetLastTraveledKeys() => _lastTraveledKeys ?? System.Array.Empty<string>();
     public string[] GetLastCompletedKeys() => _lastCompletedKeys ?? System.Array.Empty<string>();
     public string[] GetLastTravelOrder() => _lastTravelOrder ?? System.Array.Empty<string>();
+    public string[] GetLastDrawnKeys() => _lastDrawnKeys ?? System.Array.Empty<string>();
+    public string[] GetLastExpectedKeys() => _lastExpectedKeys ?? System.Array.Empty<string>();
+    public string[] GetLastRobotTraveledKeys() => _lastRobotTraveledKeys ?? System.Array.Empty<string>();
+    public string GetStudentTask() => IsDrawPathTask ? "DRAW_PATH" : "PROGRAM";
     public Vector2Int GetLastRobotCell() => _lastRobotCell;
     public Vector2Int GetLastRobotFacing() => _lastRobotFacing;
 
@@ -216,6 +302,8 @@ public class GeometryPathController : MonoBehaviour
 
     public string GetFailureHint()
     {
+        if (IsDrawPathTask)
+            return "Draw the path the yellow-strip program will take.";
         if (RequiresFinalDestination())
             return "Trace the glowing shape, then go to the destination.";
         return "Trace the glowing path with your program.";
@@ -230,12 +318,12 @@ public class GeometryPathController : MonoBehaviour
         _traveledKeys.Add(key);
         _travelOrder.Add(key);
 
-        bool onTarget = HasTargetKey(key);
-        if (onTarget) _completedKeys.Add(key);
+        bool onTarget = IsDrawPathTask ? _drawnKeys.Contains(key) : HasTargetKey(key);
+        if (!IsDrawPathTask && onTarget) _completedKeys.Add(key);
 
         if (_config.drawRobotTrail)
         {
-            Color col = onTarget ? trailColor : offPathColor;
+            Color col = IsDrawPathTask ? trailColor : (onTarget ? trailColor : offPathColor);
             StartCoroutine(AnimateTrailSegment(from, to, col));
         }
 
@@ -255,9 +343,19 @@ public class GeometryPathController : MonoBehaviour
     public bool ValidateAfterRun(LevelData level, Vector2Int robotCell, Vector2Int robotFacing)
     {
         CaptureRobotPose(robotCell, robotFacing);
-        SnapshotRunTelemetry(robotCell, robotFacing);
 
         if (!IsActive) return true;
+
+        if (IsDrawPathTask)
+        {
+            CollectExpectedKeysFromProgram();
+            SnapshotRunTelemetry(robotCell, robotFacing);
+            if (_expectedKeys.Count == 0) return _drawnKeys.Count == 0;
+            return SetsEqual(_drawnKeys, _expectedKeys);
+        }
+
+        SnapshotRunTelemetry(robotCell, robotFacing);
+
         string mode = string.IsNullOrEmpty(_config.validationMode)
             ? "TRACE_TARGET"
             : _config.validationMode.Trim().ToUpperInvariant();
@@ -786,6 +884,13 @@ public class GeometryPathController : MonoBehaviour
                     _startMarker.transform.localScale = Vector3.one * (baseMarkerRadius * mul);
                 }
             }
+            if (_drawStartMarker != null && IsDrawPathTask && !_runActive)
+            {
+                float spacing = CellSpacing();
+                float mul = Mathf.Lerp(0.92f, 1.16f, pulse);
+                float r = spacing * 0.28f * mul;
+                _drawStartMarker.transform.localScale = new Vector3(r * 2f, spacing * 0.045f, r * 2f);
+            }
             yield return null;
         }
     }
@@ -1039,17 +1144,568 @@ public class GeometryPathController : MonoBehaviour
         _completedKeys.Clear();
         _traveledKeys.Clear();
         _travelOrder.Clear();
+        _drawnKeys.Clear();
+        _drawnOrder.Clear();
+        _expectedKeys.Clear();
         ClearTrailVisuals();
+        ClearDrawPointerPreview();
+        DestroyLineList(_drawnLines);
         DestroyLineList(_targetLines);
         DestroyLineList(_targetGlowLines);
         DestroyStartMarker();
+        DestroyDrawScaffold();
+        if (_hoverMarker != null)
+        {
+            Destroy(_hoverMarker);
+            _hoverMarker = null;
+        }
+        if (_previewLine != null)
+        {
+            if (_previewLine.sharedMaterial != null &&
+                _previewLine.sharedMaterial != _lineMat &&
+                _previewLine.sharedMaterial != _trailMat)
+                Destroy(_previewLine.sharedMaterial);
+            Destroy(_previewLine.gameObject);
+            _previewLine = null;
+        }
         if (_root != null)
         {
             Destroy(_root.gameObject);
             _root = null;
         }
+        _hoverMarker = null;
+        _previewLine = null;
+        _toolCursor = null;
+        _drawStartMarker = null;
+        _penMarker = null;
+        _nodeMarkers.Clear();
+        _neighborPads.Clear();
         if (!keepConfig) _config = null;
         _runActive = false;
+    }
+
+    public bool TryAddDrawnEdge(Vector2Int from, Vector2Int to)
+    {
+        if (!AllowStudentDrawing || from == to || !AreAdjacent(from, to)) return false;
+        if (_cm != null && (!_cm.CellInGridBounds(from) || !_cm.CellInGridBounds(to))) return false;
+        string key = SegmentKey(from, to);
+        if (_drawnKeys.Contains(key)) return false;
+        _drawnKeys.Add(key);
+        _drawnOrder.Add(key);
+        EnsureRoot();
+        ShowRoot(true);
+        var lr = CreateLine("Drawn_" + _drawnLines.Count, studentDrawColor, trailWidthFraction * 1.05f, dashed: false);
+        SetLineEndpoints(lr, from, to);
+        lr.sortingOrder = 80;
+        _drawnLines.Add(lr);
+        return true;
+    }
+
+    /// <summary>
+    /// Walk orthogonally from <paramref name="from"/> to <paramref name="to"/>, removing edges that exist.
+    /// </summary>
+    public int EraseDrawnPath(Vector2Int from, Vector2Int to)
+    {
+        if (!AllowStudentDrawing || from == to) return 0;
+        int changes = 0;
+        Vector2Int cur = from;
+        int guard = gridStepGuard();
+        while (cur != to && guard-- > 0)
+        {
+            Vector2Int next = StepToward(cur, to);
+            if (next == cur) break;
+            if (RemoveDrawnEdge(SegmentKey(cur, next))) changes++;
+            cur = next;
+        }
+        return changes;
+    }
+
+    /// <summary>Erase every drawn edge that touches this cell (tap-to-erase).</summary>
+    public int EraseEdgesTouching(Vector2Int cell)
+    {
+        if (!AllowStudentDrawing) return 0;
+        var keys = new List<string>(_drawnOrder);
+        int changes = 0;
+        for (int i = 0; i < keys.Count; i++)
+        {
+            if (!TryParseKey(keys[i], out var a, out var b)) continue;
+            if (a != cell && b != cell) continue;
+            if (RemoveDrawnEdge(keys[i])) changes++;
+        }
+        return changes;
+    }
+
+    public bool HasDrawnEdge(Vector2Int from, Vector2Int to)
+    {
+        return _drawnKeys.Contains(SegmentKey(from, to));
+    }
+
+    /// <summary>
+    /// Walk orthogonally from <paramref name="from"/> to <paramref name="to"/>, adding edges.
+    /// Dragging backward over the last edge undoes it (natural mouse/touch correction).
+    /// </summary>
+    public int ConnectDrawnPath(Vector2Int from, Vector2Int to)
+    {
+        if (!AllowStudentDrawing || from == to) return 0;
+        int changes = 0;
+        Vector2Int cur = from;
+        int guard = gridStepGuard();
+        while (cur != to && guard-- > 0)
+        {
+            Vector2Int next = StepToward(cur, to);
+            if (next == cur) break;
+            if (TryConnectDrawnCells(cur, next)) changes++;
+            cur = next;
+        }
+        return changes;
+    }
+
+    bool TryConnectDrawnCells(Vector2Int from, Vector2Int to)
+    {
+        if (!AreAdjacent(from, to)) return false;
+        string key = SegmentKey(from, to);
+        if (_drawnOrder.Count > 0 && _drawnOrder[_drawnOrder.Count - 1] == key)
+        {
+            RemoveLastDrawnEdge();
+            return true;
+        }
+        return TryAddDrawnEdge(from, to);
+    }
+
+    void RemoveLastDrawnEdge()
+    {
+        if (_drawnOrder.Count == 0) return;
+        RemoveDrawnEdge(_drawnOrder[_drawnOrder.Count - 1]);
+    }
+
+    bool RemoveDrawnEdge(string key)
+    {
+        if (string.IsNullOrEmpty(key) || !_drawnKeys.Contains(key)) return false;
+        _drawnKeys.Remove(key);
+        int idx = _drawnOrder.IndexOf(key);
+        if (idx >= 0) _drawnOrder.RemoveAt(idx);
+        if (idx >= 0 && idx < _drawnLines.Count)
+        {
+            var lr = _drawnLines[idx];
+            _drawnLines.RemoveAt(idx);
+            if (lr != null)
+            {
+                if (lr.sharedMaterial != null && lr.sharedMaterial != _lineMat && lr.sharedMaterial != _trailMat)
+                    Destroy(lr.sharedMaterial);
+                Destroy(lr.gameObject);
+            }
+        }
+        else if (_drawnLines.Count != _drawnOrder.Count)
+        {
+            RebuildDrawnOverlay();
+        }
+        return true;
+    }
+
+    static Vector2Int StepToward(Vector2Int from, Vector2Int to)
+    {
+        int dx = to.x - from.x;
+        int dy = to.y - from.y;
+        if (dx == 0 && dy == 0) return from;
+        if (Mathf.Abs(dx) >= Mathf.Abs(dy) && dx != 0)
+            return new Vector2Int(from.x + (dx > 0 ? 1 : -1), from.y);
+        if (dy != 0)
+            return new Vector2Int(from.x, from.y + (dy > 0 ? 1 : -1));
+        return from;
+    }
+
+    int gridStepGuard()
+    {
+        int cols = _cm != null ? Mathf.Max(1, _cm.gridCols) : 6;
+        int rows = _cm != null ? Mathf.Max(1, _cm.gridRows) : 6;
+        return cols * rows + 4;
+    }
+
+    public void SetDrawToolSprites(Sprite pencil, Sprite eraser)
+    {
+        if (pencil != null) _pencilCursorSprite = pencil;
+        if (eraser != null) _eraserCursorSprite = eraser;
+    }
+
+    public void SetDrawPointerPreview(Vector2Int? hover, Vector2Int? from, bool drawing, bool eraseMode = false, Vector3? cursorWorld = null)
+    {
+        if (!AllowStudentDrawing)
+        {
+            ClearDrawPointerPreview();
+            return;
+        }
+        if (!hover.HasValue && !from.HasValue && !cursorWorld.HasValue)
+        {
+            ClearDrawPointerPreview();
+            return;
+        }
+
+        EnsureRoot();
+        ShowRoot(true);
+        EnsureHoverMarker();
+        EnsureNeighborPads();
+        EnsurePenMarker();
+        EnsureToolCursor();
+
+        Color accent = eraseMode ? studentEraseColor : studentDrawColor;
+        if (!from.HasValue && !hover.HasValue)
+        {
+            if (_penMarker != null) _penMarker.SetActive(false);
+            if (_hoverMarker != null) _hoverMarker.SetActive(false);
+            if (_previewLine != null) _previewLine.gameObject.SetActive(false);
+            for (int i = 0; i < _neighborPads.Count; i++)
+                if (_neighborPads[i] != null) _neighborPads[i].SetActive(false);
+            UpdateToolCursor(cursorWorld.Value, eraseMode, visible: true);
+            return;
+        }
+
+        Vector2Int padOrigin = from ?? hover.Value;
+        float spacing = CellSpacing();
+        float pulse = 0.9f + 0.1f * Mathf.Sin(Time.unscaledTime * 5.4f);
+
+        if (from.HasValue)
+        {
+            _penMarker.SetActive(true);
+            _penMarker.transform.position = CellWorld(from.Value, 0.2f);
+            float penR = spacing * 0.7f * pulse;
+            _penMarker.transform.localScale = new Vector3(penR, spacing * 0.04f, penR);
+            TintPrimitive(_penMarker, accent, 0.38f);
+        }
+        else if (_penMarker != null)
+        {
+            _penMarker.SetActive(false);
+        }
+
+        if (hover.HasValue && (!from.HasValue || hover.Value != from.Value))
+        {
+            _hoverMarker.SetActive(true);
+            _hoverMarker.transform.position = CellWorld(hover.Value, 0.24f);
+            float h = spacing * (AreAdjacent(padOrigin, hover.Value) ? 0.78f : 0.62f);
+            _hoverMarker.transform.localScale = new Vector3(h, spacing * 0.035f, h);
+            TintPrimitive(_hoverMarker, accent, drawing ? 0.55f : 0.36f);
+        }
+        else if (_hoverMarker != null)
+        {
+            _hoverMarker.SetActive(false);
+        }
+
+        for (int i = 0; i < _neighborPads.Count && i < OrthoDirs.Length; i++)
+        {
+            var pad = _neighborPads[i];
+            if (pad == null) continue;
+            Vector2Int n = padOrigin + OrthoDirs[i];
+            bool inBounds = _cm != null && _cm.CellInGridBounds(n);
+            bool hasEdge = inBounds && _drawnKeys.Contains(SegmentKey(padOrigin, n));
+            bool show = inBounds && (eraseMode ? hasEdge : true);
+            pad.SetActive(show);
+            if (!show) continue;
+            bool aimed = hover.HasValue && hover.Value == n;
+            pad.transform.position = CellWorld(n, 0.26f);
+            float s = spacing * (aimed ? 0.58f : 0.5f) * pulse;
+            pad.transform.localScale = new Vector3(s, spacing * 0.04f, s);
+            TintPrimitive(pad, accent, aimed ? 0.78f : (eraseMode ? 0.55f : 0.62f));
+        }
+
+        if (from.HasValue && hover.HasValue && from.Value != hover.Value && AreAdjacent(from.Value, hover.Value))
+        {
+            EnsurePreviewLine();
+            SetLineEndpoints(_previewLine, from.Value, hover.Value);
+            Color pc = accent;
+            pc.a = 0.8f;
+            ApplyColorToLine(_previewLine, pc);
+            _previewLine.gameObject.SetActive(true);
+        }
+        else if (_previewLine != null)
+        {
+            _previewLine.gameObject.SetActive(false);
+        }
+
+        Vector3 cursorAt = cursorWorld.HasValue
+            ? cursorWorld.Value
+            : (hover.HasValue ? CellWorld(hover.Value, 1.6f) : (from.HasValue ? CellWorld(from.Value, 1.6f) : Vector3.zero));
+        bool showCursor = drawing || hover.HasValue || cursorWorld.HasValue;
+        UpdateToolCursor(cursorAt, eraseMode, visible: showCursor);
+    }
+
+    public void ClearDrawPointerPreview()
+    {
+        if (_hoverMarker != null) _hoverMarker.SetActive(false);
+        if (_previewLine != null) _previewLine.gameObject.SetActive(false);
+        if (_toolCursor != null) _toolCursor.SetActive(false);
+        if (_penMarker != null) _penMarker.SetActive(false);
+        for (int i = 0; i < _neighborPads.Count; i++)
+            if (_neighborPads[i] != null) _neighborPads[i].SetActive(false);
+    }
+
+    void EnsureHoverMarker()
+    {
+        if (_hoverMarker != null) return;
+        _hoverMarker = CreateFloorDisc("DrawHoverCell", studentDrawColor, 0.28f);
+    }
+
+    void EnsurePreviewLine()
+    {
+        if (_previewLine != null) return;
+        Color c = studentDrawColor;
+        c.a = 0.4f;
+        _previewLine = CreateLine("DrawPreview", c, trailWidthFraction * 0.85f, dashed: true);
+        _previewLine.sortingOrder = 70;
+    }
+
+    void EnsureNeighborPads()
+    {
+        bool ready = _neighborPads.Count == OrthoDirs.Length;
+        if (ready)
+        {
+            for (int i = 0; i < _neighborPads.Count; i++)
+                if (_neighborPads[i] == null) { ready = false; break; }
+        }
+        if (ready) return;
+        DestroyNeighborPads();
+        for (int i = 0; i < OrthoDirs.Length; i++)
+        {
+            var pad = CreateFloorDisc("DrawNeighbor_" + i, studentDrawColor, 0.45f);
+            pad.SetActive(false);
+            _neighborPads.Add(pad);
+        }
+    }
+
+    void EnsurePenMarker()
+    {
+        if (_penMarker != null) return;
+        _penMarker = CreateFloorDisc("DrawPenCell", studentDrawColor, 0.4f);
+        _penMarker.SetActive(false);
+    }
+
+    void EnsureToolCursor()
+    {
+        if (_toolCursor != null) return;
+        _toolCursor = CreateFloorDisc("DrawContact", studentDrawColor, 0.9f);
+        _toolCursor.SetActive(false);
+    }
+
+    void UpdateToolCursor(Vector3 world, bool eraseMode, bool visible)
+    {
+        if (_toolCursor == null) return;
+        if (!visible)
+        {
+            _toolCursor.SetActive(false);
+            return;
+        }
+        _toolCursor.SetActive(true);
+        float spacing = CellSpacing();
+        float r = spacing * (eraseMode ? 0.28f : 0.18f);
+        Vector3 p = world;
+        p.y += LiftHeight() * 1.8f;
+        _toolCursor.transform.position = p;
+        _toolCursor.transform.localScale = new Vector3(r, spacing * 0.045f, r);
+        Color c = eraseMode ? studentEraseColor : studentDrawColor;
+        TintPrimitive(_toolCursor, c, eraseMode ? 0.62f : 0.88f);
+    }
+
+    void EnsureDrawScaffold()
+    {
+        if (!IsDrawPathTask) return;
+        EnsureRoot();
+        BuildNodeLattice();
+        BuildDrawStartMarker();
+    }
+
+    void SetDrawScaffoldVisible(bool on)
+    {
+        for (int i = 0; i < _nodeMarkers.Count; i++)
+            if (_nodeMarkers[i] != null) _nodeMarkers[i].SetActive(on);
+        if (_drawStartMarker != null) _drawStartMarker.SetActive(on && !_runActive);
+        if (!on) ClearDrawPointerPreview();
+    }
+
+    void BuildNodeLattice()
+    {
+        if (_cm == null) return;
+        if (_nodeMarkers.Count > 0 && _nodeMarkers[0] != null) return;
+        DestroyNodeLattice();
+        int cols = Mathf.Max(1, _cm.gridCols);
+        int rows = Mathf.Max(1, _cm.gridRows);
+        float spacing = CellSpacing();
+        Color nodeCol = new Color(1f, 0.92f, 0.55f, 0.42f);
+        for (int x = 0; x < cols; x++)
+        {
+            for (int y = 0; y < rows; y++)
+            {
+                var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                go.name = "DrawNode";
+                go.transform.SetParent(_root, true);
+                go.transform.position = CellWorld(new Vector2Int(x, y), 0.55f);
+                go.transform.localScale = Vector3.one * (spacing * 0.09f);
+                var col = go.GetComponent<Collider>();
+                if (col != null)
+                {
+                    col.enabled = false;
+                    Destroy(col);
+                }
+                var rend = go.GetComponent<Renderer>();
+                if (rend != null)
+                {
+                    rend.sharedMaterial = CreateColoredLineMaterial(nodeCol, 3040);
+                    rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                    rend.receiveShadows = false;
+                }
+                _nodeMarkers.Add(go);
+            }
+        }
+    }
+
+    void BuildDrawStartMarker()
+    {
+        if (_drawStartMarker != null || _cm == null) return;
+        var level = _cm.GetCurrentLevelData();
+        Vector2Int start = level != null ? level.robotStartPosition : Vector2Int.zero;
+        _drawStartMarker = CreateFloorDisc("DrawStartCell", new Color(1f, 0.55f, 0.12f, 0.9f), 0.55f);
+        float spacing = CellSpacing();
+        float r = spacing * 0.3f;
+        _drawStartMarker.transform.position = CellWorld(start, 0.18f);
+        _drawStartMarker.transform.localScale = new Vector3(r * 2f, spacing * 0.045f, r * 2f);
+    }
+
+    GameObject CreateFloorDisc(string name, Color color, float alpha)
+    {
+        EnsureRoot();
+        var go = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        go.name = name;
+        go.transform.SetParent(_root, true);
+        var col = go.GetComponent<Collider>();
+        if (col != null)
+        {
+            col.enabled = false;
+            Destroy(col);
+        }
+        var rend = go.GetComponent<Renderer>();
+        if (rend != null)
+        {
+            Color c = color;
+            c.a = alpha;
+            rend.sharedMaterial = CreateColoredLineMaterial(c, 3050);
+            rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            rend.receiveShadows = false;
+        }
+        return go;
+    }
+
+    static void TintPrimitive(GameObject go, Color color, float alpha)
+    {
+        if (go == null) return;
+        var rend = go.GetComponent<Renderer>();
+        if (rend == null || rend.sharedMaterial == null) return;
+        Color c = color;
+        c.a = alpha;
+        BakeColorIntoMaterial(rend.sharedMaterial, c);
+    }
+
+    void DestroyDrawScaffold()
+    {
+        DestroyNodeLattice();
+        DestroyNeighborPads();
+        if (_drawStartMarker != null)
+        {
+            Destroy(_drawStartMarker);
+            _drawStartMarker = null;
+        }
+        if (_penMarker != null)
+        {
+            Destroy(_penMarker);
+            _penMarker = null;
+        }
+        if (_toolCursor != null)
+        {
+            Destroy(_toolCursor);
+            _toolCursor = null;
+        }
+    }
+
+    void DestroyNodeLattice()
+    {
+        for (int i = 0; i < _nodeMarkers.Count; i++)
+            if (_nodeMarkers[i] != null) Destroy(_nodeMarkers[i]);
+        _nodeMarkers.Clear();
+    }
+
+    void DestroyNeighborPads()
+    {
+        for (int i = 0; i < _neighborPads.Count; i++)
+            if (_neighborPads[i] != null) Destroy(_neighborPads[i]);
+        _neighborPads.Clear();
+    }
+
+    public void ClearStudentDrawing()
+    {
+        _drawnKeys.Clear();
+        _drawnOrder.Clear();
+        DestroyLineList(_drawnLines);
+        ClearDrawPointerPreview();
+    }
+
+    public void SetExpectedKeys(IEnumerable<string> keys)
+    {
+        _expectedKeys.Clear();
+        if (keys == null) return;
+        foreach (var k in keys)
+        {
+            if (!string.IsNullOrEmpty(k)) _expectedKeys.Add(k);
+        }
+    }
+
+    void CollectExpectedKeysFromProgram()
+    {
+        _expectedKeys.Clear();
+        if (_cm == null) return;
+        var keys = _cm.CollectGeometryProgramPathEdgeKeys();
+        if (keys == null) return;
+        for (int i = 0; i < keys.Count; i++)
+            if (!string.IsNullOrEmpty(keys[i])) _expectedKeys.Add(keys[i]);
+    }
+
+    void RebuildDrawnOverlay()
+    {
+        DestroyLineList(_drawnLines);
+        if (_drawnOrder.Count == 0) return;
+        EnsureRoot();
+        for (int i = 0; i < _drawnOrder.Count; i++)
+        {
+            if (!TryParseKey(_drawnOrder[i], out var from, out var to)) continue;
+            var lr = CreateLine("Drawn_" + i, studentDrawColor, trailWidthFraction * 1.05f, dashed: false);
+            SetLineEndpoints(lr, from, to);
+            lr.sortingOrder = 80;
+            _drawnLines.Add(lr);
+        }
+    }
+
+    static bool TryParseKey(string key, out Vector2Int from, out Vector2Int to)
+    {
+        from = Vector2Int.zero;
+        to = Vector2Int.zero;
+        if (string.IsNullOrEmpty(key)) return false;
+        int bar = key.IndexOf('|');
+        if (bar <= 0) return false;
+        string a = key.Substring(0, bar);
+        string b = key.Substring(bar + 1);
+        int ac = a.IndexOf(',');
+        int bc = b.IndexOf(',');
+        if (ac <= 0 || bc <= 0) return false;
+        if (!int.TryParse(a.Substring(0, ac), out int ax)) return false;
+        if (!int.TryParse(a.Substring(ac + 1), out int ay)) return false;
+        if (!int.TryParse(b.Substring(0, bc), out int bx)) return false;
+        if (!int.TryParse(b.Substring(bc + 1), out int by)) return false;
+        from = new Vector2Int(ax, ay);
+        to = new Vector2Int(bx, by);
+        return true;
+    }
+
+    static string[] HashSetToArray(HashSet<string> set)
+    {
+        if (set == null || set.Count == 0) return System.Array.Empty<string>();
+        var arr = new string[set.Count];
+        set.CopyTo(arr);
+        return arr;
     }
 
     public static string SegmentKey(Vector2Int a, Vector2Int b)
@@ -1104,5 +1760,10 @@ public class GeometryPathData
     public bool requireFinishFacing;
     public string finishObjectType;
     public GeometryPathToolsData tools = new GeometryPathToolsData();
+    public string studentTask = "PROGRAM";
     public bool seedStarterProgram;
+
+    public bool IsDrawPathTask =>
+        !string.IsNullOrEmpty(studentTask) &&
+        studentTask.Trim().Equals("DRAW_PATH", StringComparison.OrdinalIgnoreCase);
 }

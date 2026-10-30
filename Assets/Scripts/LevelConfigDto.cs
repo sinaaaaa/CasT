@@ -92,6 +92,8 @@ public class GeometryPathConfigDto
     public bool requireFinishFacing;
     public string finishObjectType;
     public GeometryPathToolsDto tools;
+    /// <summary>PROGRAM (write a program) or DRAW_PATH (draw the shown program's path).</summary>
+    public string studentTask = "PROGRAM";
     /// <summary>When true, guidedActions is an editable starter program seeded into the yellow strip.</summary>
     public bool seedStarterProgram;
     public int templateSize = 2;
@@ -726,7 +728,10 @@ public static class LevelConfigMapper
                 ld.geometryPath = new GeometryPathData { enabled = true };
             else
                 ld.geometryPath.enabled = true;
-            if (!ld.geometryPath.seedStarterProgram)
+            bool drawPath = ld.geometryPath.IsDrawPathTask;
+            if (drawPath)
+                ld.geometryPath.seedStarterProgram = true;
+            if (!ld.geometryPath.seedStarterProgram && !drawPath)
                 ld.guidedActions = null;
             else if (ld.guidedActions != null)
                 ld.guidedActions.RemoveAll(t => string.IsNullOrEmpty(t) ||
@@ -737,6 +742,7 @@ public static class LevelConfigMapper
         bool debuggingItem =
             t == "DRAG_EDIT_PROGRAM" ||
             (t == "GEOMETRY_PATH" && ld.geometryPath != null && ld.geometryPath.seedStarterProgram &&
+             !ld.geometryPath.IsDrawPathTask &&
              ld.guidedActions != null && ld.guidedActions.Count > 0);
         if (!debuggingItem)
             ld.debuggingConfig = null;
@@ -763,7 +769,9 @@ public static class LevelConfigMapper
             finishFacing = dto.finishFacing != null ? dto.finishFacing.ToVector2Int() : Vector2Int.zero,
             requireFinishFacing = dto.requireFinishFacing,
             finishObjectType = dto.finishObjectType,
-            seedStarterProgram = dto.seedStarterProgram,
+            studentTask = string.IsNullOrEmpty(dto.studentTask) ? "PROGRAM" : dto.studentTask,
+            seedStarterProgram = dto.seedStarterProgram ||
+                string.Equals(dto.studentTask, "DRAW_PATH", StringComparison.OrdinalIgnoreCase),
             segments = new List<GeometryPathSegmentData>(),
             tools = new GeometryPathToolsData(),
         };

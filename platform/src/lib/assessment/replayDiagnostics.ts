@@ -1,6 +1,7 @@
 import type { LevelType } from "@prisma/client";
 import type { LevelGameplayConfig } from "@/lib/level-config";
 import { isGeometryPathLevel } from "@/lib/assessment/assessmentConfig";
+import { isGeometryDrawPath } from "@/lib/geometry-path";
 import { resolveStudentBlockTokens, resolveStudentPalette } from "@/lib/assessment/programStructureAnalysis";
 import { diagnoseGeometryProgram, type GeometryEdgeDiagnosis } from "@/lib/assessment/geometryEdgeDiagnosis";
 import { compareBlockProgram, type BlockProgramComparison } from "@/lib/assessment/blockProgramComparison";
@@ -22,8 +23,9 @@ export function buildReplayDiagnostics(args: {
   if (!tokens.length) return { geometryEdgeDiagnosis: null, blockComparison: null };
 
   const isGeometry = isGeometryPathLevel(config, levelType ?? undefined);
+  const drawPath = isGeometryDrawPath(config.geometryPath);
   let geometryEdgeDiagnosis: GeometryEdgeDiagnosis | null = null;
-  if (isGeometry) {
+  if (isGeometry && !drawPath) {
     const d = diagnoseGeometryProgram({ config, blockTokens: tokens, mistakes: args.mistakes, passed: args.passed });
     geometryEdgeDiagnosis = d.available ? d : null;
   }
@@ -32,7 +34,7 @@ export function buildReplayDiagnostics(args: {
   const usesBlocks =
     isGeometry || palette.bags || palette.chunks || tokens.some((t) => /^(bag:|chunk:|repeat)/.test(t));
   let blockComparison: BlockProgramComparison | null = null;
-  if (usesBlocks && args.passed !== true) {
+  if (usesBlocks && args.passed !== true && !drawPath) {
     const primary = geometryEdgeDiagnosis?.primaryIssue ?? null;
     const c = compareBlockProgram({
       config,

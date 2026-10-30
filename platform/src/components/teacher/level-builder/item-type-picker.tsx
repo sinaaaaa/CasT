@@ -40,7 +40,7 @@ const TYPE_META: Record<
   },
   [LevelType.GEOMETRY_PATH]: {
     icon: Pentagon,
-    example: "Program the robot to trace a glowing shape",
+    example: "Trace a glowing shape, or draw the path a shown program will take",
     gradient: "from-violet-500 to-indigo-600",
   },
 };

@@ -30,6 +30,11 @@ public class RobotGridDrag : MonoBehaviour
     private bool _orbitFloorAngleInitialized;
     private bool _orbitSideIsRight;
     private int _activeTouchFingerId = -1;
+    private bool _usingTouch;
+    private bool _grabPoseActive;
+    private Vector3 _grabBasePosition;
+
+    public bool IsManipulating => _mode != InteractionMode.None || _moveDragging;
 
     private void Awake()
     {
@@ -99,9 +104,9 @@ public class RobotGridDrag : MonoBehaviour
             EnsureInteractionCamera();
             if (UiDragState.IsDragging)
                 return;
-            if (DoesPointerHitRobot(t.position))
+            if (WouldBeginGrab(t.position))
             {
-                BeginPointerInteraction(t.position);
+                BeginPointerInteraction(t.position, touch: true);
                 return;
             }
             if (UiDragState.ShouldBlockWorldPointer(t.position, t.fingerId))
@@ -118,9 +123,9 @@ public class RobotGridDrag : MonoBehaviour
         if (Input.touchCount > 0) return;
         EnsureInteractionCamera();
         if (UiDragState.IsDragging) return;
-        if (DoesPointerHitRobot(Input.mousePosition))
+        if (WouldBeginGrab(Input.mousePosition))
         {
-            BeginPointerInteraction(Input.mousePosition);
+            BeginPointerInteraction(Input.mousePosition, touch: false);
             return;
         }
         if (UiDragState.ShouldBlockWorldPointer(Input.mousePosition)) return;
@@ -132,7 +137,7 @@ public class RobotGridDrag : MonoBehaviour
             _camera = characterMove.GetGridInteractionCamera();
     }
 
-    private void BeginPointerInteraction(Vector2 screenPos)
+    private void BeginPointerInteraction(Vector2 screenPos, bool touch)
     {
         if (characterMove == null || !characterMove.CanDragRobot())
             return;
@@ -140,14 +145,19 @@ public class RobotGridDrag : MonoBehaviour
         _camera = characterMove.GetGridInteractionCamera();
         if (_camera == null) return;
 
+        _usingTouch = touch;
         characterMove.NotifyRobotManipulationStarted();
         GameInteractionSounds.PlayRobotTouch();
+        GameHaptics.PlayGrab();
+        ApplyGrabPose();
 
-        if (characterMove.tangibleSideTapRotate &&
-            TryGetLateralHitOnRobot(screenPos, out float lateral))
+        bool preciseHit = TryGetLateralHitOnRobot(screenPos, out float lateral);
+        if (characterMove.tangibleSideTapRotate && preciseHit)
         {
             float halfCell = characterMove.GetCellSpacingForLayout(characterMove.PlayfieldLevelData()) * 0.5f;
-            float band = halfCell * Mathf.Clamp(characterMove.tangibleCenterDragBandFraction, 0.1f, 0.49f);
+            float bandFrac = Mathf.Clamp(characterMove.tangibleCenterDragBandFraction, 0.1f, 0.49f);
+            if (touch) bandFrac = Mathf.Min(0.48f, bandFrac * 1.35f);
+            float band = halfCell * bandFrac;
 
             if (lateral < -band || lateral > band)
             {
@@ -164,7 +174,9 @@ public class RobotGridDrag : MonoBehaviour
                     return;
                 }
 
+                GameHaptics.PlayTurn();
                 characterMove.RotateRobotFacingQuarterTurn(right);
+                ClearGrabPose();
                 characterMove.NotifyRobotManipulationEnded();
                 return;
             }
@@ -175,6 +187,7 @@ public class RobotGridDrag : MonoBehaviour
         _cellBeforeDrag = characterMove.RobotGridPosition;
         Vector3 world = GetPointerWorldOnFloor(screenPos);
         _offset = transform.position - world;
+        _offset.y += GrabLiftHeight();
     }
 
     private void OnMouseDrag()
@@ -294,18 +307,26 @@ public class RobotGridDrag : MonoBehaviour
             return;
 
         characterMove.NotifyRobotManipulationEnded();
+        ClearGrabPose();
 
         if (_mode == InteractionMode.OrbitRotate)
         {
             if (_orbitAccumulatedScreenPx < characterMove.orbitTapVsDragPixelThreshold)
+            {
+                GameHaptics.PlayTurn();
                 characterMove.RotateRobotFacingQuarterTurn(_orbitSideIsRight);
+            }
             else
+            {
+                GameHaptics.PlayDrop();
                 characterMove.SnapRobotFacingToNearestCardinalFromTransform();
+            }
 
             characterMove.SetManualOrbitDragActive(false);
             characterMove.RestoreAnimatorAfterOrbitIfIdle();
             _mode = InteractionMode.None;
             _activeTouchFingerId = -1;
+            _usingTouch = false;
             return;
         }
 
@@ -313,15 +334,19 @@ public class RobotGridDrag : MonoBehaviour
         {
             _mode = InteractionMode.None;
             _activeTouchFingerId = -1;
+            _usingTouch = false;
             return;
         }
 
         _moveDragging = false;
         _mode = InteractionMode.None;
         _activeTouchFingerId = -1;
+        _usingTouch = false;
         Vector2Int cell = characterMove.WorldToGridCellForRobotDrag(transform.position);
         if (!characterMove.TryPlaceRobotOnCell(cell))
             characterMove.RevertRobotToCell(_cellBeforeDrag);
+        else
+            GameHaptics.PlayDrop();
     }
 
     private void OnDisable()
@@ -334,12 +359,21 @@ public class RobotGridDrag : MonoBehaviour
         }
         _mode = InteractionMode.None;
         _moveDragging = false;
+        _usingTouch = false;
+        ClearGrabPose();
+    }
+
+    public bool WouldBeginGrab(Vector2 screenPos)
+    {
+        if (characterMove == null || !characterMove.CanDragRobot()) return false;
+        EnsureInteractionCamera();
+        if (TryGetLateralHitOnRobot(screenPos, out _)) return true;
+        return IsWithinGrabRadius(screenPos);
     }
 
     private bool DoesPointerHitRobot(Vector2 screenPos)
     {
-        EnsureInteractionCamera();
-        return TryGetLateralHitOnRobot(screenPos, out _);
+        return WouldBeginGrab(screenPos);
     }
 
     /// <summary>Lateral offset of the ray hit on the robot, along robot's flattened right axis (+ = right).</summary>
@@ -377,6 +411,51 @@ public class RobotGridDrag : MonoBehaviour
         }
 
         return false;
+    }
+
+    bool IsWithinGrabRadius(Vector2 screenPos)
+    {
+        EnsureInteractionCamera();
+        if (_camera == null) return false;
+        Bounds b = characterMove != null ? characterMove.RobotVisibleBounds() : new Bounds(transform.position, Vector3.one);
+        Vector3 robotScreen = _camera.WorldToScreenPoint(b.center);
+        if (robotScreen.z < 0.05f) return false;
+        float radius = GrabScreenRadius(b);
+        return Vector2.Distance(screenPos, new Vector2(robotScreen.x, robotScreen.y)) <= radius;
+    }
+
+    float GrabScreenRadius(Bounds worldBounds)
+    {
+        EnsureInteractionCamera();
+        if (_camera == null) return 88f;
+        Vector3 c = worldBounds.center;
+        Vector3 edge = c + _camera.transform.right * (worldBounds.extents.x + worldBounds.extents.z) * 0.5f;
+        Vector2 sc = _camera.WorldToScreenPoint(c);
+        Vector2 se = _camera.WorldToScreenPoint(edge);
+        float fromMesh = Vector2.Distance(sc, se) + 36f;
+        float minPx = _usingTouch || Input.touchCount > 0 ? 72f : 56f;
+        return Mathf.Clamp(fromMesh, minPx, 140f);
+    }
+
+    float GrabLiftHeight()
+    {
+        Bounds b = characterMove != null ? characterMove.RobotVisibleBounds() : new Bounds(transform.position, Vector3.one);
+        return Mathf.Clamp(b.size.y * 0.12f, 0.04f, 0.45f);
+    }
+
+    void ApplyGrabPose()
+    {
+        if (_grabPoseActive) return;
+        _grabPoseActive = true;
+        _grabBasePosition = transform.position;
+        Vector3 p = transform.position;
+        p.y += GrabLiftHeight();
+        transform.position = p;
+    }
+
+    void ClearGrabPose()
+    {
+        _grabPoseActive = false;
     }
 
     private Vector3 GetPointerWorldOnFloor(Vector2 screenPos)

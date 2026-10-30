@@ -635,11 +635,13 @@ public class RepeatQueueVisualizer : MonoBehaviour
             new Color(1f, 1f, 1f, 0.95f), new Color(0.25f, 0.25f, 0.3f, 1f),
             () => ChangeCount(r, +1),
             plusSprite);
+        ApplyCountButtonLock(root.transform, r);
     }
 
     private void ChangeCount(QueuedActionRef endRef, int delta)
     {
         if (endRef == null) return;
+        if (characterMove != null && characterMove.IsProgramQueueLocked()) return;
         int previous = endRef.repeatCount;
         if (ProgramSequenceUtil.ClampRepeatCount(previous + delta) == previous) return;
         if (characterMove != null && !characterMove.DebugApproveRepeatCount(endRef)) return;
@@ -672,11 +674,20 @@ public class RepeatQueueVisualizer : MonoBehaviour
     private void ApplyCountButtonLock(Transform endContent, QueuedActionRef r)
     {
         if (endContent == null || characterMove == null) return;
-        bool locked = characterMove.DebugRepeatCountLocked(r);
+        bool programLocked = characterMove.IsProgramQueueLocked();
+        bool locked = programLocked || characterMove.DebugRepeatCountLocked(r);
         var minus = endContent.Find("Minus")?.GetComponent<Button>();
         var plus = endContent.Find("Plus")?.GetComponent<Button>();
-        if (minus != null && minus.interactable == locked) minus.interactable = !locked;
-        if (plus != null && plus.interactable == locked) plus.interactable = !locked;
+        if (minus != null)
+        {
+            minus.interactable = !locked;
+            minus.gameObject.SetActive(!programLocked);
+        }
+        if (plus != null)
+        {
+            plus.interactable = !locked;
+            plus.gameObject.SetActive(!programLocked);
+        }
     }
 
     private static void CreateSizedBtn(

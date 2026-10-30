@@ -234,9 +234,10 @@ export function AttemptAssessmentView({ attempt }: { attempt: AttemptDetailPaylo
           bugFixed: debugResult.bugFixed,
         })
       : null;
-  const showEdgeDiagnosis = Boolean(attempt.geometryEdgeDiagnosis?.available);
-  const showBlockComparison = Boolean(attempt.blockComparison?.available) && !debugBlockView;
-  const showProgramStructure = Boolean(attempt.programStructure?.available);
+  const isDrawPathAssessment = geometryResult?.studentTask === "DRAW_PATH";
+  const showEdgeDiagnosis = Boolean(attempt.geometryEdgeDiagnosis?.available) && !isDrawPathAssessment;
+  const showBlockComparison = Boolean(attempt.blockComparison?.available) && !debugBlockView && !isDrawPathAssessment;
+  const showProgramStructure = Boolean(attempt.programStructure?.available) && !isDrawPathAssessment;
   const showDebuggingEdits = Boolean(attempt.debuggingEdits?.available);
   const showDiagnosisSection = showEdgeDiagnosis || showBlockComparison;
   const showRepairSection = showProgramStructure || showDebuggingEdits;
@@ -416,14 +417,25 @@ export function AttemptAssessmentView({ attempt }: { attempt: AttemptDetailPaylo
         <GeometryPathAnalysisPanel
           result={geometryResult}
           studentProgram={
-            attempt.programStructure
-              ? undefined
-              : attempt.finalCommand
-                ? attempt.finalCommand.split(/[;,]/).map((s) => s.trim()).filter(Boolean)
-                : attempt.studentProgram
+            geometryResult?.studentTask === "DRAW_PATH"
+              ? attempt.programStructure?.final.map((b) => b.label) ??
+                attempt.studentProgram ??
+                (attempt.finalCommand
+                  ? attempt.finalCommand.split(/[;,]/).map((s) => s.trim()).filter(Boolean)
+                  : undefined)
+              : attempt.programStructure
+                ? undefined
+                : attempt.finalCommand
+                  ? attempt.finalCommand.split(/[;,]/).map((s) => s.trim()).filter(Boolean)
+                  : attempt.studentProgram
           }
           hideStructureRequirements={Boolean(attempt.programStructure?.requirements.length)}
-          startCell={attempt.geometryEdgeDiagnosis?.steps[0]?.from ?? null}
+          startCell={
+            attempt.geometryEdgeDiagnosis?.steps[0]?.from ??
+            attempt.mapAnchors?.routeStartPosition ??
+            attempt.liveRoute.routeStartPosition ??
+            null
+          }
         />
       ) : isDebuggingAssessment && debugResult ? (
         <DebuggingAnalysisPanel result={debugResult} blockView={debugBlockView} />

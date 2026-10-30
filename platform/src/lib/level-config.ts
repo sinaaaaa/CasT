@@ -22,6 +22,7 @@ export {
   buildGeometryAuthoringSummary,
   generateShapeSegments,
   syncGeometryPathToolsToConfig,
+  isGeometryDrawPath,
 } from "@/lib/geometry-path";
 export type { GeometryToolPresetId } from "@/lib/geometry-path";
 
@@ -1030,7 +1031,7 @@ export const LEVEL_TYPE_HELP: Record<LevelType, string> = {
   [LevelType.DRAG_EDIT_PROGRAM]:
     "You design a starter program; students add, remove, or reorder blocks with drag and drop, then RUN.",
   [LevelType.GEOMETRY_PATH]:
-    "Students program the robot to trace a glowing geometric path on the grid. Works with arrows, Repeat, Chunks, and Command Bags.",
+    "Students program the robot to trace a glowing shape, or you show the program and they draw that path on the grid (prediction).",
 };
 
 export const INTRO_LEVEL_KEY = "level_0";

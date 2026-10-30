@@ -182,6 +182,14 @@ export type GeometryPathAttemptTelemetry = {
   travelOrder: string[];
   finalCell: { x: number; y: number } | null;
   finalFacing: { x: number; y: number } | null;
+  /** PROGRAM (write a program) or DRAW_PATH (draw the shown program's path). */
+  studentTask: "PROGRAM" | "DRAW_PATH" | null;
+  /** DRAW_PATH: edges the student drew. */
+  drawnKeys: string[];
+  /** DRAW_PATH: edges the shown program travels. */
+  expectedKeys: string[];
+  /** DRAW_PATH: edges the robot actually traveled on RUN. */
+  robotTraveledKeys: string[];
 };
 
 export function parseGeometryPathTelemetry(
@@ -200,6 +208,17 @@ export function parseGeometryPathTelemetry(
   const travelOrder = Array.isArray(g.travelOrder)
     ? g.travelOrder.filter((k): k is string => typeof k === "string")
     : traveledKeys;
+  const drawnKeys = Array.isArray(g.drawnKeys)
+    ? g.drawnKeys.filter((k): k is string => typeof k === "string")
+    : [];
+  const expectedKeys = Array.isArray(g.expectedKeys)
+    ? g.expectedKeys.filter((k): k is string => typeof k === "string")
+    : [];
+  const robotTraveledKeys = Array.isArray(g.robotTraveledKeys)
+    ? g.robotTraveledKeys.filter((k): k is string => typeof k === "string")
+    : [];
+  const studentTask =
+    g.studentTask === "DRAW_PATH" || g.studentTask === "PROGRAM" ? g.studentTask : null;
   const finalCell =
     g.finalCell && typeof g.finalCell === "object" && !Array.isArray(g.finalCell)
       ? (() => {
@@ -221,9 +240,31 @@ export function parseGeometryPathTelemetry(
   if (
     traveledKeys.length === 0 &&
     completedKeys.length === 0 &&
+    drawnKeys.length === 0 &&
+    expectedKeys.length === 0 &&
     !finalCell
   ) {
-    return { traveledKeys, completedKeys, travelOrder, finalCell, finalFacing };
+    return {
+      traveledKeys,
+      completedKeys,
+      travelOrder,
+      finalCell,
+      finalFacing,
+      studentTask,
+      drawnKeys,
+      expectedKeys,
+      robotTraveledKeys,
+    };
   }
-  return { traveledKeys, completedKeys, travelOrder, finalCell, finalFacing };
+  return {
+    traveledKeys: traveledKeys.length ? traveledKeys : drawnKeys,
+    completedKeys,
+    travelOrder,
+    finalCell,
+    finalFacing,
+    studentTask,
+    drawnKeys,
+    expectedKeys,
+    robotTraveledKeys,
+  };
 }

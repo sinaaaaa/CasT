@@ -149,7 +149,9 @@ export async function POST(request: NextRequest) {
               geometryPath: {
                 traveledKeys: Array.isArray(extras.geometryTraveledKeys)
                   ? extras.geometryTraveledKeys.filter((k): k is string => typeof k === "string")
-                  : [],
+                  : Array.isArray(extras.geometryDrawnKeys)
+                    ? extras.geometryDrawnKeys.filter((k): k is string => typeof k === "string")
+                    : [],
                 completedKeys: Array.isArray(extras.geometryCompletedKeys)
                   ? extras.geometryCompletedKeys.filter((k): k is string => typeof k === "string")
                   : [],
@@ -169,6 +171,19 @@ export async function POST(request: NextRequest) {
                   typeof extras.geometryFinalFacingY === "number"
                     ? { x: extras.geometryFinalFacingX, y: extras.geometryFinalFacingY }
                     : null,
+                studentTask:
+                  extras.geometryStudentTask === "DRAW_PATH" || extras.geometryStudentTask === "PROGRAM"
+                    ? extras.geometryStudentTask
+                    : undefined,
+                drawnKeys: Array.isArray(extras.geometryDrawnKeys)
+                  ? extras.geometryDrawnKeys.filter((k): k is string => typeof k === "string")
+                  : [],
+                expectedKeys: Array.isArray(extras.geometryExpectedKeys)
+                  ? extras.geometryExpectedKeys.filter((k): k is string => typeof k === "string")
+                  : [],
+                robotTraveledKeys: Array.isArray(extras.geometryRobotTraveledKeys)
+                  ? extras.geometryRobotTraveledKeys.filter((k): k is string => typeof k === "string")
+                  : [],
               },
             }
           : {}),

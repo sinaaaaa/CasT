@@ -6,7 +6,7 @@ import {
   formatCommandChunkToken,
   type LevelGameplayConfig,
 } from "@/lib/level-config";
-import { DEFAULT_GEOMETRY_PATH, geometryStarterPalette } from "@/lib/geometry-path";
+import { DEFAULT_GEOMETRY_PATH, geometryStarterPalette, isGeometryDrawPath } from "@/lib/geometry-path";
 import { VisualProgramBuilder } from "@/components/teacher/level-builder/visual-program-builder";
 import { cn } from "@/lib/utils";
 
@@ -41,7 +41,8 @@ function defaultStarter(config: LevelGameplayConfig): string[] {
 }
 
 export function GeometryStarterProgramEditor({ config, onChange }: Props) {
-  const seeded = !!config.geometryPath?.seedStarterProgram;
+  const drawPath = isGeometryDrawPath(config.geometryPath);
+  const seeded = drawPath || !!config.geometryPath?.seedStarterProgram;
   const palette = geometryStarterPalette(config.geometryPath?.tools);
 
   function setSeeded(next: boolean) {
@@ -56,6 +57,7 @@ export function GeometryStarterProgramEditor({ config, onChange }: Props) {
 
   return (
     <div className="space-y-5">
+      {!drawPath && (
       <div className="grid gap-3 sm:grid-cols-2">
         {MODES.map(({ seeded: value, title, description, Icon }) => {
           const on = seeded === value;
@@ -87,13 +89,14 @@ export function GeometryStarterProgramEditor({ config, onChange }: Props) {
           );
         })}
       </div>
+      )}
 
       {seeded && (
         <>
           <p className="rounded-xl border border-sky-100 bg-sky-50 px-3 py-2 text-xs leading-relaxed text-sky-900">
-            Students see these blocks in the yellow box when the item loads. They can reorder, remove, or add
-            blocks before RUN. Try Again and Reset bring the starter back. The blocks you can add follow the
-            student tools you turned on.
+            {drawPath
+              ? "Students see this program in the yellow strip and cannot edit it. They draw the path it will take on the grid, then press RUN to watch the robot follow it."
+              : "Students see these blocks in the yellow box when the item loads. They can reorder, remove, or add blocks before RUN. Try Again and Reset bring the starter back. The blocks you can add follow the student tools you turned on."}
           </p>
           <VisualProgramBuilder
             config={config}

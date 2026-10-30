@@ -437,6 +437,11 @@ public partial class CharacterMove : MonoBehaviour
     public Canvas commandBagCanvas;
     [Tooltip("Blue left panel RectTransform under that canvas (background + bag list). Leave empty to auto-create CommandBagPanel.")]
     public RectTransform commandBagPanel;
+    [Header("DRAW_PATH icons — your GameObjects on the Unity blue bar")]
+    [Tooltip("Pencil prefab/icon. Used on the blue bar and as the draw cursor on the grid.")]
+    public GameObject drawPathPencilIcon;
+    [Tooltip("Eraser prefab/icon. Used on the blue bar and as the erase cursor on the grid.")]
+    public GameObject drawPathEraserIcon;
     [Tooltip("ON = resize the blue panel with the sliders below (live in Play Mode). OFF = keep the panel's RectTransform as you set it in the Scene.")]
     public bool autoLayoutCommandBagPanel = true;
 
@@ -1460,8 +1465,15 @@ public partial class CharacterMove : MonoBehaviour
     {
         if (UiDragState.IsDragging) return false;
         if (!allowRobotDrag || isProcessing || ManualRobotRotationAnimating) return false;
+        if (IsBusyForGridInput) return false;
         LevelData ld = GetCurrentLevelData();
         return ld == null || ld.allowRobotDrag;
+    }
+
+    public bool IsRobotBeingManipulated()
+    {
+        var drag = GetComponent<RobotGridDrag>();
+        return drag != null && drag.enabled && drag.IsManipulating;
     }
 
     public bool CanPlaceRobotOnCell(Vector2Int cell) => CanRobotEnterCell(cell);
@@ -1845,6 +1857,25 @@ public partial class CharacterMove : MonoBehaviour
 
     private void ApplyActionButtonVisibility(LevelData levelData)
     {
+        if (IsGeometryDrawPathLevel(levelData))
+        {
+            void Hide(Button btn)
+            {
+                if (btn == null) return;
+                btn.gameObject.SetActive(false);
+                btn.interactable = false;
+            }
+            Hide(moveForwardButton);
+            Hide(moveDownButton);
+            Hide(rotateLeftButton);
+            Hide(rotateRightButton);
+            Hide(repeatButton);
+            ShowGeometryDrawPathBlueTools();
+            return;
+        }
+
+        SetDrawPathSceneIconsVisible(false);
+
         bool geometryAllowsBlueBar = true;
         if (IsGeometryPathLevel(levelData) && levelData.geometryPath?.tools != null)
         {
@@ -1914,9 +1945,100 @@ public partial class CharacterMove : MonoBehaviour
             return;
         }
 
+        if (EnsureCommandBagPaletteController() == null) return;
+        _commandBagPalette.Rebuild(levelData);
+        EnsureActionQueueLeftAligned();
+        EnsureProgramQueueSpacing();
+        if (IsBagOnlyProgramMode(levelData))
+            PurgeLooseMotionTilesFromProgramStrip();
+    }
+
+    void ShowGeometryDrawPathBlueTools()
+    {
+        // Predicted-path icons live on the existing action palette, not Canvas-CommandBag.
+        HideCommandBagSidebar();
+
+        if (moveForwardButton != null && moveForwardButton.transform.parent != null)
+            moveForwardButton.transform.parent.gameObject.SetActive(true);
+
+        var draw = GetComponent<GeometryPathDrawInput>();
+        if (draw == null)
+        {
+            draw = gameObject.AddComponent<GeometryPathDrawInput>();
+            draw.characterMove = this;
+        }
+
+        GameObject pencil = ResolveDrawPathIcon(drawPathPencilIcon, "pencil");
+        GameObject eraser = ResolveDrawPathIcon(drawPathEraserIcon, "eraser")
+                           ?? ResolveDrawPathIcon(null, "erase");
+        drawPathPencilIcon = pencil;
+        drawPathEraserIcon = eraser;
+        SetDrawPathSceneIconsVisible(true);
+        draw.BindSceneIcons(pencil, eraser);
+    }
+
+    void HideCommandBagSidebar()
+    {
+        if (commandBagPanel != null &&
+            commandBagPanel.gameObject != drawPathPencilIcon &&
+            commandBagPanel.gameObject != drawPathEraserIcon)
+            commandBagPanel.gameObject.SetActive(false);
+        if (commandBagCanvas != null)
+            commandBagCanvas.gameObject.SetActive(false);
+    }
+
+    void SetDrawPathSceneIconsVisible(bool on)
+    {
+        if (drawPathPencilIcon != null) drawPathPencilIcon.SetActive(on);
+        if (drawPathEraserIcon != null) drawPathEraserIcon.SetActive(on);
+    }
+
+    GameObject ResolveDrawPathIcon(GameObject assigned, string nameHint)
+    {
+        if (assigned != null) return assigned;
+        GameObject found = FindUiIconByName(commandBagPanel, nameHint);
+        if (found == null && commandBagCanvas != null)
+            found = FindUiIconByName(commandBagCanvas.transform, nameHint);
+        if (found == null && moveForwardButton != null)
+            found = FindUiIconByName(moveForwardButton.transform.parent, nameHint);
+        if (found == null)
+        {
+            var all = FindObjectsOfType<RectTransform>(true);
+            for (int i = 0; i < all.Length; i++)
+            {
+                var t = all[i];
+                if (t == null) continue;
+                string n = t.name ?? "";
+                if (n.IndexOf(nameHint, System.StringComparison.OrdinalIgnoreCase) < 0) continue;
+                if (t.GetComponentInParent<Canvas>() == null) continue;
+                found = t.gameObject;
+                break;
+            }
+        }
+        return found;
+    }
+
+    static GameObject FindUiIconByName(Transform root, string nameHint)
+    {
+        if (root == null || string.IsNullOrEmpty(nameHint)) return null;
+        var all = root.GetComponentsInChildren<Transform>(true);
+        for (int i = 0; i < all.Length; i++)
+        {
+            var t = all[i];
+            if (t == null || t == root) continue;
+            string n = t.name ?? "";
+            if (n.IndexOf(nameHint, System.StringComparison.OrdinalIgnoreCase) < 0) continue;
+            if (t.GetComponent<RectTransform>() == null && t.GetComponentInParent<Canvas>() == null)
+                continue;
+            return t.gameObject;
+        }
+        return null;
+    }
+
+    CommandBagPaletteController EnsureCommandBagPaletteController()
+    {
         if (_commandBagPalette == null)
         {
-            // Prefer a controller already on the dedicated Command Bag panel.
             CommandBagPaletteController existing = null;
             if (commandBagPanel != null)
                 existing = commandBagPanel.GetComponentInChildren<CommandBagPaletteController>(true);
@@ -1929,7 +2051,6 @@ public partial class CharacterMove : MonoBehaviour
             }
             else
             {
-                // Tiny host on this GameObject — the controller builds its own left panel on the canvas.
                 var hostGo = new GameObject(
                     "CommandBagPaletteHost",
                     typeof(RectTransform),
@@ -1943,10 +2064,9 @@ public partial class CharacterMove : MonoBehaviour
             }
         }
 
-        if (_commandBagPalette == null) return;
+        if (_commandBagPalette == null) return null;
         _commandBagPalette.characterMove = this;
         _commandBagPalette.SyncPanelSizeFromCharacterMove();
-        // Prefer the Inspector-assigned panel; otherwise the controller builds Canvas-CommandBag.
         _commandBagPalette.paletteParent = null;
         if (commandBagPanel != null)
         {
@@ -1961,11 +2081,7 @@ public partial class CharacterMove : MonoBehaviour
                 commandBagPanel = null;
             }
         }
-        _commandBagPalette.Rebuild(levelData);
-        EnsureActionQueueLeftAligned();
-        EnsureProgramQueueSpacing();
-        if (IsBagOnlyProgramMode(levelData))
-            PurgeLooseMotionTilesFromProgramStrip();
+        return _commandBagPalette;
     }
 
     /// <summary>
@@ -2671,6 +2787,8 @@ public partial class CharacterMove : MonoBehaviour
             box.isTrigger = false;
         }
 
+        EnsureRobotTouchPad();
+
         Rigidbody rb = GetComponent<Rigidbody>();
         if (rb == null)
         {
@@ -2679,6 +2797,63 @@ public partial class CharacterMove : MonoBehaviour
             rb.useGravity = false;
             rb.constraints = RigidbodyConstraints.FreezeRotation;
         }
+    }
+
+    /// <summary>Pickup collider sized from the visible mesh, not gridSize (that value is in world units and can be huge).</summary>
+    void EnsureRobotTouchPad()
+    {
+        Transform pad = transform.Find("RobotTouchPad");
+        if (pad == null)
+        {
+            var go = new GameObject("RobotTouchPad");
+            pad = go.transform;
+            pad.SetParent(transform, false);
+            pad.localPosition = Vector3.zero;
+            pad.localRotation = Quaternion.identity;
+        }
+
+        var cap = pad.GetComponent<CapsuleCollider>();
+        if (cap == null) cap = pad.gameObject.AddComponent<CapsuleCollider>();
+
+        Bounds b = RobotVisibleBounds();
+        Vector3 lossy = transform.lossyScale;
+        float sx = Mathf.Max(0.001f, Mathf.Abs(lossy.x));
+        float sy = Mathf.Max(0.001f, Mathf.Abs(lossy.y));
+        float sz = Mathf.Max(0.001f, Mathf.Abs(lossy.z));
+        Vector3 worldSize = b.size;
+        float radius = Mathf.Max(worldSize.x / sx, worldSize.z / sz) * 0.42f;
+        float height = (worldSize.y / sy) * 1.2f;
+        cap.direction = 1;
+        cap.radius = Mathf.Max(0.05f, radius);
+        cap.height = Mathf.Max(cap.radius * 2f + 0.05f, height);
+        cap.center = transform.InverseTransformPoint(b.center);
+        cap.isTrigger = true;
+    }
+
+    public Bounds RobotVisibleBounds()
+    {
+        var rends = GetComponentsInChildren<Renderer>(true);
+        bool any = false;
+        Bounds b = new Bounds(transform.position, Vector3.one * 0.8f);
+        for (int i = 0; i < rends.Length; i++)
+        {
+            var r = rends[i];
+            if (r == null || !r.enabled) continue;
+            string n = r.gameObject.name ?? "";
+            if (n == "RobotGrabHalo" || n == "RobotTouchPad") continue;
+            if (!any)
+            {
+                b = r.bounds;
+                any = true;
+            }
+            else
+            {
+                b.Encapsulate(r.bounds);
+            }
+        }
+        if (!any)
+            b = new Bounds(transform.position, Vector3.one * 0.8f);
+        return b;
     }
 
     private Vector3 ResolveRobotWorldPosition() =>
@@ -2862,11 +3037,67 @@ public partial class CharacterMove : MonoBehaviour
         }
     }
 
+    /// <summary>True while a program is running, RUN is starting, or a result popup is covering the grid.</summary>
+    public bool IsBusyForGridInput =>
+        isProcessing ||
+        _runStartupInFlight ||
+        (successPopup != null && successPopup.activeSelf) ||
+        (wrongAnswerPopup != null && wrongAnswerPopup.activeSelf);
+
     /// <summary>True when RUN must wait for the player to place the flag (flag levels only).</summary>
     public bool IsRunBlockedByFlagRequirement()
     {
         LevelData ld = GetCurrentLevelData();
-        return ld != null && ld.useFlagPlacement && ld.requireFlagBeforeRun && !IsFlagPlaced;
+        if (ld != null && ld.useFlagPlacement && ld.requireFlagBeforeRun && !IsFlagPlaced)
+            return true;
+        if (IsGeometryDrawPathLevel(ld))
+        {
+            var geo = GeometryPathController.Instance;
+            if (geo == null || !geo.HasStudentDrawing) return true;
+        }
+        return false;
+    }
+
+    public bool IsGeometryDrawPathLevel(LevelData ld = null)
+    {
+        if (ld == null) ld = GetCurrentLevelData();
+        return ld?.geometryPath != null && ld.geometryPath.IsDrawPathTask;
+    }
+
+    public void NotifyGeometryPathDrawingChanged()
+    {
+        RefreshRunButtonState();
+    }
+
+    /// <summary>Undirected edges the locked/shown program would travel from the robot start.</summary>
+    public List<string> CollectGeometryProgramPathEdgeKeys()
+    {
+        var keys = new List<string>();
+        LevelData ld = GetCurrentLevelData();
+        if (ld == null) return keys;
+
+        Vector2Int pos = ld.robotStartPosition;
+        Vector2Int facing = ld.robotStartFacing;
+        int moveCount = 0;
+        var tokens = CollectProgramTokensFromUI();
+        if (tokens.Count == 0 && ld.guidedActions != null)
+            tokens = new List<string>(ld.guidedActions);
+        var expanded = ProgramSequenceUtil.Expand(tokens);
+        for (int i = 0; i < expanded.Count; i++)
+        {
+            string cmd = expanded[i];
+            if (cmd == "left") cmd = "turn left";
+            else if (cmd == "right") cmd = "turn right";
+            Vector2Int before = pos;
+            SimulateOneCommandOnGrid(ld, ref pos, ref facing, cmd, ref moveCount);
+            if (pos == before) continue;
+            int dx = Mathf.Abs(pos.x - before.x);
+            int dy = Mathf.Abs(pos.y - before.y);
+            if (!((dx == 1 && dy == 0) || (dx == 0 && dy == 1))) continue;
+            string key = GeometryPathController.SegmentKey(before, pos);
+            if (!keys.Contains(key)) keys.Add(key);
+        }
+        return keys;
     }
 
     /// <summary>(col, row) bounds for the logical grid.</summary>
@@ -3386,6 +3617,11 @@ public partial class CharacterMove : MonoBehaviour
                 geo = gameObject.AddComponent<GeometryPathController>();
         }
         geo.BindLevel(levelData);
+        if (GetComponent<GeometryPathDrawInput>() == null)
+        {
+            var draw = gameObject.AddComponent<GeometryPathDrawInput>();
+            draw.characterMove = this;
+        }
     }
 
     void RestoreGeometryPathForNewAttempt(LevelData levelData)
@@ -3398,6 +3634,9 @@ public partial class CharacterMove : MonoBehaviour
                 geo = gameObject.AddComponent<GeometryPathController>();
         }
         geo.RestoreForNewAttempt(levelData);
+        var draw = GetComponent<GeometryPathDrawInput>();
+        if (draw != null) draw.ResetForNewAttempt();
+        NotifyGeometryPathDrawingChanged();
     }
 
     static bool IsGeometryPathLevel(LevelData ld)
@@ -3441,6 +3680,78 @@ public partial class CharacterMove : MonoBehaviour
 
         cell = WorldToGridCell(world);
         return CellInGridBounds(cell);
+    }
+
+    /// <summary>
+    /// DRAW_PATH picking: snap to the nearest cell center so kids do not need to hit a cell dead-on.
+    /// </summary>
+    public bool TryScreenToNearestGridCell(Vector2 screenPos, out Vector2Int cell, float magnetCells = 0.78f)
+    {
+        cell = Vector2Int.zero;
+        Camera cam = gridInteractionCamera != null ? gridInteractionCamera : Camera.main;
+        if (cam == null)
+        {
+            Camera[] cams = FindObjectsOfType<Camera>();
+            foreach (var c in cams)
+            {
+                if (c != null && c.enabled && c.gameObject.activeInHierarchy) { cam = c; break; }
+            }
+        }
+        if (cam == null) return false;
+
+        Ray ray = cam.ScreenPointToRay(screenPos);
+        Vector3 world;
+        const float maxDist = 5000f;
+        if (Physics.Raycast(ray, out RaycastHit hit, maxDist, ~0, QueryTriggerInteraction.Ignore))
+            world = hit.point;
+        else
+        {
+            Plane gridPlane = new Plane(Vector3.up, new Vector3(0f, robotStartWorldPos.y, 0f));
+            if (!gridPlane.Raycast(ray, out float dist)) return false;
+            world = ray.GetPoint(dist);
+        }
+
+        Vector2Int raw = WorldToGridCell(world);
+        float spacing = GetCellSpacingForLayout(PlayfieldLevelData());
+        float maxD = Mathf.Max(0.2f, spacing * magnetCells);
+        Vector2Int best = raw;
+        float bestD = float.MaxValue;
+        for (int dx = -1; dx <= 1; dx++)
+        {
+            for (int dy = -1; dy <= 1; dy++)
+            {
+                Vector2Int c = new Vector2Int(raw.x + dx, raw.y + dy);
+                if (!CellInGridBounds(c)) continue;
+                Vector3 cw = GridCellToWorld(c);
+                float d = Vector2.Distance(new Vector2(world.x, world.z), new Vector2(cw.x, cw.z));
+                if (d < bestD)
+                {
+                    bestD = d;
+                    best = c;
+                }
+            }
+        }
+        if (bestD > maxD || !CellInGridBounds(best)) return false;
+        cell = best;
+        return true;
+    }
+
+    public bool TryScreenToGridWorld(Vector2 screenPos, out Vector3 world)
+    {
+        world = Vector3.zero;
+        Camera cam = gridInteractionCamera != null ? gridInteractionCamera : Camera.main;
+        if (cam == null) return false;
+        Ray ray = cam.ScreenPointToRay(screenPos);
+        const float maxDist = 5000f;
+        if (Physics.Raycast(ray, out RaycastHit hit, maxDist, ~0, QueryTriggerInteraction.Ignore))
+        {
+            world = hit.point;
+            return true;
+        }
+        Plane gridPlane = new Plane(Vector3.up, new Vector3(0f, robotStartWorldPos.y, 0f));
+        if (!gridPlane.Raycast(ray, out float dist)) return false;
+        world = ray.GetPoint(dist);
+        return true;
     }
 
     // -------------------------------------------------------------------
@@ -4534,11 +4845,16 @@ public partial class CharacterMove : MonoBehaviour
         return a;
     }
 
+    /// <summary>Yellow-strip program is read-only (DRAW_PATH, flag placement, fixed starter).</summary>
+    public bool IsProgramQueueLocked() => ShouldLockProgramQueue(GetCurrentLevelData());
+
     private bool ShouldLockProgramQueue(LevelData levelData)
     {
-        if (levelData == null || levelData.guidedActions == null || levelData.guidedActions.Count == 0)
-            return false;
+        if (levelData == null) return false;
         if (UsesGuidedBlankFlow(levelData)) return false;
+        if (IsGeometryDrawPathLevel(levelData)) return true;
+        if (levelData.guidedActions == null || levelData.guidedActions.Count == 0)
+            return false;
         if (levelData.useFlagPlacement) return true;
         return string.Equals(levelData.levelType, "FLAG_PLACEMENT", System.StringComparison.OrdinalIgnoreCase);
     }
@@ -4583,6 +4899,8 @@ public partial class CharacterMove : MonoBehaviour
             Debug.Log(seededMacros > 0
                 ? $"[CharacterMove] Bag mode: seeded {seededMacros} starter bag/chunk tile(s); loose tokens skipped."
                 : "[CharacterMove] Bag mode: skipped seeding loose guidedActions into yellow strip.");
+            if (ShouldLockProgramQueue(levelData))
+                LockAllQueuedBlocks();
             return;
         }
 
@@ -4662,11 +4980,23 @@ public partial class CharacterMove : MonoBehaviour
         }
         else if (ShouldLockProgramQueue(levelData))
         {
-            // Flag-placement / fixed-program items: show the teacher program read-only in the yellow strip.
+            // Flag-placement / DRAW_PATH / fixed-program items: show the teacher program read-only.
             if (moveForwardButton != null) moveForwardButton.interactable = false;
             if (moveDownButton != null) moveDownButton.interactable = false;
             if (rotateLeftButton != null) rotateLeftButton.interactable = false;
             if (rotateRightButton != null) rotateRightButton.interactable = false;
+            LockAllQueuedBlocks();
+        }
+    }
+
+    void LockAllQueuedBlocks()
+    {
+        if (actionQueueTransform == null) return;
+        for (int i = 0; i < actionQueueTransform.childCount; i++)
+        {
+            var r = actionQueueTransform.GetChild(i).GetComponent<QueuedActionRef>();
+            if (r == null) continue;
+            r.deletable = false;
         }
     }
 
@@ -5806,6 +6136,10 @@ public partial class CharacterMove : MonoBehaviour
                 extras.geometryTraveledKeys = geo.GetLastTraveledKeys();
                 extras.geometryCompletedKeys = geo.GetLastCompletedKeys();
                 extras.geometryTravelOrder = geo.GetLastTravelOrder();
+                extras.geometryDrawnKeys = geo.GetLastDrawnKeys();
+                extras.geometryExpectedKeys = geo.GetLastExpectedKeys();
+                extras.geometryRobotTraveledKeys = geo.GetLastRobotTraveledKeys();
+                extras.geometryStudentTask = geo.GetStudentTask();
                 var cell = geo.GetLastRobotCell();
                 var face = geo.GetLastRobotFacing();
                 extras.geometryFinalCellX = cell.x;
@@ -8703,8 +9037,14 @@ public partial class CharacterMove : MonoBehaviour
         if (IsRunBlockedByFlagRequirement())
         {
             if (chatGPTResponseText != null)
-                chatGPTResponseText.text = "Place the flag on a cell first — that cell is your goal.";
-            Debug.Log("[CharacterMove] RUN blocked: flag not placed yet (flag-placement level only).");
+            {
+                chatGPTResponseText.text = IsGeometryDrawPathLevel(runLevel)
+                    ? "Draw the path this program will take on the grid, then press RUN."
+                    : "Place the flag on a cell first — that cell is your goal.";
+            }
+            Debug.Log(IsGeometryDrawPathLevel(runLevel)
+                ? "[CharacterMove] RUN blocked: draw the predicted path first."
+                : "[CharacterMove] RUN blocked: flag not placed yet (flag-placement level only).");
             yield break;
         }
 
@@ -8905,6 +9245,11 @@ public partial class CharacterMove : MonoBehaviour
 
         ClearCommandHistoryStripUI();
         ResetCurrentLevel();
+        if (GeometryPathController.Instance != null && IsGeometryDrawPathLevel(levelData))
+        {
+            GeometryPathController.Instance.ClearStudentDrawing();
+            NotifyGeometryPathDrawingChanged();
+        }
         SnapRobotToLogicalGridCell();
         RefreshLevelCornerHint();
 
@@ -10527,11 +10872,6 @@ public partial class CharacterMove : MonoBehaviour
             }
         }
         
-        if (moveForwardButton != null) moveForwardButton.interactable = true;
-        if (moveDownButton != null) moveDownButton.interactable = true;
-        if (rotateLeftButton != null) rotateLeftButton.interactable = true;
-        if (rotateRightButton != null) rotateRightButton.interactable = true;
-
         if (UsesCanvas(levelData))
         {
             ApplyCanvasLessonContent(levelData);
@@ -10541,10 +10881,14 @@ public partial class CharacterMove : MonoBehaviour
             EnsureRepeatPaletteButton();
             ApplyActionButtonVisibility(levelData);
         }
-        else if (levelData.guidedActions != null && levelData.guidedActions.Count > 0)
-            SeedGuidedProgramQueue(levelData);
         else
-            ClearActionQueueVisual();
+        {
+            ApplyActionButtonVisibility(levelData);
+            if (levelData.guidedActions != null && levelData.guidedActions.Count > 0)
+                SeedGuidedProgramQueue(levelData);
+            else
+                ClearActionQueueVisual();
+        }
 
         if (runButton != null && !UsesGuidedBlankFlow(levelData))
             runButton.interactable = !IsRunBlockedByFlagRequirement() && !DebugRunsExhausted;

@@ -533,6 +533,39 @@ function canvasPatternVerdict(r: NonNullable<AttemptVerdictInput["canvasPattern"
 }
 
 function geometryVerdict(r: GeometryPathAnalysisResult): AttemptVerdict {
+  if (r.studentTask === "DRAW_PATH") {
+    if (r.outcome === "correct" || (r.hasTelemetry && r.pathCompletionPct >= 100 && r.extraEdgeCount === 0)) {
+      return {
+        headline: "Correct — the drawn path matches the program.",
+        detail: r.summary,
+        fix: null,
+        tone: "success",
+        confidence: null,
+      };
+    }
+    if (r.outcome === "partial" || (r.hasTelemetry && r.completedEdgeCount > 0)) {
+      return {
+        headline: "Almost — the drawing does not fully match the program.",
+        detail: r.summary,
+        fix:
+          r.missedEdgeCount > 0 && r.extraEdgeCount > 0
+            ? "Some program edges were missed and extra edges were drawn. Trace only the path the yellow-strip program takes."
+            : r.missedEdgeCount > 0
+              ? "Draw every edge the yellow-strip program travels."
+              : "Erase extra edges that the program does not travel.",
+        tone: "warning",
+        confidence: null,
+      };
+    }
+    return {
+      headline: "Not yet — the predicted path does not match the program.",
+      detail: r.summary,
+      fix: "Look at the yellow-strip program, then draw that path on the grid before pressing RUN.",
+      tone: "danger",
+      confidence: null,
+    };
+  }
+
   if (r.requiresDestination) {
     if (r.combinedOutcome === "geometry_and_destination" || r.outcome === "correct") {
       return {
