@@ -230,7 +230,7 @@ export function UsersAdminPanel() {
     <div>
       <PageHeader
         title="User management"
-        description="Create accounts, manage Unity auto-created students, set real emails for dashboard login, and reset passwords."
+        description="Create accounts, set real emails for dashboard login, and reset passwords. Students can only play if their Student ID is already on this list."
         actions={refreshButton}
       />
 
@@ -264,8 +264,8 @@ export function UsersAdminPanel() {
               Unity game login
             </CardTitle>
             <CardDescription>
-              Students can enter an ID in Unity — a profile is created automatically (placeholder name
-              and email). Edit those students here and add a real email + password for web access.
+              Students sign in to the game with a Student ID you already added here. Unknown IDs
+              cannot play. After they pick a nickname, it shows on their dashboard as Hey plus that name.
             </CardDescription>
           </CardHeader>
         </Card>

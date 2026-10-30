@@ -7,17 +7,22 @@ import {
   STUDENT_SESSION_COOKIE,
 } from "@/lib/student-session";
 import { getPlayableLevelsForStudent } from "@/lib/level-assignments";
-import { resolveGameResumeLevel } from "@/lib/game-resume-level";
+import {
+  resolveGameResumeLevel,
+  resolveRequestedPlayLevel,
+} from "@/lib/game-resume-level";
 import { resolveUnityGameUrl } from "@/lib/unity-game-url";
 
 type Props = {
   loginNext?: string;
   homeHref?: string;
+  itemKey?: string;
 };
 
 export async function StudentPlayView({
   loginNext = "/student/play",
   homeHref = "/student/home",
+  itemKey,
 }: Props) {
   const session = await getStudentSessionFromCookies();
   if (!session) {
@@ -27,10 +32,18 @@ export async function StudentPlayView({
   const cookieStore = await cookies();
   const sessionToken = cookieStore.get(STUDENT_SESSION_COOKIE)?.value ?? "";
   const playableLevels = await getPlayableLevelsForStudent(session.studentCode);
-  const resume = await resolveGameResumeLevel(
-    session.studentProfileId,
-    playableLevels.map((level) => ({ id: level.id, levelKey: level.levelKey }))
-  );
+  const playableRefs = playableLevels.map((level) => ({ id: level.id, levelKey: level.levelKey }));
+
+  const requestedKey = itemKey?.trim();
+  const requested = requestedKey
+    ? await resolveRequestedPlayLevel(session.studentProfileId, playableRefs, requestedKey)
+    : null;
+  if (requestedKey && !requested) {
+    redirect(homeHref);
+  }
+  const resume =
+    requested ?? (await resolveGameResumeLevel(session.studentProfileId, playableRefs));
+
   const config = {
     ...buildStudentGameConfig(session, sessionToken),
     resumeLevelKey: resume?.resumeLevelKey ?? null,

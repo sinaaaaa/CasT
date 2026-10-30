@@ -29,7 +29,7 @@ export function WizardHeader({ levelName, stepIndex, totalSteps, autosaveStatus,
           <div>
             <p className="text-xs font-medium uppercase tracking-wider text-primary">Item builder</p>
             <h1 className="text-lg font-semibold text-slate-900 sm:text-xl">
-              {levelName.trim() || "Untitled item"}
+              {levelName.trim() || "Name this item"}
             </h1>
           </div>
           <AutosaveBadge status={autosaveStatus} isNew={isNew} />

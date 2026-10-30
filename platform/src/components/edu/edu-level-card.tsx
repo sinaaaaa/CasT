@@ -9,18 +9,11 @@ import { LevelType } from "@prisma/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatItemDisplayName } from "@/lib/item-display";
-import { LEVEL_TYPE_LABELS } from "@/lib/level-config";
+import { getItemFamily, type ItemFamilyId } from "@/lib/item-activity";
+import { FAMILY_UI } from "@/lib/item-family-ui";
 import { LevelVisibleToggle } from "@/components/teacher/level-visible-toggle";
 import { parseApiError, readApiJson } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
-
-const typeGradients: Partial<Record<LevelType, string>> = {
-  INTRO: "from-violet-500 to-purple-600",
-  DRAG_ACTIONS: "from-teal-500 to-emerald-600",
-  FLAG_PLACEMENT: "from-amber-500 to-orange-600",
-  CHOOSE_BUTTONS: "from-sky-500 to-blue-600",
-  DRAG_EDIT_PROGRAM: "from-rose-500 to-pink-600",
-};
 
 export type EduLevelCardProps = {
   id: string;
@@ -36,26 +29,27 @@ export type EduLevelCardProps = {
   ownerTeacherId?: string | null;
   canEdit?: boolean;
   isPlatformDefault?: boolean;
+  activityTitle?: string;
+  familyId?: ItemFamilyId;
 };
 
 export function EduLevelCard({
   id,
-  levelKey,
   name,
   orderIndex,
-  levelType,
   published,
   visible,
   attemptCount,
   index = 0,
-  ownerTeacherId,
   canEdit = true,
   isPlatformDefault = false,
+  activityTitle,
+  familyId = "program",
 }: EduLevelCardProps) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const gradient = typeGradients[levelType] ?? "from-indigo-500 to-violet-600";
+  const family = getItemFamily(familyId);
 
   async function customizeItem() {
     setBusy(true);
@@ -78,36 +72,51 @@ export function EduLevelCard({
 
   return (
     <motion.article
-      initial={{ opacity: 0, y: 16 }}
+      initial={{ opacity: 0, y: 12 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
-      transition={{ delay: index * 0.04 }}
-      whileHover={{ y: -6 }}
-      className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-100 transition-shadow hover:shadow-lg"
+      transition={{ delay: Math.min(index, 8) * 0.03 }}
+      className="group relative overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-100 transition hover:-translate-y-0.5 hover:shadow-lg"
     >
-      <div className={cn("relative flex h-28 items-end bg-gradient-to-br p-4", gradient)}>
-        <span className="absolute left-3 top-3 flex h-8 w-8 items-center justify-center rounded-lg bg-white/90 text-sm font-bold text-indigo-700 shadow">
-          {orderIndex}
-        </span>
-        <div className="flex flex-wrap gap-1.5">
-          <Badge className="bg-white/90 text-slate-800 hover:bg-white">{LEVEL_TYPE_LABELS[levelType]}</Badge>
-          {isPlatformDefault && (
-            <Badge variant="secondary" className="bg-white/90 text-slate-700">
-              Default
+      <span
+        className="absolute inset-y-0 left-0 w-1.5"
+        style={{ backgroundColor: FAMILY_UI[familyId].barHex }}
+      />
+      <div className="space-y-3 p-5 pl-6">
+        <div className="flex items-start justify-between gap-2">
+          <span
+            className={cn(
+              "flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold",
+              FAMILY_UI[familyId].soft
+            )}
+          >
+            {orderIndex}
+          </span>
+          <div className="flex flex-wrap justify-end gap-1.5">
+            <Badge variant={published ? "default" : "secondary"} className={published ? "bg-emerald-600" : ""}>
+              {published ? "Live" : "Draft"}
             </Badge>
-          )}
-          <Badge variant={published ? "default" : "secondary"} className={published ? "bg-emerald-600" : ""}>
-            {published ? "Live" : "Draft"}
-          </Badge>
+            {isPlatformDefault && (
+              <Badge variant="secondary" className="bg-slate-100 text-slate-600">
+                Default
+              </Badge>
+            )}
+          </div>
         </div>
-      </div>
 
-      <div className="space-y-3 p-4">
         <div>
-          <Link href={`/teacher/levels/${id}`} className="text-lg font-bold text-slate-900 hover:text-[#4F46E5]">
+          <Link href={`/teacher/levels/${id}`} className="text-base font-bold leading-snug text-slate-900 hover:text-[#4F46E5]">
             {formatItemDisplayName(name)}
           </Link>
-          <p className="text-xs text-slate-500">{levelKey}</p>
+          {activityTitle && (
+            <p className="mt-1 text-sm text-slate-500">{activityTitle}</p>
+          )}
+        </div>
+
+        <div className="flex flex-wrap gap-1.5">
+          <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", FAMILY_UI[familyId].chip)}>
+            {family.title}
+          </span>
         </div>
 
         <div className="flex items-center justify-between text-sm text-slate-600">
@@ -119,7 +128,7 @@ export function EduLevelCard({
         </div>
 
         <div className="flex gap-2 pt-1">
-          <Button asChild size="sm" className="flex-1 rounded-xl bg-[#4F46E5] hover:bg-[#4338CA]">
+          <Button asChild size="sm" className="flex-1 rounded-xl">
             <Link href={`/teacher/levels/${id}?tab=attempts`}>Review</Link>
           </Button>
           {canEdit ? (
@@ -148,18 +157,6 @@ export function EduLevelCard({
           )}
         </div>
         {error && <p className="text-xs text-destructive">{error}</p>}
-        {isPlatformDefault && !canEdit && (
-          <p className="text-xs text-muted-foreground">
-            Customize creates your own version of this item. The shared default is hidden from your
-            list once you customize it.
-          </p>
-        )}
-        {canEdit && !isPlatformDefault && (
-          <p className="text-xs text-muted-foreground">
-            Your customized version replaces the shared default for you and your students when
-            published.
-          </p>
-        )}
       </div>
     </motion.article>
   );

@@ -6,10 +6,20 @@ export default {
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
+    "./src/lib/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ["var(--font-sans)", "ui-sans-serif", "system-ui", "sans-serif"],
+      },
       colors: {
+        navy: {
+          DEFAULT: "#1E3A8A",
+          800: "#1E40AF",
+          900: "#1E3A8A",
+          950: "#172554",
+        },
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
         card: { DEFAULT: "hsl(var(--card))", foreground: "hsl(var(--card-foreground))" },

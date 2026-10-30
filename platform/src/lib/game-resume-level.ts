@@ -82,3 +82,39 @@ export async function resolveGameResumeLevel(
     resumeSlot: next.slot,
   };
 }
+
+export function isLevelOpenForStudent(
+  level: PlayableLevelProgress,
+  nextLevelKey: string | null,
+  replayLevelIds: Set<string>
+): boolean {
+  if (replayLevelIds.has(level.id)) return true;
+  if (level.passed) return true;
+  if (level.attempts > 0) return true;
+  if (nextLevelKey && level.levelKey === nextLevelKey) return true;
+  return false;
+}
+
+/** Honor a clicked item when the student is allowed to open it. Otherwise return null. */
+export async function resolveRequestedPlayLevel(
+  studentProfileId: string,
+  orderedLevels: PlayableLevelRef[],
+  requestedKey: string | null | undefined
+): Promise<GameResumeLevel | null> {
+  const key = requestedKey?.trim();
+  if (!key || orderedLevels.length === 0) return null;
+
+  const [replayLevelIds, progress] = await Promise.all([
+    getStudentReplayLevelIds(studentProfileId),
+    buildPlayableLevelProgress(studentProfileId, orderedLevels),
+  ]);
+  const next = pickNextPlayableLevel(progress);
+  const match = progress.find((level) => level.levelKey === key);
+  if (!match) return null;
+  if (!isLevelOpenForStudent(match, next?.levelKey ?? null, replayLevelIds)) return null;
+
+  return {
+    resumeLevelKey: match.levelKey,
+    resumeSlot: match.slot,
+  };
+}

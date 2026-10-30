@@ -12,11 +12,14 @@ import {
   defaultConfigForType,
   defaultNewLevelKey,
   formatLevelSaveValidationError,
+  suggestLevelKeyFromName,
   syncNumberLineGridPositions,
   validateLevelIdentity,
   type LevelGameplayConfig,
 } from "@/lib/level-config";
 import type { AutosaveStatus } from "./wizard-header";
+import { resolveItemActivity } from "@/lib/item-activity";
+import { isPlaceholderItemName } from "@/lib/item-name";
 import { ItemBuilderTopbar } from "./item-builder-topbar";
 import { ItemBuilderStepRail } from "./item-builder-step-rail";
 import { ItemBuilderMobileSteps } from "./item-builder-mobile-steps";
@@ -60,8 +63,11 @@ export function LevelBuilderWizard({ initial }: Props) {
   const [completedSteps, setCompletedSteps] = useState<Set<WizardStepId>>(() => new Set());
   const [navReady, setNavReady] = useState(false);
 
-  const [levelKey, setLevelKey] = useState(initial?.levelKey ?? defaultNewLevelKey());
-  const [name, setName] = useState(initial?.name ?? "Untitled item");
+  const [levelKey, setLevelKey] = useState(initial?.levelKey ?? "new_item");
+  const [name, setName] = useState(initial?.name ?? "");
+  const [activityPicked, setActivityPicked] = useState(isEdit);
+  const autoNameRef = useRef<string | null>(null);
+  const autoKeyRef = useRef<string | null>(null);
   const [description, setDescription] = useState(initial?.description ?? "");
   const [orderIndex, setOrderIndex] = useState(initial?.orderIndex ?? 0);
   const [difficulty, setDifficulty] = useState(initial?.difficulty ?? 1);
@@ -83,11 +89,38 @@ export function LevelBuilderWizard({ initial }: Props) {
   const currentStepMeta = WIZARD_STEPS[stepIndex];
 
   useEffect(() => {
+    if (isEdit || levelKey !== "new_item") return;
+    setLevelKey(defaultNewLevelKey());
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- assign a unique code after hydration
+  }, [isEdit]);
+
+  useEffect(() => {
+    if (isEdit) return;
+    let cancelled = false;
+    fetch("/api/teacher/levels")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((payload: { levels?: { orderIndex: number }[] } | null) => {
+        if (cancelled || !payload?.levels) return;
+        const next =
+          payload.levels.reduce((max, level) => Math.max(max, level.orderIndex ?? 0), -1) + 1;
+        setOrderIndex((current) => (current === 0 ? next : current));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [isEdit]);
+
+  useEffect(() => {
+    if (!isEdit) {
+      setNavReady(true);
+      return;
+    }
     const t = searchParams.get("step") ?? stepFromUrl;
     if (t === "assessment" || t === "ct") setCurrentStep("preview");
     else if (isWizardStepId(t)) setCurrentStep(t);
     setNavReady(true);
-  }, [searchParams, stepFromUrl]);
+  }, [searchParams, stepFromUrl, isEdit]);
 
   async function goToStep(step: WizardStepId) {
     setCurrentStep(step);
@@ -97,12 +130,26 @@ export function LevelBuilderWizard({ initial }: Props) {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function applyType(type: LevelType) {
-    if (type === levelType) return;
-    setLevelType(type);
-    setConfig((prev) => applyLevelTypeDefaults(type, prev));
+  function applyActivity(next: { levelType: LevelType; config: LevelGameplayConfig }) {
+    setLevelType(next.levelType);
+    setConfig(next.config);
+    setActivityPicked(true);
     setSaveMessage(null);
     dirtyRef.current = true;
+    const title = resolveItemActivity(next.levelType, next.config).title;
+    if (!isEdit && (isPlaceholderItemName(name) || name === autoNameRef.current)) {
+      setName(title);
+      autoNameRef.current = title;
+      if (
+        levelKey === "new_item" ||
+        levelKey.startsWith("level_draft_") ||
+        levelKey === autoKeyRef.current
+      ) {
+        const nextKey = suggestLevelKeyFromName(title);
+        setLevelKey(nextKey);
+        autoKeyRef.current = nextKey;
+      }
+    }
   }
 
   function markDirty() {
@@ -183,7 +230,9 @@ export function LevelBuilderWizard({ initial }: Props) {
             setTimeout(() => setAutosaveStatus("idle"), 2500);
           } else {
             setSaveMessage(
-              savedId && !levelId ? "Item created — continue to preview and publish." : "Item saved. You can keep editing."
+              savedId && !levelId
+                ? "Item created. Next, preview it and publish when you are ready."
+                : "Item saved. You can keep editing."
             );
             setSaving(false);
           }
@@ -221,6 +270,7 @@ export function LevelBuilderWizard({ initial }: Props) {
 
   function validateStep(step: WizardStepId): boolean {
     if (step === "info") {
+      if (!activityPicked) return false;
       return validateLevelIdentity(name, levelKey) === null;
     }
     return true;
@@ -228,7 +278,8 @@ export function LevelBuilderWizard({ initial }: Props) {
 
   function stepValidationMessage(step: WizardStepId): string {
     if (step === "info") {
-      return validateLevelIdentity(name, levelKey) ?? "Please complete the required fields.";
+      if (!activityPicked) return "Choose what students will do first.";
+      return validateLevelIdentity(name, levelKey) ?? "Give the item a classroom name before continuing.";
     }
     return "Please fill in the required fields before continuing.";
   }
@@ -264,6 +315,8 @@ export function LevelBuilderWizard({ initial }: Props) {
         return (
           <StepLevelInfo
             isEdit={isEdit}
+            activityPicked={activityPicked}
+            onActivityPicked={() => setActivityPicked(true)}
             levelKey={levelKey}
             setLevelKey={(v) => {
               setLevelKey(v);
@@ -290,7 +343,7 @@ export function LevelBuilderWizard({ initial }: Props) {
               markDirty();
             }}
             levelType={levelType}
-            applyType={applyType}
+            applyActivity={applyActivity}
             config={config}
             setConfig={(c) => {
               setConfig(c);
@@ -354,6 +407,7 @@ export function LevelBuilderWizard({ initial }: Props) {
         return null;
     }
   }, [
+    activityPicked,
     config,
     currentStep,
     description,
@@ -368,29 +422,38 @@ export function LevelBuilderWizard({ initial }: Props) {
   ]);
 
   return (
-    <form onSubmit={handleSave} className="flex min-h-screen flex-col bg-[#F8FAFC] pb-24">
+    <form onSubmit={handleSave} className="flex min-h-screen flex-col bg-[#F5F2EB] pb-32">
       <ItemBuilderTopbar
         itemName={name}
         isNew={!levelId}
         autosaveStatus={autosaveStatus}
         currentStepLabel={currentStepMeta?.label ?? ""}
+        activityLabel={activityPicked ? resolveItemActivity(levelType, config).title : undefined}
       />
 
       <div className="flex flex-1">
         <aside className="hidden w-72 shrink-0 border-r border-slate-200/80 bg-white lg:block">
           <div className="sticky top-[4.25rem] space-y-5 p-6">
             <div>
-              <div className="mb-2 flex items-center justify-between text-xs font-semibold text-slate-500">
-                <span>Progress</span>
+              <div className="mb-1.5 flex items-center justify-between text-xs font-semibold text-slate-500">
+                <span>Step {stepIndex + 1} of {WIZARD_STEPS.length}</span>
                 <span>{progress}%</span>
               </div>
-              <Progress value={progress} className="h-1.5" />
+              <Progress value={progress} className="h-1.5 bg-stone-200 [&>div]:bg-[#0F9B8E]" />
+              <p className="mt-2 text-[11px] leading-snug text-slate-400">
+                {activityPicked
+                  ? currentStepMeta?.description
+                  : "Pick the student job to unlock the rest"}
+              </p>
             </div>
             <ItemBuilderStepRail
               steps={WIZARD_STEPS}
               currentStep={currentStep}
               completedSteps={completedSteps}
-              onStepClick={goToStep}
+              onStepClick={(id) => {
+                if (!activityPicked && id !== "info") return;
+                void goToStep(id);
+              }}
             />
           </div>
         </aside>
@@ -421,14 +484,14 @@ export function LevelBuilderWizard({ initial }: Props) {
             )}
           </div>
 
-          {currentStep !== "grid" && (
+          {currentStep !== "grid" && currentStep !== "info" && currentStep !== "program" && (
             <ItemBuilderContextPanel stepId={currentStep} />
           )}
         </div>
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white/95 px-4 py-4 backdrop-blur-md lg:left-[18rem]">
-        <div className="mx-auto flex max-w-4xl items-center justify-between gap-3">
+      <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white/95 px-4 py-3.5 backdrop-blur-md lg:left-72">
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
           <Button
             type="button"
             variant="outline"
@@ -440,11 +503,13 @@ export function LevelBuilderWizard({ initial }: Props) {
             <ChevronLeft className="h-4 w-4" />
             Back
           </Button>
-          <p className="hidden text-sm text-slate-500 sm:block">
-            {currentStepMeta?.description}
+          <p className="hidden min-w-0 truncate text-sm text-slate-500 sm:block">
+            {activityPicked
+              ? `Step ${stepIndex + 1} of ${WIZARD_STEPS.length} · ${currentStepMeta?.label}`
+              : "Choose a student job to continue"}
           </p>
           <div className="flex gap-2">
-            <Button type="submit" variant="secondary" disabled={saving} className="gap-2 rounded-xl">
+            <Button type="submit" variant="secondary" disabled={saving || !activityPicked} className="gap-2 rounded-xl">
               <Save className="h-4 w-4" />
               {saving ? "Saving…" : "Save draft"}
             </Button>
@@ -452,14 +517,16 @@ export function LevelBuilderWizard({ initial }: Props) {
               <Button
                 type="button"
                 onClick={() => void handleNext()}
-                disabled={saving}
-                className="gap-1 rounded-xl bg-[#4F46E5] hover:bg-[#4338CA]"
+                disabled={saving || (currentStep === "info" && !activityPicked)}
+                className="gap-1 rounded-xl bg-navy px-4 hover:bg-navy-800"
               >
-                Continue
+                {WIZARD_STEPS[stepIndex + 1]
+                  ? `Next: ${WIZARD_STEPS[stepIndex + 1]!.shortLabel}`
+                  : "Continue"}
                 <ChevronRight className="h-4 w-4" />
               </Button>
             ) : (
-              <Button type="submit" disabled={saving} className="gap-1 rounded-xl bg-[#4F46E5] hover:bg-[#4338CA]">
+              <Button type="submit" disabled={saving} className="gap-1 rounded-xl bg-navy hover:bg-navy-800">
                 {published ? "Save & publish" : "Save item"}
               </Button>
             )}

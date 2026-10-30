@@ -5573,7 +5573,9 @@ public partial class CharacterMove : MonoBehaviour
 
         LoadPlayerLevel();
         ResolveCurrentLevelSlotAfterLevelsLoaded();
-        MaybeSkipCompletedIntroLevel();
+        bool replayPickedItem = loader != null && loader.ForceSelectedItem;
+        if (!replayPickedItem)
+            MaybeSkipCompletedIntroLevel();
         if (currentLevel > allLevelsData.Count)
             currentLevel = 1;
 
@@ -5635,6 +5637,43 @@ public partial class CharacterMove : MonoBehaviour
         ft.debugLogs = true;
     }
 
+    /// <summary>Classroom name for a slot. Avoids empty or placeholder titles.</summary>
+    private string StudentFacingNameForSlot(int slot)
+    {
+        if (allLevelsData == null || slot < 1 || slot > allLevelsData.Count)
+            return slot > 0 ? $"Item {slot}" : "this item";
+
+        LevelData ld = allLevelsData[slot - 1];
+        if (ld == null) return $"Item {slot}";
+
+        int playableIndex = 0;
+        for (int i = 0; i < slot; i++)
+        {
+            if (allLevelsData[i] != null && !IsIntroLevel(allLevelsData[i]))
+                playableIndex++;
+        }
+
+        if (IsIntroLevel(ld))
+        {
+            if (string.IsNullOrWhiteSpace(ld.levelName) || IsPlaceholderLevelName(ld.levelName))
+                return "Warm-up";
+            return ld.levelName.Trim();
+        }
+
+        if (string.IsNullOrWhiteSpace(ld.levelName) || IsPlaceholderLevelName(ld.levelName))
+            return playableIndex > 0 ? $"Item {playableIndex}" : $"Item {slot}";
+        return ld.levelName.Trim();
+    }
+
+    private static bool IsPlaceholderLevelName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return true;
+        string trimmed = name.Trim();
+        return trimmed.Equals("Untitled item", System.StringComparison.OrdinalIgnoreCase)
+            || trimmed.Equals("New Item", System.StringComparison.OrdinalIgnoreCase)
+            || trimmed.Equals("Untitled", System.StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>Title/subtitle shown on modern transition cards.</summary>
     private void GetTransitionLabelsForSlot(int slot, out string title, out string subtitle)
     {
@@ -5646,27 +5685,8 @@ public partial class CharacterMove : MonoBehaviour
         LevelData ld = allLevelsData[slot - 1];
         if (ld == null) return;
 
-        if (IsIntroLevel(ld))
-        {
-            title = string.IsNullOrWhiteSpace(ld.levelName) ? "Introduction" : ld.levelName;
-            subtitle = "Learn the action blocks";
-            return;
-        }
-
-        // Slot number among non-intro items when possible.
-        int playableIndex = 0;
-        for (int i = 0; i < slot; i++)
-        {
-            if (allLevelsData[i] != null && !IsIntroLevel(allLevelsData[i]))
-                playableIndex++;
-        }
-
-        string name = string.IsNullOrWhiteSpace(ld.levelName) ? $"Item {playableIndex}" : ld.levelName;
-        if (playableIndex > 0 && !name.StartsWith("Item", System.StringComparison.OrdinalIgnoreCase))
-            title = $"Item {playableIndex}";
-        else
-            title = name;
-        subtitle = name;
+        title = StudentFacingNameForSlot(slot);
+        subtitle = IsIntroLevel(ld) ? "Learn the action blocks" : "Get ready";
     }
 
     /// <summary>
@@ -5857,50 +5877,55 @@ public partial class CharacterMove : MonoBehaviour
 
         successPopup.SetActive(false);
 
+        // Used up tries without a pass: stay here so Play next does not skip ahead.
+        if (!pendingLevelPassed)
+        {
+            yield return RetrySameItemAfterFailedAttempts();
+            yield break;
+        }
+
+        int finishedSlot = currentLevel;
+        int nextLevel = currentLevel + 1;
+        if (!CanAdvanceToSlot(nextLevel))
+        {
+            if (GameAssessmentClient.Instance != null)
+                yield return GameAssessmentClient.Instance.WaitForPendingReports();
+            ShowAllItemsCompleteScreen();
+            yield break;
+        }
+
+        currentLevel = nextLevel;
+        SavePlayerLevel();
+        yield return SetupNextLevel(finishedSlot);
+    }
+
+    /// <summary>After the last failed try, reload this item instead of unlocking the next one.</summary>
+    private IEnumerator RetrySameItemAfterFailedAttempts()
+    {
         _isLevelTransitioning = true;
         EnsureLevelTransitionController();
         if (useLevelTransitionFades && levelTransition != null)
             yield return levelTransition.FadeOutForItemChange();
         ClearPlayfieldForLevelTransition();
 
-        if (!_skipNextPlatformReport && !_currentRunReportedToPlatform)
-            yield return ReportCurrentRunToPlatformRoutine(pendingLevelPassed);
-        else
-            _skipNextPlatformReport = false;
-
         if (GameAssessmentClient.Instance != null)
+        {
             yield return GameAssessmentClient.Instance.WaitForPendingReports();
-
-        int nextLevel = currentLevel + 1;
-        if (CanAdvanceToSlot(nextLevel))
-        {
-            currentLevel = nextLevel;
-            SavePlayerLevel();
-
-            if (minTransitionCoverSeconds > 0f)
-                yield return new WaitForSecondsRealtime(minTransitionCoverSeconds);
-
-            SetupLevel(currentLevel);
-            yield return null;
-            Canvas.ForceUpdateCanvases();
-            yield return null;
-            yield return null;
-
-            string title, subtitle;
-            GetTransitionLabelsForSlot(currentLevel, out title, out subtitle);
-            if (useLevelTransitionFades && levelTransition != null)
-                yield return levelTransition.PlayItemTransitionReveal(title, subtitle);
-
-            _isLevelTransitioning = false;
-            NotifyTutorialsAfterLevelReveal();
+            GameAssessmentClient.Instance.ClearCurrentAttempt();
         }
-        else
-        {
-            _isLevelTransitioning = false;
-            if (useLevelTransitionFades && levelTransition != null)
-                yield return levelTransition.FadeTo(0f, levelTransition.fadeInSeconds, blockInput: false);
-            ShowAllItemsCompleteScreen();
-        }
+
+        SetupLevel(currentLevel);
+        yield return null;
+        Canvas.ForceUpdateCanvases();
+        yield return null;
+        yield return null;
+
+        string name = StudentFacingNameForSlot(currentLevel);
+        if (useLevelTransitionFades && levelTransition != null)
+            yield return levelTransition.PlayItemTransitionReveal("Try this one again", name);
+
+        _isLevelTransitioning = false;
+        NotifyTutorialsAfterLevelReveal();
     }
 
     private bool IsOnLastPlayableItem()
@@ -5939,7 +5964,7 @@ public partial class CharacterMove : MonoBehaviour
         string message =
             levelLine +
             "You completed all " + total + " items!\n\n" +
-            "Great work — your results are saved. You can close the game or ask your teacher what to try next.";
+            "Great work. Your results are saved. You can close the game or ask your teacher what to try next.";
 
         if (successPopup != null && successPopupText != null)
         {
@@ -6204,12 +6229,13 @@ public partial class CharacterMove : MonoBehaviour
             return;
         }
 
+        int finishedSlot = currentLevel;
         int nextLevel = currentLevel + 1;
         if (CanAdvanceToSlot(nextLevel))
         {
             currentLevel = nextLevel;
             SavePlayerLevel();
-            StartCoroutine(SetupNextLevel());
+            StartCoroutine(SetupNextLevel(finishedSlot));
         }
         else
         {
@@ -6219,7 +6245,7 @@ public partial class CharacterMove : MonoBehaviour
         }
     }
 
-    private IEnumerator SetupNextLevel()
+    private IEnumerator SetupNextLevel(int finishedSlot)
     {
         _isLevelTransitioning = true;
         EnsureLevelTransitionController();
@@ -6252,9 +6278,11 @@ public partial class CharacterMove : MonoBehaviour
         yield return null;
         yield return null;
 
-        // 5) Title card + soft reveal.
-        string title, subtitle;
-        GetTransitionLabelsForSlot(currentLevel, out title, out subtitle);
+        // 5) Title card + soft reveal: you finished X, next is Y.
+        string finishedName = StudentFacingNameForSlot(finishedSlot);
+        string nextName = StudentFacingNameForSlot(currentLevel);
+        string title = "You finished " + finishedName;
+        string subtitle = "Next: " + nextName;
         if (useLevelTransitionFades && levelTransition != null)
             yield return levelTransition.PlayItemTransitionReveal(title, subtitle);
 
@@ -9269,13 +9297,6 @@ public partial class CharacterMove : MonoBehaviour
             Destroy(actionHistoryTransform.GetChild(i).gameObject);
     }
 
-    private IEnumerator AdvanceAfterPendingReports()
-    {
-        if (GameAssessmentClient.Instance != null)
-            yield return GameAssessmentClient.Instance.WaitForPendingReports();
-        AdvanceToNextLevel();
-    }
-
     private bool HandleRunFailure(LevelData levelData, string failureReason = null)
     {
         if (levelData == null) return false;
@@ -9302,7 +9323,7 @@ public partial class CharacterMove : MonoBehaviour
             }
             else
             {
-                StartCoroutine(AdvanceAfterPendingReports());
+                StartCoroutine(RetrySameItemAfterFailedAttempts());
             }
             if (runButton != null) runButton.interactable = false;
             RefreshStudentResetButtonState();

@@ -673,7 +673,13 @@ export const createLevelBodySchema = z.object({
     .min(2)
     .max(64)
     .regex(/^[a-z0-9_]+$/, "Use lowercase letters, numbers, underscores"),
-  name: z.string().min(1).max(120),
+  name: z
+    .string()
+    .min(1)
+    .max(120)
+    .refine((value) => !/^(untitled item|new item|untitled)$/i.test(value.trim()), {
+      message: "Give the item a classroom name students will see.",
+    }),
   description: z.string().max(500).optional(),
   orderIndex: z.number().int().min(0).default(0),
   difficulty: z.number().int().min(1).max(5).default(1),
@@ -715,6 +721,9 @@ export function validateLevelIdentity(name: string, levelKey: string): string | 
   const trimmedKey = levelKey.trim();
 
   if (!trimmedName) return "Add a display name before saving.";
+  if (/^(untitled item|new item|untitled)$/i.test(trimmedName)) {
+    return "Give the item a classroom name students will see.";
+  }
   if (trimmedName.length > 120) return "Display name is too long (max 120 characters).";
   if (!trimmedKey) return "Add an item code before saving.";
   if (trimmedKey.length < 2) return "Item code must be at least 2 characters.";
@@ -1011,27 +1020,27 @@ export function defaultConfigForType(levelType: LevelType, levelName: string): L
 }
 
 export const LEVEL_TYPE_LABELS: Record<LevelType, string> = {
-  [LevelType.INTRO]: "Introduction (Item 0)",
-  [LevelType.DRAG_ACTIONS]: "Drag action blocks",
-  [LevelType.FLAG_PLACEMENT]: "Place flag (goal)",
-  [LevelType.CHOOSE_BUTTONS]: "Choose action buttons (guided blanks)",
-  [LevelType.DRAG_EDIT_PROGRAM]: "Edit starter program (drag & drop)",
-  [LevelType.GEOMETRY_PATH]: "Geometry Path",
+  [LevelType.INTRO]: "Introduction",
+  [LevelType.DRAG_ACTIONS]: "Build a program",
+  [LevelType.FLAG_PLACEMENT]: "Place the flag",
+  [LevelType.CHOOSE_BUTTONS]: "Fill in blanks",
+  [LevelType.DRAG_EDIT_PROGRAM]: "Fix a starter",
+  [LevelType.GEOMETRY_PATH]: "Geometry path",
 };
 
 export const LEVEL_TYPE_HELP: Record<LevelType, string> = {
   [LevelType.INTRO]:
-    "Runs once before Item 1. Teaches Forward, Backward, and turns — edit under Introduction in the menu.",
+    "Runs once before Item 1. Teaches Forward, Backward, and turns — edit under Introduction.",
   [LevelType.DRAG_ACTIONS]:
-    "Students drag blocks into the queue, then press RUN. Optional: visit two objects in order (both blink and disappear when touched).",
+    "Students build a command sequence, then press RUN. Use a grid, number line, or pattern canvas.",
   [LevelType.FLAG_PLACEMENT]:
-    "Students tap a cell to place the flag as the goal, then run their program.",
+    "Students tap the cell where the robot will finish — a prediction, not a full program.",
   [LevelType.CHOOSE_BUTTONS]:
-    "Pre-filled program with blanks; students pick the correct arrow buttons.",
+    "The program is mostly filled in. Students pick the missing move or turn.",
   [LevelType.DRAG_EDIT_PROGRAM]:
-    "You design a starter program; students add, remove, or reorder blocks with drag and drop, then RUN.",
+    "You seed a starter program. Students add, remove, or reorder blocks, then RUN.",
   [LevelType.GEOMETRY_PATH]:
-    "Students program the robot to trace a glowing shape, or you show the program and they draw that path on the grid (prediction).",
+    "Trace a glowing shape with a program, or show the program and have students draw that path.",
 };
 
 export const INTRO_LEVEL_KEY = "level_0";

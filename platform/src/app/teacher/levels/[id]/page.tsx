@@ -16,6 +16,7 @@ import {
 } from "@/components/teacher/level-detail-tabs";
 import { type LevelAttemptRow } from "@/components/assessment/level-attempts-table";
 import { LEVEL_TYPE_LABELS, levelGameplayConfigSchema } from "@/lib/level-config";
+import { itemActivityLabel } from "@/lib/item-activity";
 import { AttemptStatus } from "@prisma/client";
 import { formatAttemptRunLabel, parseAttemptRunMeta } from "@/lib/attempt-mistakes";
 import { resolveAttemptDurationSeconds } from "@/lib/game/resolve-attempt-duration";
@@ -220,7 +221,9 @@ async function LevelDetailContent({ id }: { id: string }) {
     description: level.description,
     orderIndex: level.orderIndex,
     difficulty: level.difficulty,
-    levelTypeLabel: LEVEL_TYPE_LABELS[level.levelType],
+    levelTypeLabel: parsedConfig.success
+      ? itemActivityLabel(level.levelType, parsedConfig.data)
+      : LEVEL_TYPE_LABELS[level.levelType],
     published: level.published,
     metrics: {
       attemptCount: attempts.length,

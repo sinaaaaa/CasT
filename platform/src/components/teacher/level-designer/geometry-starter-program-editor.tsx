@@ -1,13 +1,19 @@
 "use client";
 
-import { FilePlus2, Wrench } from "lucide-react";
+import { FilePlus2, Puzzle, Repeat2, RotateCcw, Wrench } from "lucide-react";
 import {
   formatCommandBagToken,
   formatCommandChunkToken,
   type LevelGameplayConfig,
 } from "@/lib/level-config";
 import { DEFAULT_GEOMETRY_PATH, geometryStarterPalette, isGeometryDrawPath } from "@/lib/geometry-path";
+import {
+  withGeometryRepeatProgram,
+  withGeometryShapeProgram,
+  wrapGeometryProgramAsChunk,
+} from "@/lib/geometry-program-path";
 import { VisualProgramBuilder } from "@/components/teacher/level-builder/visual-program-builder";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -69,14 +75,14 @@ export function GeometryStarterProgramEditor({ config, onChange }: Props) {
               className={cn(
                 "flex items-start gap-3 rounded-2xl border p-4 text-left transition",
                 on
-                  ? "border-violet-400 bg-violet-50/70 ring-2 ring-violet-100"
-                  : "border-slate-200 bg-white hover:border-slate-300"
+                  ? "border-navy bg-[#FFF8E8] ring-2 ring-[#E8C547]/50"
+                  : "border-stone-200 bg-white hover:border-stone-300"
               )}
             >
               <span
                 className={cn(
                   "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
-                  on ? "bg-violet-600 text-white" : "bg-slate-100 text-slate-500"
+                  on ? "bg-navy text-white" : "bg-stone-100 text-stone-500"
                 )}
               >
                 <Icon className="h-5 w-5" />
@@ -93,11 +99,45 @@ export function GeometryStarterProgramEditor({ config, onChange }: Props) {
 
       {seeded && (
         <>
-          <p className="rounded-xl border border-sky-100 bg-sky-50 px-3 py-2 text-xs leading-relaxed text-sky-900">
+          <p className="rounded-xl border border-stone-200 bg-[#F7F4EE] px-3 py-2 text-xs leading-relaxed text-stone-700">
             {drawPath
-              ? "Students see this program in the yellow strip and cannot edit it. They draw the path it will take on the grid, then press RUN to watch the robot follow it."
+              ? "Students see this program in the yellow strip and cannot edit it. They draw the path it will take on the grid, then press RUN to watch the robot follow it. Change the arrows into Repeat or a Chunk here — the drawn shape stays the same."
               : "Students see these blocks in the yellow box when the item loads. They can reorder, remove, or add blocks before RUN. Try Again and Reset bring the starter back. The blocks you can add follow the student tools you turned on."}
           </p>
+          {drawPath && (
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 gap-1.5 rounded-xl"
+                onClick={() => onChange(withGeometryShapeProgram(config))}
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                Rebuild from shape
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 gap-1.5 rounded-xl"
+                onClick={() => onChange(withGeometryRepeatProgram(config))}
+              >
+                <Repeat2 className="h-3.5 w-3.5" />
+                Fold into Repeat
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 gap-1.5 rounded-xl"
+                onClick={() => onChange(wrapGeometryProgramAsChunk(config))}
+              >
+                <Puzzle className="h-3.5 w-3.5" />
+                Make a Chunk
+              </Button>
+            </div>
+          )}
           <VisualProgramBuilder
             config={config}
             onChange={onChange}

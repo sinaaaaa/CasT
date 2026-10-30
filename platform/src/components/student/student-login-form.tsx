@@ -73,15 +73,15 @@ export function StudentLoginForm() {
 
           <div className="rounded-[2rem] border-2 border-white bg-white/95 p-8 shadow-2xl shadow-indigo-200/40 backdrop-blur-sm">
             <div className="mb-6 text-center">
-              <h1 className="text-3xl font-extrabold text-slate-900">Let&apos;s Get Started!</h1>
-              <p className="mt-2 text-lg text-slate-600">Enter your Student ID</p>
+              <h1 className="text-3xl font-extrabold text-stone-800">Let&apos;s get started</h1>
+              <p className="mt-2 text-lg text-stone-600">Enter the Student ID your teacher gave you</p>
               {next === "/play" ? (
-                <p className="mt-3 rounded-xl bg-indigo-50 px-4 py-2 text-sm font-medium text-indigo-800">
+                <p className="mt-3 rounded-xl bg-teal-50 px-4 py-2 text-sm font-medium text-teal-800">
                   Sign in to open the robot coding game.
                 </p>
               ) : (
                 <p className="mt-3 rounded-xl bg-teal-50 px-4 py-2 text-sm font-medium text-teal-800">
-                  Your teacher gave you a Student ID.
+                  Only IDs already on the class list can sign in.
                 </p>
               )}
             </div>
@@ -105,8 +105,8 @@ export function StudentLoginForm() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="displayName" className="text-sm font-semibold text-slate-700">
-                  Nickname <span className="font-normal text-slate-400">(optional, first time only)</span>
+                <Label htmlFor="displayName" className="text-sm font-semibold text-stone-700">
+                  Nickname <span className="font-normal text-stone-400">(optional)</span>
                 </Label>
                 <Input
                   id="displayName"
@@ -115,6 +115,7 @@ export function StudentLoginForm() {
                   placeholder="What should we call you?"
                   className="h-14 rounded-2xl border-2 border-indigo-100 text-lg"
                 />
+                <p className="text-xs text-stone-500">We&apos;ll greet you with this, like Hey Maya.</p>
               </div>
 
               {error && (

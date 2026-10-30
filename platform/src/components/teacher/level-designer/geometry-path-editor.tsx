@@ -12,12 +12,14 @@ import {
   MapPin,
   Pencil,
   PencilLine,
+  Puzzle,
   Redo2,
   RotateCcw,
   Sparkles,
   Trash2,
   Undo2,
 } from "lucide-react";
+import { CommandGlyph, commandGlyphSrc } from "@/components/assessment/command-glyph";
 import type { LevelGameplayConfig } from "@/lib/level-config";
 import {
   DEFAULT_GEOMETRY_COLORS,
@@ -42,7 +44,16 @@ import {
   type GeometryValidationMode,
   type PathSegment,
 } from "@/lib/geometry-path";
-import { geometryProgramPathSegments } from "@/lib/geometry-program-path";
+import {
+  geometryProgramPathSegments,
+  programTokensFromGeometryShape,
+  withGeometryShapeProgram,
+} from "@/lib/geometry-program-path";
+import {
+  parseCommandBagToken,
+  parseCommandChunkToken,
+} from "@/lib/level-config";
+import { parseRepeatStart } from "@/lib/assessment/expand-repeats";
 import { GRID_COLS, GRID_ROWS, OBJECT_PALETTE } from "@/lib/level-editor-constants";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -50,6 +61,8 @@ import { cn } from "@/lib/utils";
 type Props = {
   config: LevelGameplayConfig;
   onChange: (c: LevelGameplayConfig) => void;
+  /** Hide the PROGRAM / DRAW_PATH switch — the catalog already chose the student job. */
+  lockStudentTask?: boolean;
 };
 
 type DrawMode = "draw" | "erase" | "start" | "destination";
@@ -200,7 +213,50 @@ function Section({
   );
 }
 
-export function GeometryPathEditor({ config, onChange }: Props) {
+function programChipLabel(token: string): string {
+  if (token === "forward") return "Forward";
+  if (token === "backward") return "Back";
+  if (token === "turn left") return "Left";
+  if (token === "turn right") return "Right";
+  const repeat = parseRepeatStart(token);
+  if (repeat != null) return `Repeat ×${repeat}`;
+  if (token === "repeat-end") return "End";
+  if (parseCommandChunkToken(token)) return "Chunk";
+  if (parseCommandBagToken(token)) return "Bag";
+  return token;
+}
+
+function ShownProgramStrip({ tokens }: { tokens: string[] }) {
+  if (!tokens.length) {
+    return (
+      <p className="text-xs text-amber-900">
+        Draw edges from the robot start and the command arrows will appear here.
+      </p>
+    );
+  }
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {tokens.map((token, i) => (
+        <span
+          key={`${token}-${i}`}
+          className="inline-flex items-center gap-1 rounded-lg border border-stone-200 bg-white px-1.5 py-1 text-[11px] font-semibold text-stone-800 shadow-sm"
+          title={token}
+        >
+          {commandGlyphSrc(token) ? (
+            <CommandGlyph token={token} size={18} framed={false} />
+          ) : parseCommandChunkToken(token) ? (
+            <Puzzle className="h-3.5 w-3.5 text-[#9E66EB]" />
+          ) : (
+            <Sparkles className="h-3.5 w-3.5 text-stone-500" />
+          )}
+          {programChipLabel(token)}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+export function GeometryPathEditor({ config, onChange, lockStudentTask = true }: Props) {
   const gp = config.geometryPath;
   const segments = gp?.segments ?? [];
   const [drawMode, setDrawMode] = useState<DrawMode>("draw");
@@ -212,6 +268,13 @@ export function GeometryPathEditor({ config, onChange }: Props) {
   const facing = config.robotStartFacing ?? { x: 1, y: 0 };
   const shapeColor = gp?.targetColor ?? DEFAULT_GEOMETRY_COLORS.targetColor;
   const trailColor = gp?.trailColor ?? DEFAULT_GEOMETRY_COLORS.trailColor;
+
+  const commit = useCallback(
+    (next: LevelGameplayConfig, syncProgram = false) => {
+      onChange(syncProgram ? withGeometryShapeProgram(next) : next);
+    },
+    [onChange]
+  );
 
   useEffect(() => {
     if ((config.geometryPath?.segments?.length ?? 0) > 0) return;
@@ -228,7 +291,7 @@ export function GeometryPathEditor({ config, onChange }: Props) {
       config.geometryPath?.templateHeight ?? 2
     );
     if (next.length === 0) return;
-    onChange(patchGeometry(config, { shapeType: shape, segments: next, templateOrigin: origin }));
+    commit(patchGeometry(config, { shapeType: shape, segments: next, templateOrigin: origin }), true);
     setHistory([next]);
     setHistoryIndex(0);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- seed once when empty
@@ -236,7 +299,7 @@ export function GeometryPathEditor({ config, onChange }: Props) {
 
   const pushSegments = useCallback(
     (next: PathSegment[], shapeType: GeometryShapeType = "CUSTOM") => {
-      onChange(patchGeometry(config, { shapeType, segments: next }));
+      commit(patchGeometry(config, { shapeType, segments: next }), true);
       setHistory((prev) => {
         const clipped = prev.slice(0, historyIndex + 1);
         const updated = [...clipped, next].slice(-40);
@@ -245,13 +308,13 @@ export function GeometryPathEditor({ config, onChange }: Props) {
       });
       setAnchor(null);
     },
-    [config, historyIndex, onChange]
+    [commit, config, historyIndex]
   );
 
   const applyTemplate = useCallback(
     (shape: GeometryShapeType) => {
       if (shape === "CUSTOM") {
-        onChange(patchGeometry(config, { shapeType: "CUSTOM" }));
+        commit(patchGeometry(config, { shapeType: "CUSTOM" }));
         return;
       }
       const origin = gp?.templateOrigin ?? robot;
@@ -262,12 +325,13 @@ export function GeometryPathEditor({ config, onChange }: Props) {
         gp?.templateWidth ?? 3,
         gp?.templateHeight ?? 2
       );
-      onChange(
+      commit(
         patchGeometry(config, {
           shapeType: shape,
           segments: next,
           templateOrigin: origin,
-        })
+        }),
+        true
       );
       setHistory((prev) => {
         const clipped = prev.slice(0, historyIndex + 1);
@@ -277,7 +341,7 @@ export function GeometryPathEditor({ config, onChange }: Props) {
       });
       setAnchor(null);
     },
-    [config, gp, historyIndex, onChange, robot]
+    [commit, config, gp, historyIndex, robot]
   );
 
   const refreshTemplate = useCallback(() => {
@@ -289,19 +353,19 @@ export function GeometryPathEditor({ config, onChange }: Props) {
     if (historyIndex <= 0) return;
     const i = historyIndex - 1;
     setHistoryIndex(i);
-    onChange(patchGeometry(config, { shapeType: "CUSTOM", segments: history[i] ?? [] }));
+    commit(patchGeometry(config, { shapeType: "CUSTOM", segments: history[i] ?? [] }), true);
   }
 
   function redo() {
     if (historyIndex >= history.length - 1) return;
     const i = historyIndex + 1;
     setHistoryIndex(i);
-    onChange(patchGeometry(config, { shapeType: "CUSTOM", segments: history[i] ?? [] }));
+    commit(patchGeometry(config, { shapeType: "CUSTOM", segments: history[i] ?? [] }), true);
   }
 
   function onCellPointer(x: number, y: number) {
     if (drawMode === "start") {
-      onChange({ ...config, robotStartPosition: { x, y } });
+      commit({ ...config, robotStartPosition: { x, y } }, true);
       return;
     }
 
@@ -359,21 +423,15 @@ export function GeometryPathEditor({ config, onChange }: Props) {
     () => (drawPath ? geometryProgramPathSegments(config) : []),
     [drawPath, config]
   );
-  const displaySegments = segments.length > 0 ? segments : predictedSegments;
-  const predictedKeys = useMemo(
-    () => new Set(predictedSegments.map((s) => segmentKey(s.from, s.to))),
-    [predictedSegments]
+  const shapeProgram = useMemo(
+    () => (drawPath ? programTokensFromGeometryShape(config) : null),
+    [drawPath, config]
   );
+  const displaySegments = segments.length > 0 ? segments : predictedSegments;
   const authoredKeys = useMemo(
     () => new Set(segments.map((s) => segmentKey(s.from, s.to))),
     [segments]
   );
-  const programMatchesShape =
-    drawPath &&
-    authoredKeys.size > 0 &&
-    predictedKeys.size > 0 &&
-    authoredKeys.size === predictedKeys.size &&
-    [...authoredKeys].every((k) => predictedKeys.has(k));
   const mode = (gp?.validationMode ?? "TRACE_TARGET") as GeometryValidationMode;
   const shape = (gp?.shapeType ?? "SQUARE") as GeometryShapeType;
   const afterShape = (gp?.afterShapeBehavior ?? "SHAPE_COMPLETE") as GeometryAfterShapeBehavior;
@@ -402,9 +460,6 @@ export function GeometryPathEditor({ config, onChange }: Props) {
   function setStudentTask(next: "PROGRAM" | "DRAW_PATH") {
     if ((gp?.studentTask ?? "PROGRAM") === next) return;
     const seeded = next === "DRAW_PATH" ? true : !!gp?.seedStarterProgram;
-    const actions =
-      sanitizeGeometryStarter({ ...gp, seedStarterProgram: seeded, studentTask: next }, config.guidedActions) ??
-      (next === "DRAW_PATH" ? ["forward", "turn left", "forward"] : config.guidedActions);
     if (next === "DRAW_PATH") setDrawMode("draw");
     const nextHint =
       next === "DRAW_PATH"
@@ -433,39 +488,47 @@ export function GeometryPathEditor({ config, onChange }: Props) {
             ),
           }
         : {};
-    onChange({
-      ...patchGeometry(config, {
-        studentTask: next,
-        seedStarterProgram: seeded,
-        keepShapeVisibleDuringRun: next === "DRAW_PATH" ? false : gp?.keepShapeVisibleDuringRun,
-        afterShapeBehavior: next === "DRAW_PATH" ? "SHAPE_COMPLETE" : gp?.afterShapeBehavior,
-        validationMode: next === "DRAW_PATH" ? "EXACT_PATH" : gp?.validationMode,
-        ...shapePatch,
-      }),
-      guidedActions: actions,
-      ...(nextHint ? { cornerHint: nextHint } : {}),
+    const patched = patchGeometry(config, {
+      studentTask: next,
+      seedStarterProgram: seeded,
+      keepShapeVisibleDuringRun: next === "DRAW_PATH" ? false : gp?.keepShapeVisibleDuringRun,
+      afterShapeBehavior: next === "DRAW_PATH" ? "SHAPE_COMPLETE" : gp?.afterShapeBehavior,
+      validationMode: next === "DRAW_PATH" ? "EXACT_PATH" : gp?.validationMode,
+      ...shapePatch,
+    });
+    const withHint = nextHint ? { ...patched, cornerHint: nextHint } : patched;
+    if (next === "DRAW_PATH") {
+      commit(withHint, true);
+      return;
+    }
+    commit({
+      ...withHint,
+      guidedActions:
+        sanitizeGeometryStarter({ ...gp, seedStarterProgram: seeded, studentTask: next }, config.guidedActions) ??
+        config.guidedActions,
     });
   }
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-3 sm:grid-cols-2">
+      {!lockStudentTask && (
+      <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-1.5">
         {(
           [
             {
               id: "PROGRAM" as const,
-              title: "Write a program",
-              description: "Students build a program that traces the glowing shape.",
+              title: "Trace with a program",
+              hint: "Students write commands that follow this shape",
               Icon: Pencil,
             },
             {
               id: "DRAW_PATH" as const,
-              title: "Draw the path (prediction)",
-              description: "The program is shown in the yellow strip. Students draw that path on the grid, then press RUN to see the robot follow it.",
+              title: "Draw the path",
+              hint: "Students see the program and draw this shape",
               Icon: PencilLine,
             },
           ] as const
-        ).map(({ id, title, description, Icon }) => {
+        ).map(({ id, title, hint, Icon }) => {
           const on = (gp?.studentTask ?? "PROGRAM") === id;
           return (
             <button
@@ -473,28 +536,27 @@ export function GeometryPathEditor({ config, onChange }: Props) {
               type="button"
               onClick={() => setStudentTask(id)}
               className={cn(
-                "flex items-start gap-3 rounded-2xl border p-4 text-left transition",
-                on
-                  ? "border-violet-400 bg-violet-50/70 ring-2 ring-violet-100"
-                  : "border-slate-200 bg-white hover:border-slate-300"
+                "flex min-w-[12rem] flex-1 items-start gap-2.5 rounded-xl px-3 py-2.5 text-left transition",
+                on ? "bg-white shadow-sm ring-1 ring-violet-200" : "hover:bg-white/70"
               )}
             >
               <span
                 className={cn(
-                  "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
-                  on ? "bg-violet-600 text-white" : "bg-slate-100 text-slate-500"
+                  "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
+                  on ? "bg-violet-600 text-white" : "bg-white text-slate-500"
                 )}
               >
-                <Icon className="h-5 w-5" />
+                <Icon className="h-4 w-4" />
               </span>
               <span>
-                <span className="block text-sm font-semibold text-slate-900">{title}</span>
-                <span className="mt-1 block text-xs leading-relaxed text-slate-600">{description}</span>
+                <span className="block text-sm font-bold text-slate-900">{title}</span>
+                <span className="text-[11px] leading-snug text-slate-500">{hint}</span>
               </span>
             </button>
           );
         })}
       </div>
+      )}
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.85fr)]">
         {/* —— Canvas hero —— */}
@@ -502,11 +564,11 @@ export function GeometryPathEditor({ config, onChange }: Props) {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h3 className="text-base font-bold text-slate-900">
-                {drawPath ? "Shape this program will take" : "Path canvas"}
+                {drawPath ? "Draw the shape" : "Path canvas"}
               </h3>
               <p className="mt-0.5 text-xs text-slate-500">
                 {drawPath
-                  ? "Define the shape the same way as Write a program. Students do not see it — they look at the yellow-strip program and draw this path."
+                  ? "Draw or pick a shape. The yellow-strip program is generated from it. Students do not see this shape — they predict it from the program."
                   : "Draw edges between cells. This glowing path is what students must trace."}
               </p>
             </div>
@@ -684,6 +746,34 @@ export function GeometryPathEditor({ config, onChange }: Props) {
                   );
                 })}
 
+              {drawPath &&
+                shapeProgram?.walk.map((seg, i) => {
+                  const a = cellCenterSvg(seg.from.x, seg.from.y);
+                  const b = cellCenterSvg(seg.to.x, seg.to.y);
+                  const dx = b.cx - a.cx;
+                  const dy = b.cy - a.cy;
+                  const len = Math.hypot(dx, dy) || 1;
+                  const ux = dx / len;
+                  const uy = dy / len;
+                  const px = -uy;
+                  const py = ux;
+                  const mx = (a.cx + b.cx) / 2;
+                  const my = (a.cy + b.cy) / 2;
+                  const size = 0.13;
+                  const tipx = mx + ux * size;
+                  const tipy = my + uy * size;
+                  const bx = mx - ux * size * 0.35;
+                  const by = my - uy * size * 0.35;
+                  return (
+                    <polygon
+                      key={`walk-${i}`}
+                      points={`${tipx},${tipy} ${bx + px * size},${by + py * size} ${bx - px * size},${by - py * size}`}
+                      fill="#0f172a"
+                      opacity={0.72}
+                    />
+                  );
+                })}
+
               {anchor && (
                 <circle
                   cx={cellCenterSvg(anchor.x, anchor.y).cx}
@@ -753,35 +843,37 @@ export function GeometryPathEditor({ config, onChange }: Props) {
           </div>
 
           {drawPath && (
-            <div
-              className={cn(
-                "flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2 text-xs",
-                programMatchesShape
-                  ? "border-emerald-200 bg-emerald-50 text-emerald-900"
-                  : predictedSegments.length === 0
-                    ? "border-amber-200 bg-amber-50 text-amber-900"
-                    : "border-sky-200 bg-sky-50 text-sky-950"
-              )}
-            >
-              <span>
-                {programMatchesShape
-                  ? "The yellow-strip program will draw this shape."
-                  : predictedSegments.length === 0
-                    ? "Write a program with at least one move so this shape has a predicted path."
-                    : segments.length === 0
-                      ? "No shape yet — pick a template or draw edges. Cyan is what the program will do."
-                      : "Cyan dashed line is what the program will draw. Align the program with this shape."}
-              </span>
-              {predictedSegments.length > 0 && (
+            <div className="space-y-2 rounded-xl border border-[#E8C547]/70 bg-[#F7E37D] px-3 py-3">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <p className="text-xs font-semibold text-stone-900">Generated program</p>
+                  <p className="text-[11px] text-stone-700">
+                    These arrows go under the shape in the yellow strip. In the next section you can
+                    rewrite them as Repeat or Chunks.
+                  </p>
+                </div>
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   className="h-8 rounded-lg"
-                  onClick={() => pushSegments(predictedSegments, "CUSTOM")}
+                  onClick={() => commit(config, true)}
                 >
-                  Use program path as shape
+                  Rebuild from shape
                 </Button>
+              </div>
+              <ShownProgramStrip tokens={config.guidedActions ?? []} />
+              {!shapeProgram?.startOnShape && (segments.length ?? 0) > 0 && (
+                <p className="text-[11px] text-amber-900">
+                  Place the robot on the shape so these arrows start from the orange marker.
+                </p>
+              )}
+              {(shapeProgram?.unusedEdgeCount ?? 0) > 0 && (
+                <p className="text-[11px] text-amber-900">
+                  {shapeProgram?.unusedEdgeCount} edge
+                  {(shapeProgram?.unusedEdgeCount ?? 0) === 1 ? "" : "s"} could not be reached from
+                  the start — connect them or move the robot.
+                </p>
               )}
             </div>
           )}
@@ -817,7 +909,7 @@ export function GeometryPathEditor({ config, onChange }: Props) {
             title="Shape"
             description={
               drawPath
-                ? "Pick the shape this program should take. Students predict it from the yellow-strip program."
+                ? "Pick or draw a shape. Command arrows generate automatically from it."
                 : "Pick a template, then tune size. Switch to Custom to draw freely."
             }
           >
@@ -856,12 +948,13 @@ export function GeometryPathEditor({ config, onChange }: Props) {
                       gp?.templateWidth ?? 3,
                       gp?.templateHeight ?? 2
                     );
-                    onChange(
+                    commit(
                       patchGeometry(config, {
                         shapeType: shape,
                         templateSize: n,
                         segments: next,
-                      })
+                      }),
+                      true
                     );
                   })}
                 {(shape === "RECTANGLE" || shape === "L_SHAPE") && (
@@ -877,12 +970,13 @@ export function GeometryPathEditor({ config, onChange }: Props) {
                           n,
                           gp?.templateHeight ?? 2
                         );
-                        onChange(
+                        commit(
                           patchGeometry(config, {
                             shapeType: shape,
                             templateWidth: n,
                             segments: next,
-                          })
+                          }),
+                          true
                         );
                       }
                     )}
@@ -897,12 +991,13 @@ export function GeometryPathEditor({ config, onChange }: Props) {
                           gp?.templateWidth ?? 3,
                           n
                         );
-                        onChange(
+                        commit(
                           patchGeometry(config, {
                             shapeType: shape,
                             templateHeight: n,
                             segments: next,
-                          })
+                          }),
+                          true
                         );
                       }
                     )}
@@ -930,7 +1025,7 @@ export function GeometryPathEditor({ config, onChange }: Props) {
                   <button
                     key={id}
                     type="button"
-                    onClick={() => onChange({ ...config, robotStartFacing: { ...vec } })}
+                    onClick={() => commit({ ...config, robotStartFacing: { ...vec } }, true)}
                     className={cn(
                       "flex h-11 flex-col items-center justify-center gap-0.5 rounded-xl border text-[10px] font-semibold transition",
                       selected
@@ -1219,9 +1314,9 @@ export function GeometryPathEditor({ config, onChange }: Props) {
             </div>
           </Section>
 
-          <div className="rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50/80 to-white p-4 shadow-sm">
+          <div className="rounded-2xl border border-stone-200 bg-gradient-to-br from-[#FFF8E8] to-white p-4 shadow-sm">
             <div className="mb-3 flex items-center gap-2">
-              <ClipboardCheck className="h-4 w-4 text-indigo-600" />
+              <ClipboardCheck className="h-4 w-4 text-[#0F9B8E]" />
               <h3 className="text-sm font-bold text-slate-900">Assessment summary</h3>
             </div>
             <dl className="space-y-2 text-xs">
@@ -1262,7 +1357,7 @@ export function GeometryPathEditor({ config, onChange }: Props) {
                 <dd className="font-medium text-slate-800">{summary.trailOn ? "On" : "Off"}</dd>
               </div>
               {summary.requirements.length > 0 && (
-                <div className="border-t border-indigo-100 pt-2">
+                <div className="border-t border-stone-200 pt-2">
                   <dt className="mb-1 text-slate-500">Requirements</dt>
                   <dd className="space-y-1">
                     {summary.requirements.map((r) => (
@@ -1275,7 +1370,7 @@ export function GeometryPathEditor({ config, onChange }: Props) {
               )}
             </dl>
             <p className="mt-3 flex items-start gap-1.5 text-[11px] leading-relaxed text-slate-500">
-              <Sparkles className="mt-0.5 h-3 w-3 shrink-0 text-indigo-500" />
+              <Sparkles className="mt-0.5 h-3 w-3 shrink-0 text-[#0F9B8E]" />
               Configure Commands, Repeat, Chunks, and Bags in the Program step. Results use the same
               attempt &amp; assessment pipeline as other items.
             </p>

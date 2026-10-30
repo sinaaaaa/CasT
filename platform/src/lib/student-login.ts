@@ -1,5 +1,4 @@
-import bcrypt from "bcryptjs";
-import { Prisma, UserRole } from "@prisma/client";
+import { UserRole } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { normalizeExternalStudentId, resolveStudent } from "@/lib/game-service";
 
@@ -55,11 +54,19 @@ async function enrollInClassByCode(studentProfileId: string, classCode: string) 
   });
 }
 
+function looksLikePlaceholderName(name: string, externalId: string): boolean {
+  const trimmed = name.trim();
+  if (!trimmed) return true;
+  if (/^STU-/i.test(trimmed)) return true;
+  const rawId = externalId.replace(/^STU-/i, "");
+  return new RegExp(`^Student\\s+${rawId}$`, "i").test(trimmed);
+}
+
 /**
- * Find or create a student by external student code (STU-XXXX).
- * Safe for concurrent requests — does not overwrite existing profiles.
+ * Sign in a student who already exists on the class list.
+ * Unknown IDs are rejected. A nickname is saved when the student provides one.
  */
-export async function findOrCreateStudentByCode(
+export async function signInExistingStudent(
   input: StudentLoginInput
 ): Promise<StudentLoginResult> {
   const validated = validateStudentCode(input.studentCode);
@@ -68,86 +75,43 @@ export async function findOrCreateStudentByCode(
   }
 
   const externalId = validated.code;
-  const rawDisplay = input.displayName?.trim();
-
-  let existing = await resolveStudent(externalId);
-  if (existing) {
-    const account = await prisma.user.findUnique({
-      where: { id: existing.userId },
-      select: { isActive: true },
-    });
-    if (!account?.isActive || existing.isArchived) {
-      throw new StudentLoginError("This student account is disabled.", 403);
-    }
-
-    if (input.classCode?.trim()) {
-      await enrollInClassByCode(existing.id, input.classCode);
-    }
-
-    return {
-      profileId: existing.id,
-      studentCode: externalId,
-      displayName: existing.displayName?.trim() || `Student ${externalId}`,
-      created: false,
-    };
+  const existing = await resolveStudent(externalId);
+  if (!existing) {
+    throw new StudentLoginError(
+      "This Student ID is not on the class list. Ask your teacher to add you first.",
+      404
+    );
   }
 
-  const rawId = externalId.replace(/^STU-/i, "");
-  const email = `student.${rawId.toLowerCase()}@game.sparc.local`;
-  const passwordHash = await bcrypt.hash(rawId, 10);
-
-  try {
-    const user = await prisma.user.create({
-      data: {
-        email,
-        password: passwordHash,
-        role: UserRole.STUDENT,
-        studentProfile: {
-          create: {
-            displayName: rawDisplay || `Student ${rawId}`,
-            externalId,
-          },
-        },
-      },
-      include: { studentProfile: true },
-    });
-
-    const profile = user.studentProfile!;
-    const defaultClass = await prisma.class.findFirst({ orderBy: { createdAt: "asc" } });
-    if (defaultClass) {
-      await prisma.classStudent.upsert({
-        where: {
-          classId_studentId: { classId: defaultClass.id, studentId: profile.id },
-        },
-        create: { classId: defaultClass.id, studentId: profile.id },
-        update: {},
-      });
-    }
-
-    if (input.classCode?.trim()) {
-      await enrollInClassByCode(profile.id, input.classCode);
-    }
-
-    return {
-      profileId: profile.id,
-      studentCode: externalId,
-      displayName: profile.displayName,
-      created: true,
-    };
-  } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      existing = await resolveStudent(externalId);
-      if (existing) {
-        return {
-          profileId: existing.id,
-          studentCode: externalId,
-          displayName: existing.displayName?.trim() || `Student ${externalId}`,
-          created: false,
-        };
-      }
-    }
-    throw error;
+  const account = await prisma.user.findUnique({
+    where: { id: existing.userId },
+    select: { isActive: true, role: true },
+  });
+  if (account?.role !== UserRole.STUDENT || !account.isActive || existing.isArchived) {
+    throw new StudentLoginError("This student account is disabled.", 403);
   }
+
+  const nickname = input.displayName?.trim();
+  let displayName = existing.displayName?.trim() || `Student ${externalId}`;
+  if (nickname && (nickname !== displayName || looksLikePlaceholderName(displayName, externalId))) {
+    const updated = await prisma.studentProfile.update({
+      where: { id: existing.id },
+      data: { displayName: nickname },
+      select: { displayName: true },
+    });
+    displayName = updated.displayName;
+  }
+
+  if (input.classCode?.trim()) {
+    await enrollInClassByCode(existing.id, input.classCode);
+  }
+
+  return {
+    profileId: existing.id,
+    studentCode: externalId,
+    displayName,
+    created: false,
+  };
 }
 
 export class StudentLoginError extends Error {

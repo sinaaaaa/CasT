@@ -14,7 +14,7 @@ export function ItemBuilderContextPanel({ stepId }: { stepId: WizardStepId }) {
           <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-white shadow-sm">
             <Lightbulb className="h-4 w-4 text-[#4F46E5]" />
           </div>
-          <p className="text-xs font-bold uppercase tracking-wider text-[#4F46E5]">Design tip</p>
+          <p className="text-xs font-bold uppercase tracking-wider text-[#4F46E5]">This step</p>
           <p className="mt-2 text-sm font-semibold text-slate-900">{ctx.title}</p>
           <p className="mt-2 text-sm leading-relaxed text-slate-600">{ctx.body}</p>
         </div>

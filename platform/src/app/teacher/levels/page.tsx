@@ -6,6 +6,7 @@ import { TeacherShell } from "@/components/teacher/teacher-shell";
 import { LevelsHub, type LevelHubRow } from "@/components/teacher/levels-hub";
 import { LevelType } from "@prisma/client";
 import { INTRO_LEVEL_KEY, levelGameplayConfigSchema } from "@/lib/level-config";
+import { resolveItemActivity } from "@/lib/item-activity";
 import { assertLevelEditAccess } from "@/lib/class-access";
 
 export default async function TeacherLevelsPage() {
@@ -23,6 +24,9 @@ export default async function TeacherLevelsPage() {
     .map((l) => {
       const parsed = levelGameplayConfigSchema.safeParse(l.config);
       const visible = parsed.success ? (parsed.data.visible ?? true) : true;
+      const activity = parsed.success
+        ? resolveItemActivity(l.levelType, parsed.data)
+        : resolveItemActivity(l.levelType, null);
       return {
         id: l.id,
         levelKey: l.levelKey,
@@ -36,6 +40,9 @@ export default async function TeacherLevelsPage() {
         ownerTeacherId: l.ownerTeacherId,
         canEdit: assertLevelEditAccess(scope, l),
         isPlatformDefault: l.ownerTeacherId === null,
+        activityId: activity.id,
+        activityTitle: activity.title,
+        familyId: activity.family,
       };
     });
 

@@ -3,11 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { motion, Reorder } from "framer-motion";
 import {
-  ArrowDown,
-  ArrowUp,
   Briefcase,
-  CornerDownLeft,
-  CornerDownRight,
   HelpCircle,
   Minus,
   Play,
@@ -16,6 +12,7 @@ import {
   RotateCcw,
   Sparkles,
 } from "lucide-react";
+import { CommandGlyph, commandGlyphSrc } from "@/components/assessment/command-glyph";
 import type { CommandBag, LevelGameplayConfig } from "@/lib/level-config";
 import {
   formatCommandBagToken,
@@ -47,48 +44,22 @@ export type ProgramPalette = { arrows: boolean; repeat: boolean; bags: boolean; 
 
 type ProgramBlock = { id: string; action: string };
 
-const ACTION_STYLES: Record<string, { bg: string; border: string; icon: React.ReactNode }> = {
-  forward: {
-    bg: "bg-sky-50",
-    border: "border-sky-300",
-    icon: <ArrowUp className="h-4 w-4 text-sky-600" />,
-  },
-  backward: {
-    bg: "bg-indigo-50",
-    border: "border-indigo-300",
-    icon: <ArrowDown className="h-4 w-4 text-indigo-600" />,
-  },
-  "turn left": {
-    bg: "bg-amber-50",
-    border: "border-amber-300",
-    icon: <CornerDownLeft className="h-4 w-4 text-amber-600" />,
-  },
-  "turn right": {
-    bg: "bg-orange-50",
-    border: "border-orange-300",
-    icon: <CornerDownRight className="h-4 w-4 text-orange-600" />,
-  },
-  blank: {
-    bg: "bg-violet-50",
-    border: "border-violet-400 border-dashed",
-    icon: <HelpCircle className="h-4 w-4 text-violet-600" />,
-  },
-  "repeat:1": {
-    bg: "bg-purple-100",
-    border: "border-purple-400",
-    icon: <RotateCcw className="h-4 w-4 text-purple-700" />,
-  },
-  "repeat:2": {
-    bg: "bg-purple-100",
-    border: "border-purple-400",
-    icon: <RotateCcw className="h-4 w-4 text-purple-700" />,
-  },
-  "repeat-end": {
-    bg: "bg-orange-100",
-    border: "border-orange-400",
-    icon: <RotateCcw className="h-4 w-4 text-orange-700" />,
-  },
+const ACTION_STYLES: Record<string, { bg: string; border: string }> = {
+  forward: { bg: "bg-white", border: "border-stone-200" },
+  backward: { bg: "bg-white", border: "border-stone-200" },
+  "turn left": { bg: "bg-white", border: "border-stone-200" },
+  "turn right": { bg: "bg-white", border: "border-stone-200" },
+  blank: { bg: "bg-white", border: "border-dashed border-stone-300" },
+  "repeat:1": { bg: "bg-white", border: "border-stone-200" },
+  "repeat:2": { bg: "bg-white", border: "border-stone-200" },
+  "repeat-end": { bg: "bg-white", border: "border-stone-200" },
 };
+
+function ActionGlyph({ token, size = 22 }: { token: string; size?: number }) {
+  if (commandGlyphSrc(token)) return <CommandGlyph token={token} size={size} framed={false} />;
+  if (token === "blank") return <HelpCircle className="h-4 w-4 text-stone-500" />;
+  return null;
+}
 
 const CATEGORIES = [
   { id: "move", label: "Move", actions: ["forward", "backward"] as const },
@@ -317,8 +288,8 @@ export function VisualProgramBuilder({
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
       {storage === "correctProgram" && (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-violet-200 bg-violet-50/50 p-3">
-          <span className="mr-1 text-xs font-semibold uppercase tracking-wide text-violet-700">
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-stone-200 bg-[#F7F4EE] p-3">
+          <span className="mr-1 text-xs font-semibold uppercase tracking-wide text-stone-600">
             Accepted answers
           </span>
           {Array.from({ length: programCount }).map((_, i) => (
@@ -329,8 +300,8 @@ export function VisualProgramBuilder({
               className={cn(
                 "rounded-lg px-3 py-1.5 text-xs font-medium transition",
                 safeIndex === i
-                  ? "bg-violet-600 text-white shadow-sm"
-                  : "bg-white text-violet-800 hover:bg-violet-100"
+                  ? "bg-navy text-white shadow-sm"
+                  : "bg-white text-stone-700 hover:bg-white"
               )}
             >
               Program {i + 1}
@@ -363,7 +334,7 @@ export function VisualProgramBuilder({
               Remove program {safeIndex + 1}
             </Button>
           )}
-          <p className="w-full text-xs text-violet-700/80">
+          <p className="w-full text-xs text-stone-500">
             Students pass if their strip matches any accepted program (exact Repeat nesting or same
             expanded motions). Use <strong>Smart variants</strong> to auto-add both forms from the
             pattern (e.g. F·R·F·R and Repeat×2 [F·R]).
@@ -371,38 +342,37 @@ export function VisualProgramBuilder({
         </div>
       )}
 
-      <motion.div className="overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-sky-50/40 p-5 shadow-sm">
+      <motion.div className="overflow-hidden rounded-2xl border border-[#E8C547]/60 bg-[#F7E37D] p-5 shadow-sm">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h4 className="text-sm font-semibold text-slate-900">
+            <h4 className="text-sm font-semibold text-stone-900">
               {storage === "correctProgram"
                 ? `Accepted program ${safeIndex + 1}`
-                : "Command sequence"}
+                : "Yellow strip"}
             </h4>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-stone-700/80">
               {storage === "correctProgram"
                 ? "One valid way students can answer — add more for Repeat vs expanded variants"
-                : "What students will see in the action queue"}
+                : "Same arrows students see in the game — and in assessment reports"}
             </p>
           </div>
           <Button
             type="button"
             size="sm"
             variant="outline"
-            className="gap-2 border-sky-200 bg-white hover:bg-sky-50"
+            className="gap-2 border-stone-300 bg-white hover:bg-white/80"
             onClick={runPreview}
             disabled={actions.length === 0}
           >
-            <Play className={cn("h-3.5 w-3.5", previewRun && "text-sky-600")} />
+            <Play className={cn("h-3.5 w-3.5", previewRun && "text-[#0F9B8E]")} />
             Preview run
           </Button>
         </div>
 
         <div
           className={cn(
-            "relative min-h-[5.5rem] rounded-xl border-2 border-dashed p-4 transition-colors",
-            actions.length === 0 ? "border-slate-200 bg-white/60" : "border-sky-200/80 bg-white",
-            previewRun && "border-sky-400 ring-2 ring-sky-200"
+            "relative min-h-[5.5rem] rounded-xl border border-[#E8C547]/70 bg-[#FFF8D6] p-4 transition-colors",
+            previewRun && "ring-2 ring-stone-800/20"
           )}
         >
           {blocks.length === 0 ? (
@@ -428,18 +398,18 @@ export function VisualProgramBuilder({
                     key={block.id}
                     value={block}
                     className={cn(
-                      "flex cursor-grab items-center gap-2 rounded-xl border-2 px-3 py-2 text-sm font-medium shadow-sm active:cursor-grabbing",
+                      "flex cursor-grab items-center gap-2 rounded-xl border px-2.5 py-1.5 text-sm font-medium shadow-sm active:cursor-grabbing",
                       macro
                         ? macro.missing
                           ? "border-dashed border-red-300 bg-red-50 text-red-700"
-                          : "bg-white"
+                          : "border-stone-200 bg-white"
                         : [style.bg, style.border],
                       previewRun && "animate-pulse"
                     )}
                     style={macro && !macro.missing && macro.color ? { borderColor: macro.color } : undefined}
                     whileDrag={{ scale: 1.05, zIndex: 10 }}
                   >
-                    <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-white/80 text-xs font-bold text-slate-500">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-md bg-stone-100 text-[10px] font-bold text-stone-500">
                       {i + 1}
                     </span>
                     {macro ? (
@@ -449,7 +419,7 @@ export function VisualProgramBuilder({
                         <Puzzle className="h-4 w-4" style={{ color: macro.color }} />
                       )
                     ) : (
-                      style.icon
+                      <ActionGlyph token={block.action} size={24} />
                     )}
                     <span>{actionLabel(block.action, bags)}</span>
                     {repeatCount != null && (
@@ -498,7 +468,7 @@ export function VisualProgramBuilder({
             <motion.p
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="mt-3 text-center text-xs font-medium text-sky-600"
+              className="mt-3 text-center text-xs font-medium text-[#0F9B8E]"
             >
               Simulating {actions.length} step{actions.length !== 1 ? "s" : ""}…
             </motion.p>
@@ -510,13 +480,13 @@ export function VisualProgramBuilder({
       <div className="space-y-4">
         <h4 className="text-sm font-semibold text-slate-800">Add a command</h4>
         {showMacros && (
-          <div className="rounded-xl border border-violet-200 bg-violet-50/50 p-3">
-            <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-violet-700">
+          <div className="rounded-xl border border-stone-200 bg-[#F7F4EE] p-3">
+            <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-stone-600">
               {palette.bags ? <Briefcase className="h-3.5 w-3.5" /> : <Puzzle className="h-3.5 w-3.5" />}
               {macroHeading}
             </p>
             {macroOptions.length === 0 ? (
-              <p className="text-xs text-violet-800/80">
+              <p className="text-xs text-stone-600">
                 Add {palette.bags ? "a bag" : "a chunk"} in the Command Bags &amp; Chunks panel first.
               </p>
             ) : (
@@ -545,8 +515,8 @@ export function VisualProgramBuilder({
               </div>
             )}
             {!palette.arrows && (
-              <p className="mt-2 text-xs text-violet-700/80">
-                While {macroHeading} are on, students only see these in the blue bar — single arrows and
+              <p className="mt-2 text-xs text-stone-500">
+                While {macroHeading} are on, students only see these in the yellow strip — single arrows and
                 Repeat are hidden.
               </p>
             )}
@@ -567,8 +537,8 @@ export function VisualProgramBuilder({
         )}
         <div className={cn("grid gap-4 sm:grid-cols-3", visibleCategories.length === 0 && "hidden")}>
           {visibleCategories.map((cat) => (
-            <div key={cat.id} className="rounded-xl border border-slate-100 bg-slate-50/50 p-3">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{cat.label}</p>
+            <div key={cat.id} className="rounded-xl border border-stone-200 bg-[#F7F4EE] p-3">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500">{cat.label}</p>
               <motion.div className="flex flex-col gap-2">
                 {cat.actions.map((value) => {
                   const style = ACTION_STYLES[value];
@@ -580,12 +550,11 @@ export function VisualProgramBuilder({
                       whileTap={{ scale: 0.98 }}
                       onClick={() => addAction(value)}
                       className={cn(
-                        "flex items-center gap-2 rounded-xl border-2 px-3 py-2.5 text-left text-sm font-medium transition-shadow hover:shadow-md",
-                        style.bg,
+                        "flex items-center gap-2 rounded-xl border bg-white px-3 py-2.5 text-left text-sm font-medium shadow-sm transition-shadow hover:shadow-md",
                         style.border
                       )}
                     >
-                      {style.icon}
+                      <ActionGlyph token={value} size={26} />
                       {actionLabel(value)}
                     </motion.button>
                   );
@@ -603,10 +572,10 @@ export function VisualProgramBuilder({
       </div>
 
       {showBlanks && actions.includes("blank") && (
-        <div className="space-y-4 rounded-2xl border border-violet-200 bg-violet-50/30 p-5">
+        <div className="space-y-4 rounded-2xl border border-stone-200 bg-[#F7F4EE] p-5">
           <div>
-            <h4 className="text-sm font-semibold text-violet-900">Student choice blanks</h4>
-            <p className="text-xs text-violet-700/80">
+            <h4 className="text-sm font-semibold text-stone-900">Student choice blanks</h4>
+            <p className="text-xs text-stone-500">
               For each blank, pick the correct answer and which buttons students can tap.
             </p>
           </div>
@@ -614,7 +583,7 @@ export function VisualProgramBuilder({
             <motion.div
               key={bi}
               layout
-              className="space-y-3 rounded-xl border border-violet-100 bg-white p-4 shadow-sm"
+              className="space-y-3 rounded-xl border border-stone-200 bg-white p-4 shadow-sm"
             >
               <p className="text-xs font-medium text-slate-500">Blank #{bi + 1}</p>
               <label className="block space-y-1">
@@ -644,8 +613,8 @@ export function VisualProgramBuilder({
                       className={cn(
                         "flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors",
                         b.enabledArrows?.includes(arrow)
-                          ? "border-violet-400 bg-violet-100 text-violet-900"
-                          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                          ? "border-[#0F9B8E] bg-[#0F9B8E]/10 text-stone-900"
+                          : "border-stone-200 bg-white text-stone-600 hover:border-stone-300"
                       )}
                     >
                       <input
@@ -661,6 +630,7 @@ export function VisualProgramBuilder({
                           setBlanks(next);
                         }}
                       />
+                      <CommandGlyph token={arrow} size={18} framed={false} />
                       {actionLabel(arrow)}
                     </label>
                   ))}

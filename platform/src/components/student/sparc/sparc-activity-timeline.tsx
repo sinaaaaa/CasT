@@ -46,8 +46,8 @@ export function SparcActivityTimeline({ items }: { items: Item[] }) {
             )}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="font-bold text-slate-900">
-              {item.passed ? "Completed" : "Tried"}: {item.levelName}
+            <p className="font-bold text-stone-800">
+              {item.passed ? "Finished" : "Tried"} {item.levelName}
             </p>
             <p className="text-sm text-slate-500">
               {item.endedAt

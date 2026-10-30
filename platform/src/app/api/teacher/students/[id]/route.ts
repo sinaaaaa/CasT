@@ -3,6 +3,7 @@ import { requireTeacher } from "@/lib/api-auth";
 import { requireStudentAccess } from "@/lib/class-access";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
+import { normalizeExternalStudentId } from "@/lib/game-service";
 
 const updateSchema = z.object({
   displayName: z.string().min(1).max(120).optional(),
@@ -26,9 +27,16 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     return Response.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
+  const data = {
+    ...parsed.data,
+    ...(parsed.data.externalId
+      ? { externalId: normalizeExternalStudentId(parsed.data.externalId) }
+      : {}),
+  };
+
   const student = await prisma.studentProfile.update({
     where: { id },
-    data: parsed.data,
+    data,
   });
 
   return Response.json({ student });

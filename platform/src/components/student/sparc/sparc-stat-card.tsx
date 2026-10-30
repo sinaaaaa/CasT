@@ -39,10 +39,11 @@ export function SparcStatCard({ icon: Icon, label, value, suffix = "", accent, i
 type RingProps = {
   percent: number;
   label: string;
+  detail?: string;
   size?: number;
 };
 
-export function SparcProgressRing({ percent, label, size = 120 }: RingProps) {
+export function SparcProgressRing({ percent, label, detail, size = 120 }: RingProps) {
   const stroke = 10;
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -81,7 +82,8 @@ export function SparcProgressRing({ percent, label, size = 120 }: RingProps) {
           </span>
         </div>
       </div>
-      <p className="text-sm font-semibold text-slate-600">{label}</p>
+      <p className="text-sm font-semibold text-stone-700">{label}</p>
+      {detail && <p className="text-xs font-medium text-stone-500">{detail}</p>}
     </div>
   );
 }

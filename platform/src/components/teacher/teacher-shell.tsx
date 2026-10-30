@@ -112,11 +112,12 @@ export function TeacherShell({
   ];
 
   return (
-    <div className="edu-zone min-h-screen bg-[#F8FAFC]">
+    <div className="edu-zone min-h-screen bg-[#F5F2EB]">
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 flex w-[18rem] flex-col bg-gradient-to-b from-[#1E1B4B] via-[#312E81] to-[#1E1B4B] shadow-2xl transition-transform duration-300 ease-out lg:translate-x-0",
-          open ? "translate-x-0" : "-translate-x-full"
+          "fixed inset-y-0 left-0 z-40 flex w-[18rem] flex-col bg-gradient-to-b from-[#1E1B4B] via-[#312E81] to-[#1E1B4B] shadow-2xl transition-transform duration-300 ease-out",
+          open ? "translate-x-0" : "-translate-x-full",
+          !immersive && "lg:translate-x-0"
         )}
       >
         <div className="border-b border-white/10 px-5 py-5">
@@ -164,7 +165,7 @@ export function TeacherShell({
         />
       )}
 
-      <div className="lg:pl-[18rem]">
+      <div className={cn(!immersive && "lg:pl-[18rem]")}>
         {immersive ? (
           <div className="sticky top-0 z-20 border-b border-slate-200/60 bg-white/80 px-4 py-2 backdrop-blur-xl lg:hidden">
             <Button
@@ -189,10 +190,10 @@ export function TeacherShell({
                   {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
                 </Button>
                 <div className="min-w-0">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-500">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-stone-500">
                     Teacher workspace
                   </p>
-                  <h1 className="truncate text-lg font-extrabold tracking-tight text-slate-900 sm:text-xl">
+                  <h1 className="truncate text-lg font-extrabold tracking-tight text-stone-800 sm:text-xl">
                     {title}
                   </h1>
                 </div>

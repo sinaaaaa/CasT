@@ -8,6 +8,7 @@ using UnityEngine.EventSystems;
 public class LoginManager : MonoBehaviour
 {
     [SerializeField] private InputField studentIdInput;
+    [SerializeField] private InputField nicknameInput;
     [SerializeField] private Button loginButton;
     [SerializeField] private Text statusText;
     [SerializeField] private string platformUrl = "http://localhost:3000";
@@ -130,7 +131,12 @@ public class LoginManager : MonoBehaviour
             comm.Configure(platformUrl, null);
         }
 
-        comm.CheckOrCreateStudent(studentIdInput.text.Trim(), OnStudentCheckComplete);
+        var studentId = studentIdInput.text.Trim();
+        var nickname = nicknameInput != null ? nicknameInput.text.Trim() : null;
+        if (string.IsNullOrWhiteSpace(nickname))
+            comm.CheckOrCreateStudent(studentId, OnStudentCheckComplete);
+        else
+            comm.CheckOrCreateStudent(studentId, nickname, OnStudentCheckComplete);
     }
 
     private void OnStudentCheckComplete(bool success, string response)
@@ -163,7 +169,12 @@ public class LoginManager : MonoBehaviour
         else
         {
             Debug.LogError($"[LoginManager] Platform error: {response}");
-            if (response != null && (response.Contains("database") || response.Contains("503")))
+            var serverMessage = TryReadServerMessage(response);
+            if (!string.IsNullOrEmpty(serverMessage))
+            {
+                ShowError(serverMessage);
+            }
+            else if (response != null && (response.Contains("database") || response.Contains("503")))
             {
                 ShowError("Platform database is offline. Start PostgreSQL, then npm run db:push && npm run db:seed");
             }
@@ -223,6 +234,25 @@ public class LoginManager : MonoBehaviour
     {
         // This method is now deprecated - using OnStudentCheckComplete instead
         yield return null;
+    }
+
+    private static string TryReadServerMessage(string response)
+    {
+        if (string.IsNullOrEmpty(response)) return null;
+        try
+        {
+            var parsed = JsonUtility.FromJson<StudentResponse>(response);
+            if (parsed != null && !string.IsNullOrEmpty(parsed.message))
+                return parsed.message;
+        }
+        catch
+        {
+            // Fall through to substring checks.
+        }
+
+        if (response.IndexOf("not on the class list", StringComparison.OrdinalIgnoreCase) >= 0)
+            return "This Student ID is not on the class list. Ask your teacher to add you first.";
+        return null;
     }
 
     private void ShowError(string message)

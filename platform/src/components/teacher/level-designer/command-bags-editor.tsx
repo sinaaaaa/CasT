@@ -2,20 +2,16 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  ArrowDown,
-  ArrowUp,
   Briefcase,
-  CornerDownLeft,
-  CornerDownRight,
   GripVertical,
   Minus,
   Plus,
   Puzzle,
-  RotateCcw,
   Sparkles,
   Trash2,
   X,
 } from "lucide-react";
+import { CommandGlyph } from "@/components/assessment/command-glyph";
 import { Reorder } from "framer-motion";
 import type {
   CommandBag,
@@ -62,10 +58,10 @@ const CHUNK_COLORS = [
 ];
 
 const MOTION_ACTIONS = [
-  { value: "forward", label: "Forward", short: "↑", icon: ArrowUp, chip: "border-sky-200 bg-sky-50 text-sky-900" },
-  { value: "backward", label: "Back", short: "↓", icon: ArrowDown, chip: "border-amber-200 bg-amber-50 text-amber-900" },
-  { value: "turn left", label: "Left", short: "↺", icon: CornerDownLeft, chip: "border-emerald-200 bg-emerald-50 text-emerald-900" },
-  { value: "turn right", label: "Right", short: "↻", icon: CornerDownRight, chip: "border-rose-200 bg-rose-50 text-rose-900" },
+  { value: "forward", label: "Forward", chip: "border-stone-200 bg-white text-stone-900" },
+  { value: "backward", label: "Back", chip: "border-stone-200 bg-white text-stone-900" },
+  { value: "turn left", label: "Left", chip: "border-stone-200 bg-white text-stone-900" },
+  { value: "turn right", label: "Right", chip: "border-stone-200 bg-white text-stone-900" },
 ] as const;
 
 function newId(prefix: string): string {
@@ -113,7 +109,7 @@ function ExpandedPreview({ tokens }: { tokens: string[] }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white/90 px-2.5 py-2">
       <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-        <Sparkles className="h-3 w-3 text-sky-500" />
+        <Sparkles className="h-3 w-3 text-[#0F9B8E]" />
         Robot will run ({expanded.length} step{expanded.length === 1 ? "" : "s"})
       </div>
       {expanded.length === 0 ? (
@@ -280,7 +276,7 @@ function ChunkEditor({
         className={cn(
           "min-h-[4.25rem] rounded-xl border-2 border-dashed p-2.5 transition-colors",
           tokens.length === 0 ? "bg-slate-50/80" : "bg-slate-50/40",
-          dragOver ? "border-sky-400 bg-sky-50/50 ring-2 ring-sky-200" : "border-slate-200"
+          dragOver ? "border-[#0F9B8E] bg-[#0F9B8E]/10 ring-2 ring-[#0F9B8E]/25" : "border-stone-200"
         )}
       >
         {blocks.length === 0 ? (
@@ -301,7 +297,6 @@ function ChunkEditor({
               const repeatCount = parseRepeatStart(block.action);
               const end = isRepeatEnd(block.action);
               const meta = MOTION_ACTIONS.find((a) => a.value === block.action);
-              const Icon = meta?.icon ?? RotateCcw;
 
               return (
                 <Reorder.Item
@@ -312,16 +307,16 @@ function ChunkEditor({
                 >
                   <span className="inline-flex items-center gap-0.5">
                     {repeatCount != null ? (
-                      <span className="inline-flex items-center gap-1 rounded-xl border-2 border-violet-300 bg-violet-50 px-2 py-1 text-xs font-semibold text-violet-900 shadow-sm">
-                        <RotateCcw className="h-3.5 w-3.5" />
+                      <span className="inline-flex items-center gap-1 rounded-xl border border-stone-200 bg-white px-2 py-1 text-xs font-semibold text-stone-900 shadow-sm">
+                        <CommandGlyph token="repeat-start" size={20} framed={false} />
                         Repeat
                         <span
-                          className="ml-0.5 inline-flex items-center gap-0.5 rounded-lg bg-white p-0.5 ring-1 ring-violet-200"
+                          className="ml-0.5 inline-flex items-center gap-0.5 rounded-lg bg-white p-0.5 ring-1 ring-[#9E66EB]/30"
                           onPointerDown={(e) => e.stopPropagation()}
                         >
                           <button
                             type="button"
-                            className="rounded p-0.5 text-violet-700 hover:bg-violet-100 disabled:opacity-40"
+                            className="rounded p-0.5 text-[#6D4C9F] hover:bg-[#9E66EB]/10 disabled:opacity-40"
                             disabled={repeatCount <= 1}
                             onClick={(e) => {
                               e.stopPropagation();
@@ -336,7 +331,7 @@ function ChunkEditor({
                           </span>
                           <button
                             type="button"
-                            className="rounded p-0.5 text-violet-700 hover:bg-violet-100 disabled:opacity-40"
+                            className="rounded p-0.5 text-[#6D4C9F] hover:bg-[#9E66EB]/10 disabled:opacity-40"
                             disabled={repeatCount >= 9}
                             onClick={(e) => {
                               e.stopPropagation();
@@ -349,17 +344,18 @@ function ChunkEditor({
                         </span>
                       </span>
                     ) : end ? (
-                      <span className="inline-flex items-center gap-1 rounded-xl border-2 border-orange-300 bg-orange-50 px-2 py-1 text-xs font-semibold text-orange-900 shadow-sm">
+                      <span className="inline-flex items-center gap-1 rounded-xl border border-stone-200 bg-white px-2 py-1 text-xs font-semibold text-stone-900 shadow-sm">
+                        <CommandGlyph token="repeat-end" size={20} framed={false} />
                         End
                       </span>
                     ) : (
                       <span
                         className={cn(
-                          "inline-flex items-center gap-1 rounded-xl border-2 px-2 py-1 text-xs font-semibold shadow-sm",
+                          "inline-flex items-center gap-1 rounded-xl border px-2 py-1 text-xs font-semibold shadow-sm",
                           motionChipClass(block.action)
                         )}
                       >
-                        <Icon className="h-3.5 w-3.5" />
+                        <CommandGlyph token={block.action} size={20} framed={false} />
                         {meta?.label ?? block.action}
                       </span>
                     )}
@@ -402,7 +398,7 @@ function ChunkEditor({
                 a.chip
               )}
             >
-              <a.icon className="h-3.5 w-3.5" />
+              <CommandGlyph token={a.value} size={18} framed={false} />
               {a.label}
             </button>
           ))}
@@ -411,10 +407,10 @@ function ChunkEditor({
             draggable
             onDragStart={(e) => onPaletteDragStart(e, "repeat")}
             onClick={addRepeatBlock}
-            className="inline-flex h-8 cursor-grab items-center gap-1.5 rounded-lg border border-violet-300 bg-violet-50 px-2.5 text-[11px] font-semibold text-violet-900 shadow-sm transition hover:scale-[1.02] active:cursor-grabbing"
+            className="inline-flex h-8 cursor-grab items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-2.5 text-[11px] font-semibold text-stone-900 shadow-sm transition hover:scale-[1.02] active:cursor-grabbing"
             title="Adds Repeat ×2 with a body and End — change the counter on the chip"
           >
-            <RotateCcw className="h-3.5 w-3.5" />
+            <CommandGlyph token="repeat-btn" size={18} framed={false} />
             Repeat ×N
           </button>
         </div>
@@ -487,7 +483,7 @@ function BagEditor({
   return (
     <div
       className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
-      style={{ borderTopWidth: 4, borderTopColor: isChunkMode ? "#8B5CF6" : bagTint }}
+        style={{ borderTopWidth: 4, borderTopColor: isChunkMode ? "#9E66EB" : bagTint }}
     >
       {/* Bag identity — compact in chunk mode */}
       <div
@@ -495,14 +491,14 @@ function BagEditor({
           "space-y-3 border-b border-slate-100 px-4",
           isChunkMode ? "py-2.5" : "py-3.5"
         )}
-        style={{ backgroundColor: isChunkMode ? "#F5F3FF" : `${bagTint}33` }}
+        style={{ backgroundColor: isChunkMode ? "#F7F4EE" : `${bagTint}33` }}
       >
         <div className="flex flex-wrap items-center gap-2">
           <span
             className={cn(
               "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1",
               isChunkMode
-                ? "bg-violet-100 text-violet-900 ring-violet-200"
+                ? "bg-[#9E66EB]/15 text-[#6D4C9F] ring-[#9E66EB]/30"
                 : "bg-white/90 text-slate-700 ring-slate-200/80"
             )}
           >
@@ -567,7 +563,7 @@ function BagEditor({
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-800">
-              <Puzzle className="h-4 w-4 text-violet-600" />
+              <Puzzle className="h-4 w-4 text-[#9E66EB]" />
               {isChunkMode ? "Chunks students can drag" : "Program inside this bag"}
             </div>
             <p className="mt-0.5 text-[11px] text-slate-500">
@@ -625,7 +621,7 @@ function BagEditor({
               <button
                 type="button"
                 onClick={addChunk}
-                className="text-[11px] font-medium text-slate-500 underline-offset-2 hover:text-violet-700 hover:underline"
+                className="text-[11px] font-medium text-slate-500 underline-offset-2 hover:text-[#0F9B8E] hover:underline"
               >
                 + Add another chunk to this bag
               </button>
@@ -795,9 +791,9 @@ export function CommandBagsEditor({ config, onChange }: Props) {
                   "rounded-xl border px-3.5 py-3 text-left transition-all",
                   active
                     ? opt.value === "CHUNK"
-                      ? "border-violet-500 bg-violet-50 ring-2 ring-violet-200"
-                      : "border-sky-500 bg-sky-50 ring-2 ring-sky-200"
-                    : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                      ? "border-[#9E66EB] bg-[#9E66EB]/10 ring-2 ring-[#9E66EB]/25"
+                      : "border-[#0F9B8E] bg-[#0F9B8E]/10 ring-2 ring-[#0F9B8E]/25"
+                    : "border-stone-200 bg-white hover:border-stone-300 hover:bg-[#F7F4EE]"
                 )}
               >
                 <div className="flex items-center gap-2">
@@ -806,9 +802,9 @@ export function CommandBagsEditor({ config, onChange }: Props) {
                       "inline-flex h-9 w-9 items-center justify-center rounded-lg",
                       active
                         ? opt.value === "CHUNK"
-                          ? "bg-violet-500 text-white"
-                          : "bg-sky-500 text-white"
-                        : "bg-slate-100 text-slate-600"
+                          ? "bg-[#9E66EB] text-white"
+                          : "bg-[#0F9B8E] text-white"
+                        : "bg-stone-100 text-stone-600"
                     )}
                   >
                     <Icon className="h-4 w-4" />
@@ -820,9 +816,9 @@ export function CommandBagsEditor({ config, onChange }: Props) {
                         "text-[11px] font-medium",
                         active
                           ? opt.value === "CHUNK"
-                            ? "text-violet-700"
-                            : "text-sky-700"
-                          : "text-slate-500"
+                            ? "text-[#6D4C9F]"
+                            : "text-[#0B6E7A]"
+                          : "text-stone-500"
                       )}
                     >
                       {opt.studentSees}
@@ -832,7 +828,7 @@ export function CommandBagsEditor({ config, onChange }: Props) {
                     <span
                       className={cn(
                         "ml-auto shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white",
-                        opt.value === "CHUNK" ? "bg-violet-500" : "bg-sky-500"
+                        opt.value === "CHUNK" ? "bg-[#9E66EB]" : "bg-[#0F9B8E]"
                       )}
                     >
                       Selected
@@ -889,11 +885,11 @@ export function CommandBagsEditor({ config, onChange }: Props) {
             <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 px-4 py-8 text-center">
               {mode === "BAG" ? (
                 <>
-                  <Briefcase className="mx-auto mb-2 h-8 w-8 text-sky-300" />
+                  <Briefcase className="mx-auto mb-2 h-8 w-8 text-[#0F9B8E]/50" />
                   <p className="text-sm font-medium text-slate-700">No bags yet</p>
                   <p className="mx-auto mt-1 max-w-md text-xs text-slate-500">
                     Create a bag, then fill its program with arrows and{" "}
-                    <span className="font-semibold text-violet-700">Repeat ×N</span>.
+                    <span className="font-semibold text-[#6D4C9F]">Repeat ×N</span>.
                   </p>
                   <Button type="button" size="sm" className="mt-4" onClick={addBag}>
                     <Plus className="mr-1.5 h-3.5 w-3.5" />
@@ -902,11 +898,11 @@ export function CommandBagsEditor({ config, onChange }: Props) {
                 </>
               ) : (
                 <>
-                  <Puzzle className="mx-auto mb-2 h-8 w-8 text-violet-300" />
+                  <Puzzle className="mx-auto mb-2 h-8 w-8 text-[#9E66EB]/50" />
                   <p className="text-sm font-medium text-slate-700">No chunks yet</p>
                   <p className="mx-auto mt-1 max-w-md text-xs text-slate-500">
                     Create a chunk, then drop arrows and{" "}
-                    <span className="font-semibold text-violet-700">Repeat ×N</span> into it.
+                    <span className="font-semibold text-[#6D4C9F]">Repeat ×N</span> into it.
                   </p>
                   <Button type="button" size="sm" className="mt-4" onClick={addChunk}>
                     <Plus className="mr-1.5 h-3.5 w-3.5" />
@@ -930,7 +926,7 @@ export function CommandBagsEditor({ config, onChange }: Props) {
                 <button
                   type="button"
                   onClick={addChunkGroup}
-                  className="text-[11px] font-medium text-slate-500 underline-offset-2 hover:text-violet-700 hover:underline"
+                  className="text-[11px] font-medium text-slate-500 underline-offset-2 hover:text-[#0F9B8E] hover:underline"
                 >
                   + New chunk group (optional)
                 </button>

@@ -57,11 +57,16 @@ public class PlatformCommunication : MonoBehaviour
     }
 
     /// <summary>
-    /// Main-menu login: verifies student or creates a new one (Flask-compatible callback).
+    /// Main-menu login: verifies a Student ID that already exists on the platform.
     /// </summary>
     public void CheckOrCreateStudent(string studentId, Action<bool, string> callback)
     {
         StartCoroutine(StudentSignIn(studentId, null, callback));
+    }
+
+    public void CheckOrCreateStudent(string studentId, string displayName, Action<bool, string> callback)
+    {
+        StartCoroutine(StudentSignIn(studentId, displayName, callback));
     }
 
     public void RegisterStudent(string studentId, string displayName, Action<bool, string> callback)

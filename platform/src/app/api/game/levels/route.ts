@@ -11,13 +11,20 @@ import {
   getPlayableLevelsForStudent,
   resolveStudentProfileId,
 } from "@/lib/level-assignments";
-import { resolveGameResumeLevel } from "@/lib/game-resume-level";
+import {
+  resolveGameResumeLevel,
+  resolveRequestedPlayLevel,
+} from "@/lib/game-resume-level";
 import { getActiveDirectAssignmentLevelIds } from "@/lib/level-student-assignments";
 
 export async function GET(request: NextRequest) {
   if (!verifyGameApiKey(request)) return gameApiUnauthorized();
 
   const studentId = request.nextUrl.searchParams.get("studentId")?.trim() || undefined;
+  const requestedItem =
+    request.nextUrl.searchParams.get("item")?.trim() ||
+    request.nextUrl.searchParams.get("levelKey")?.trim() ||
+    undefined;
 
   const levels = studentId
     ? await getPlayableLevelsForStudent(studentId)
@@ -31,10 +38,10 @@ export async function GET(request: NextRequest) {
     if (profileId) {
       const active = await getActiveDirectAssignmentLevelIds(profileId);
       hasCustomAssignments = active.size > 0;
-      const resume = await resolveGameResumeLevel(
-        profileId,
-        levels.map((l) => ({ id: l.id, levelKey: l.levelKey }))
-      );
+      const playableRefs = levels.map((l) => ({ id: l.id, levelKey: l.levelKey }));
+      const resume = requestedItem
+        ? await resolveRequestedPlayLevel(profileId, playableRefs, requestedItem)
+        : await resolveGameResumeLevel(profileId, playableRefs);
       if (resume) {
         resumeLevelKey = resume.resumeLevelKey;
         resumeSlot = resume.resumeSlot;

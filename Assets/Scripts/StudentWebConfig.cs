@@ -21,6 +21,7 @@ public static class StudentWebConfig
         public string gameApiKey;
         public string resumeLevelKey;
         public int resumeSlot;
+        public string displayName;
     }
 
 #if UNITY_WEBGL && !UNITY_EDITOR
@@ -58,7 +59,9 @@ public static class StudentWebConfig
         {
             var studentData = new StudentData();
             studentData.id = studentCode.GetHashCode();
-            studentData.username = studentCode;
+            studentData.username = !string.IsNullOrWhiteSpace(payload.displayName)
+                ? payload.displayName.Trim()
+                : studentCode;
             StudentDataManager.Instance.SetCurrentStudent(studentData);
         }
 
@@ -153,6 +156,8 @@ public static class StudentWebConfig
             target.apiBaseUrl = query.apiBaseUrl;
         if (string.IsNullOrWhiteSpace(target.gameApiKey) && !string.IsNullOrWhiteSpace(query.gameApiKey))
             target.gameApiKey = query.gameApiKey;
+        if (string.IsNullOrWhiteSpace(target.displayName) && !string.IsNullOrWhiteSpace(query.displayName))
+            target.displayName = query.displayName;
     }
 
     private static Payload LoadFromJsBridge()
@@ -200,6 +205,7 @@ public static class StudentWebConfig
                     case "apiBaseUrl": payload.apiBaseUrl = value; break;
                     case "gameApiKey": payload.gameApiKey = value; break;
                     case "resumeLevelKey": payload.resumeLevelKey = value; break;
+                    case "displayName": payload.displayName = value; break;
                     case "resumeSlot":
                         if (int.TryParse(value, out var slot)) payload.resumeSlot = slot;
                         break;

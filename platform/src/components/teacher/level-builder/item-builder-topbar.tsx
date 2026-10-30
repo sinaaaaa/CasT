@@ -11,9 +11,16 @@ type Props = {
   isNew: boolean;
   autosaveStatus: AutosaveStatus;
   currentStepLabel: string;
+  activityLabel?: string;
 };
 
-export function ItemBuilderTopbar({ itemName, isNew, autosaveStatus, currentStepLabel }: Props) {
+export function ItemBuilderTopbar({
+  itemName,
+  isNew,
+  autosaveStatus,
+  currentStepLabel,
+  activityLabel,
+}: Props) {
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/90 backdrop-blur-xl">
       <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
@@ -27,13 +34,15 @@ export function ItemBuilderTopbar({ itemName, isNew, autosaveStatus, currentStep
           </Link>
           <div className="hidden h-6 w-px bg-slate-200 sm:block" />
           <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#4F46E5]">
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-stone-500">
               {isNew ? "Create item" : "Edit item"}
             </p>
-            <h1 className="truncate text-base font-extrabold text-slate-900 sm:text-lg">
-              {itemName.trim() || "Untitled item"}
+            <h1 className="truncate text-base font-extrabold text-stone-800 sm:text-lg">
+              {itemName.trim() || "Name this item"}
             </h1>
-            <p className="truncate text-xs text-slate-500">{currentStepLabel}</p>
+            <p className="truncate text-xs text-slate-500">
+              {activityLabel ? `${activityLabel} · ${currentStepLabel}` : currentStepLabel}
+            </p>
           </div>
         </div>
         <AutosaveBadge status={autosaveStatus} isNew={isNew} />

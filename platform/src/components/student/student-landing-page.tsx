@@ -101,7 +101,7 @@ export function StudentLandingPage() {
               animate={{ opacity: 1 }}
               className="mt-4 text-base font-medium text-indigo-700"
             >
-              Welcome back, {me.displayName}! 👋
+              Hey {me.displayName.split(" ")[0]}! Ready to play?
             </motion.p>
           )}
         </motion.div>
@@ -163,7 +163,7 @@ export function StudentLandingPage() {
           </ol>
           <div className="mt-10 text-center">
             <SparcButton size="lg" onClick={() => router.push("/student/login")}>
-              Get your Student ID ready — Let&apos;s go!
+              Got your Student ID? Let&apos;s go
             </SparcButton>
           </div>
         </div>

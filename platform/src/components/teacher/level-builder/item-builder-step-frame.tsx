@@ -19,10 +19,10 @@ export function ItemBuilderStepFrame({
   className?: string;
 }) {
   const accents = {
-    indigo: "from-[#4F46E5]/12 to-violet-500/5 border-indigo-100 text-indigo-700",
-    teal: "from-[#14B8A6]/12 to-emerald-500/5 border-teal-100 text-teal-700",
-    violet: "from-violet-500/12 to-fuchsia-500/5 border-violet-100 text-violet-700",
-    amber: "from-amber-500/12 to-orange-500/5 border-amber-100 text-amber-700",
+    indigo: "from-[#4F46E5]/10 to-[#F5F2EB] border-stone-200 text-indigo-700",
+    teal: "from-[#0F9B8E]/10 to-[#F5F2EB] border-stone-200 text-teal-800",
+    violet: "from-[#9E66EB]/10 to-[#F5F2EB] border-stone-200 text-violet-800",
+    amber: "from-[#F7E37D]/50 to-[#F5F2EB] border-[#E8C547]/50 text-amber-900",
   };
 
   return (
@@ -38,8 +38,8 @@ export function ItemBuilderStepFrame({
             <Icon className="h-6 w-6" />
           </span>
           <div>
-            <h2 className="text-lg font-extrabold tracking-tight text-slate-900 sm:text-xl">{title}</h2>
-            <p className="mt-1 max-w-2xl text-sm leading-relaxed text-slate-600">{subtitle}</p>
+            <h2 className="text-lg font-extrabold tracking-tight text-stone-800 sm:text-xl">{title}</h2>
+            <p className="mt-1 max-w-2xl text-sm leading-relaxed text-stone-600">{subtitle}</p>
           </div>
         </div>
       </div>
@@ -62,13 +62,13 @@ export function ItemBuilderPanel({
   return (
     <section
       className={cn(
-        "rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm ring-1 ring-slate-100 sm:p-6",
+        "rounded-2xl border border-stone-200/80 bg-white p-5 shadow-sm ring-1 ring-stone-100/80 sm:p-6",
         className
       )}
     >
       <div className="mb-5">
-        <h3 className="text-base font-bold text-slate-900">{title}</h3>
-        {description && <p className="mt-1 text-sm text-slate-600">{description}</p>}
+        <h3 className="text-base font-bold text-stone-900">{title}</h3>
+        {description && <p className="mt-1 text-sm text-stone-600">{description}</p>}
       </div>
       {children}
     </section>

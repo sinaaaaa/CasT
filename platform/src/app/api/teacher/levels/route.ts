@@ -10,6 +10,7 @@ import {
   levelGameplayConfigSchema,
   syncNumberLineGridPositions,
 } from "@/lib/level-config";
+import { nextCatalogOrderIndex } from "@/lib/next-catalog-order";
 
 export async function GET() {
   const { error, scope } = await requireTeacher();
@@ -65,12 +66,15 @@ export async function POST(request: NextRequest) {
         ? null
         : await resolveAssignedByTeacherId(session!.user.id, session!.user.teacherProfileId);
 
+    const orderIndex =
+      data.orderIndex > 0 ? data.orderIndex : await nextCatalogOrderIndex();
+
     const level = await prisma.level.create({
       data: {
         levelKey: data.levelKey,
         name: data.name,
         description: data.description,
-        orderIndex: data.orderIndex,
+        orderIndex,
         difficulty: data.difficulty,
         levelType: data.levelType,
         published: data.published,

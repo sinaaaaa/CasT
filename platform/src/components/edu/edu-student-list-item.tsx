@@ -109,7 +109,17 @@ export function EduStudentListItem({
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="truncate font-bold text-slate-900">{displayName}</p>
+            {onEdit ? (
+              <button
+                type="button"
+                onClick={onEdit}
+                className="truncate font-bold text-stone-800 underline-offset-2 hover:text-teal-700 hover:underline"
+              >
+                {displayName}
+              </button>
+            ) : (
+              <p className="truncate font-bold text-stone-800">{displayName}</p>
+            )}
             {needsHelp && (
               <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">
                 <AlertTriangle className="h-3 w-3" />
@@ -131,7 +141,7 @@ export function EduStudentListItem({
       </div>
 
       <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
-        <Button asChild size="sm" className="rounded-xl bg-[#4F46E5] hover:bg-[#4338CA]">
+        <Button asChild size="sm" className="rounded-xl">
           <Link href={`/teacher/students/${id}`}>View</Link>
         </Button>
         {onEdit && (

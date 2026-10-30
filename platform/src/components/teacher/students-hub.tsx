@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Download, Search, Trash2, UserPlus } from "lucide-react";
 import { AddStudentDialog } from "@/components/teacher/add-student-dialog";
+import { EditStudentDialog } from "@/components/teacher/edit-student-dialog";
 import { BulkLevelAssignmentPanel } from "@/components/teacher/bulk-level-assignment-panel";
 import { PageHeader } from "@/components/assessment/page-header";
 import { EduStudentListItem } from "@/components/edu/edu-student-list-item";
@@ -45,6 +46,7 @@ export function StudentsHub({
   const router = useRouter();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [addOpen, setAddOpen] = useState(false);
+  const [editing, setEditing] = useState<StudentRow | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -93,22 +95,8 @@ export function StudentsHub({
     }
   }
 
-  async function editStudent(s: StudentRow) {
-    const displayName = prompt("Display name", s.displayName);
-    if (!displayName?.trim()) return;
-    setBusy(true);
-    try {
-      const res = await fetch(`/api/teacher/students/${s.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ displayName: displayName.trim() }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error ?? "Failed");
-      window.location.reload();
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Update failed");
-      setBusy(false);
-    }
+  function editStudent(s: StudentRow) {
+    setEditing(s);
   }
 
   async function deleteSelected() {
@@ -129,7 +117,13 @@ export function StudentsHub({
       <PageHeader
         eyebrow="People"
         title="Students"
-        description="Understand each learner&apos;s progress, assign levels, and spot who needs support."
+        description="See how each learner is doing, assign items, and spot who needs support."
+        actions={
+          <Button type="button" className="rounded-xl" onClick={() => setAddOpen(true)}>
+            <UserPlus className="mr-2 h-4 w-4" />
+            Add student
+          </Button>
+        }
       />
 
       <BulkLevelAssignmentPanel
@@ -144,6 +138,18 @@ export function StudentsHub({
         defaultClassId={initialClassId}
         onCreated={() => {
           setMessage("Student added.");
+          router.refresh();
+        }}
+      />
+
+      <EditStudentDialog
+        student={editing}
+        open={Boolean(editing)}
+        onOpenChange={(open) => {
+          if (!open) setEditing(null);
+        }}
+        onSaved={() => {
+          setMessage("Student updated.");
           router.refresh();
         }}
       />
@@ -242,7 +248,7 @@ export function StudentsHub({
             <option value="name">Name (A–Z)</option>
             <option value="recent">Recent activity</option>
           </select>
-          <Button type="submit" className="rounded-xl bg-[#4F46E5] hover:bg-[#4338CA]">
+          <Button type="submit" className="rounded-xl">
             Apply filters
           </Button>
         </form>

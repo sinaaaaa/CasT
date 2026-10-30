@@ -21,9 +21,24 @@ type Props = {
 };
 
 const LAYOUTS = [
-  { id: "GRID" as const, label: "6×6 Grid", icon: Grid3x3 },
-  { id: "NUMBER_LINE" as const, label: "Number line", icon: Minus },
-  { id: "CANVAS" as const, label: "Canvas", icon: SquareDashed },
+  {
+    id: "GRID" as const,
+    label: "Grid world",
+    hint: "6×6 cells, robot, objects",
+    icon: Grid3x3,
+  },
+  {
+    id: "NUMBER_LINE" as const,
+    label: "Number line",
+    hint: "Forward and back only",
+    icon: Minus,
+  },
+  {
+    id: "CANVAS" as const,
+    label: "Pattern canvas",
+    hint: "No grid — strip + pattern",
+    icon: SquareDashed,
+  },
 ];
 
 export function LayoutModePicker({ config, onChange }: Props) {
@@ -89,7 +104,7 @@ export function LayoutModePicker({ config, onChange }: Props) {
   }
 
   return (
-    <div className="inline-flex flex-wrap gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
+    <div className="grid gap-2 sm:grid-cols-3">
       {LAYOUTS.map((layout) => {
         const active =
           layout.id === "GRID"
@@ -104,14 +119,24 @@ export function LayoutModePicker({ config, onChange }: Props) {
             type="button"
             onClick={() => setMode(layout.id)}
             className={cn(
-              "inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition",
+              "flex items-center gap-3 rounded-2xl border px-3.5 py-3 text-left transition",
               active
-                ? "bg-white text-slate-900 shadow-sm"
-                : "text-slate-500 hover:text-slate-800"
+                ? "border-teal-400 bg-teal-50/80 ring-2 ring-teal-100"
+                : "border-slate-200 bg-white hover:border-slate-300"
             )}
           >
-            <Icon className="h-4 w-4" />
-            {layout.label}
+            <span
+              className={cn(
+                "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl",
+                active ? "bg-teal-600 text-white" : "bg-slate-100 text-slate-500"
+              )}
+            >
+              <Icon className="h-4 w-4" />
+            </span>
+            <span>
+              <span className="block text-sm font-bold text-slate-900">{layout.label}</span>
+              <span className="text-[11px] text-slate-500">{layout.hint}</span>
+            </span>
           </button>
         );
       })}

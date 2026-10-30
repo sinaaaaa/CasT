@@ -399,7 +399,7 @@ export function AddStudentDialog({
                 <Button
                   type="button"
                   disabled={busy}
-                  className="bg-[#4F46E5] hover:bg-[#4338CA]"
+                  className="bg-navy hover:bg-navy-800"
                   onClick={() => void submitBulk()}
                 >
                   {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
@@ -411,7 +411,7 @@ export function AddStudentDialog({
                 <Button
                   type="button"
                   disabled={busy}
-                  className="bg-[#4F46E5] hover:bg-[#4338CA]"
+                  className="bg-navy hover:bg-navy-800"
                   onClick={(e) => void submitManual(e)}
                 >
                   {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
@@ -430,7 +430,7 @@ export function AddStudentDialog({
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 Close
               </Button>
-              <Button asChild className="bg-[#4F46E5] hover:bg-[#4338CA]">
+              <Button asChild>
                 <Link href="/teacher/classes">Go to classes</Link>
               </Button>
             </DialogFooter>

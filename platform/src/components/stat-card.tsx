@@ -16,7 +16,7 @@ export function StatCard({
   tone?: "default" | "success" | "warning" | "danger";
 }) {
   const iconBg = {
-    default: "bg-primary/10 text-primary",
+    default: "bg-navy/10 text-navy",
     success: "bg-emerald-100 text-emerald-700",
     warning: "bg-amber-100 text-amber-700",
     danger: "bg-red-100 text-red-700",

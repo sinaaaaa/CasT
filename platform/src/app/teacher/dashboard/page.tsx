@@ -1,6 +1,6 @@
 import { getServerSession } from "next-auth";
 import Link from "next/link";
-import { ArrowRight, Gamepad2 } from "lucide-react";
+import { ArrowRight, BookOpen, ClipboardCheck, Gamepad2 } from "lucide-react";
 import { authOptions } from "@/lib/auth";
 import { resolveTeacherScope, classScopeWhere } from "@/lib/class-access";
 import { getTeacherDashboardStats } from "@/lib/analytics";
@@ -122,22 +122,56 @@ export default async function TeacherDashboardPage() {
         }}
       />
 
-      <div className="mt-10 overflow-hidden rounded-2xl bg-gradient-to-br from-[#4F46E5]/10 via-white to-[#14B8A6]/10 p-6 shadow-sm ring-1 ring-indigo-100 sm:flex sm:items-center sm:justify-between">
-        <div className="flex items-start gap-4">
-          <span className="rounded-2xl bg-[#4F46E5] p-3 text-white shadow-lg shadow-indigo-200">
+      <section className="mt-10 grid gap-4 md:grid-cols-3">
+        <Link
+          href="/teacher/levels/new"
+          className="group rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-100 transition hover:-translate-y-0.5 hover:shadow-md"
+        >
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#4F46E5] text-white">
+            <BookOpen className="h-5 w-5" />
+          </span>
+          <p className="mt-4 font-bold text-slate-900">Create an item</p>
+          <p className="mt-1 text-sm leading-relaxed text-slate-600">
+            Pick what students will do, then design the board step by step.
+          </p>
+          <p className="mt-3 inline-flex items-center text-sm font-semibold text-[#4F46E5]">
+            New item
+            <ArrowRight className="ml-1 h-4 w-4 transition group-hover:translate-x-0.5" />
+          </p>
+        </Link>
+        <Link
+          href="/teacher/classes"
+          className="group rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-100 transition hover:-translate-y-0.5 hover:shadow-md"
+        >
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-600 text-white">
+            <ClipboardCheck className="h-5 w-5" />
+          </span>
+          <p className="mt-4 font-bold text-slate-900">Assign to a class</p>
+          <p className="mt-1 text-sm leading-relaxed text-slate-600">
+            Choose which items each class can unlock in the game.
+          </p>
+          <p className="mt-3 inline-flex items-center text-sm font-semibold text-teal-700">
+            Classes
+            <ArrowRight className="ml-1 h-4 w-4 transition group-hover:translate-x-0.5" />
+          </p>
+        </Link>
+        <Link
+          href="/teacher/reports"
+          className="group rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-100 transition hover:-translate-y-0.5 hover:shadow-md"
+        >
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500 text-white">
             <Gamepad2 className="h-5 w-5" />
           </span>
-          <div>
-            <p className="font-bold text-slate-900">Assignment management</p>
-            <p className="mt-1 text-sm text-slate-600">
-              Choose which levels each student can unlock in the game.
-            </p>
-          </div>
-        </div>
-        <Button asChild className="mt-4 rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] sm:mt-0">
-          <Link href="/teacher/students">Manage assignments</Link>
-        </Button>
-      </div>
+          <p className="mt-4 font-bold text-slate-900">Review plays</p>
+          <p className="mt-1 text-sm leading-relaxed text-slate-600">
+            Open a recent run to see the robot’s path and what to coach next.
+          </p>
+          <p className="mt-3 inline-flex items-center text-sm font-semibold text-amber-800">
+            All attempts
+            <ArrowRight className="ml-1 h-4 w-4 transition group-hover:translate-x-0.5" />
+          </p>
+        </Link>
+      </section>
     </TeacherShell>
   );
 }

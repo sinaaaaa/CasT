@@ -206,6 +206,23 @@ public class ActionBlockIntroManager : MonoBehaviour
         return !IsIntroCompletedForStudent(cfg);
     }
 
+    static string NicknameGreeting()
+    {
+        var student = StudentDataManager.Instance != null ? StudentDataManager.Instance.GetCurrentStudent() : null;
+        var nick = student != null ? student.username : null;
+        if (string.IsNullOrWhiteSpace(nick)) return "Hey there!";
+        if (nick.StartsWith("STU-", StringComparison.OrdinalIgnoreCase)) return "Hey there!";
+        if (nick.StartsWith("Student ", StringComparison.OrdinalIgnoreCase)) return "Hey there!";
+        return "Hey " + nick.Trim() + "!";
+    }
+
+    static string WelcomeTitle(string configuredTitle)
+    {
+        if (string.IsNullOrWhiteSpace(configuredTitle) || configuredTitle.Trim() == "Welcome!")
+            return NicknameGreeting();
+        return configuredTitle;
+    }
+
     /// <summary>
     /// Before the opening drag demo or step 1, show only the first teaching step's button
     /// (e.g. Forward) — not all four palette buttons.
@@ -255,7 +272,7 @@ public class ActionBlockIntroManager : MonoBehaviour
                 characterMove.chatGPTResponseText.text = HtmlToTmpRichText.Convert(firstStep.stepHint.body);
             else if (welcomeEnabled)
                 characterMove.chatGPTResponseText.text = string.IsNullOrEmpty(levelData.cornerHint.body)
-                    ? "Welcome!"
+                    ? NicknameGreeting()
                     : HtmlToTmpRichText.Convert(levelData.cornerHint.body);
             else
                 characterMove.chatGPTResponseText.text = "Let's learn the action blocks first!";
@@ -434,7 +451,7 @@ public class ActionBlockIntroManager : MonoBehaviour
         ApplyWelcomePopupPanelStyle(panelImg, panelRt);
 
         var hint = levelData?.cornerHint;
-        string title = hint != null && !string.IsNullOrEmpty(hint.title) ? hint.title : "Welcome!";
+        string title = WelcomeTitle(hint != null ? hint.title : null);
         string body = hint != null && !string.IsNullOrEmpty(hint.body)
             ? hint.body
             : "These are your action blocks. Tap Let's go! to start step 1.";

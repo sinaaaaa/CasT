@@ -41,24 +41,24 @@ export function ItemBuilderStepRail<T extends string>({
             onClick={() => onStepClick(step.id)}
             className={cn(
               "group relative flex w-full items-start gap-3 rounded-2xl px-3 py-3 text-left transition-all",
-              active && "bg-[#4F46E5]/10 ring-1 ring-[#4F46E5]/20",
-              !active && "hover:bg-slate-100"
+              active && "bg-navy text-white shadow-sm",
+              !active && "hover:bg-stone-100"
             )}
           >
             {active && (
               <motion.span
                 layoutId="builder-step-active"
-                className="absolute inset-0 rounded-2xl bg-gradient-to-r from-[#4F46E5]/8 to-transparent"
+                className="absolute inset-0 rounded-2xl bg-navy"
                 transition={{ type: "spring", stiffness: 380, damping: 32 }}
               />
             )}
             <span
               className={cn(
                 "relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border-2 transition-all",
-                active && "border-[#4F46E5] bg-[#4F46E5] text-white shadow-lg shadow-indigo-200",
+                active && "border-white/20 bg-[#0F9B8E] text-white shadow-sm",
                 done && !active && "border-emerald-500 bg-emerald-50 text-emerald-700",
-                !active && !done && index <= currentIndex && "border-slate-300 bg-white text-slate-600",
-                !active && !done && index > currentIndex && "border-slate-200 bg-slate-50 text-slate-400"
+                !active && !done && index <= currentIndex && "border-stone-300 bg-white text-stone-600",
+                !active && !done && index > currentIndex && "border-stone-200 bg-stone-50 text-stone-400"
               )}
             >
               {done && !active ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
@@ -67,12 +67,14 @@ export function ItemBuilderStepRail<T extends string>({
               <span
                 className={cn(
                   "block text-sm font-bold",
-                  active ? "text-[#4F46E5]" : "text-slate-800"
+                  active ? "text-white" : "text-stone-800"
                 )}
               >
                 {step.label}
               </span>
-              <span className="mt-0.5 block text-xs leading-snug text-slate-500">{step.description}</span>
+              <span className={cn("mt-0.5 block text-xs leading-snug", active ? "text-white/65" : "text-stone-500")}>
+                {step.description}
+              </span>
             </span>
           </button>
         );

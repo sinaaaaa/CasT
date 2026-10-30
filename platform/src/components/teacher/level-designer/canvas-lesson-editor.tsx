@@ -759,11 +759,11 @@ function PatternEmphasisControls({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ type: "spring", stiffness: 320, damping: 28 }}
-      className="space-y-4 rounded-2xl border border-violet-200/80 bg-gradient-to-br from-violet-50/80 via-white to-rose-50/40 p-4 shadow-sm"
+      className="space-y-4 rounded-2xl border border-stone-200 bg-gradient-to-br from-[#FDF0E9] via-white to-[#F5F2EB] p-4 shadow-sm"
     >
       <div className="flex items-start gap-3">
         <motion.div
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-white shadow-md"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#C45C26] text-white shadow-md"
           animate={{ rotate: [0, -6, 6, 0] }}
           transition={{ duration: 3.2, repeat: Infinity, ease: "easeInOut" }}
         >

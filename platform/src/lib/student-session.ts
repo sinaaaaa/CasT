@@ -105,6 +105,7 @@ export async function revokeStudentSession(token: string | undefined | null) {
 export type StudentGameConfig = {
   studentId: string;
   studentCode: string;
+  displayName?: string;
   sessionToken: string;
   apiBaseUrl: string;
   gameApiKey: string;
@@ -124,6 +125,7 @@ export function buildStudentGameConfig(
   return {
     studentId: session.studentProfileId,
     studentCode: session.studentCode,
+    displayName: session.displayName,
     sessionToken,
     apiBaseUrl,
     gameApiKey: process.env.GAME_API_KEY ?? "",

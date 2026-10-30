@@ -1,9 +1,6 @@
 import { NextRequest } from "next/server";
 import { cookies } from "next/headers";
-import {
-  findOrCreateStudentByCode,
-  StudentLoginError,
-} from "@/lib/student-login";
+import { signInExistingStudent, StudentLoginError } from "@/lib/student-login";
 import {
   createStudentSession,
   sessionCookieOptions,
@@ -17,7 +14,7 @@ export async function POST(request: NextRequest) {
     const displayName = typeof body.displayName === "string" ? body.displayName : undefined;
     const classCode = typeof body.classCode === "string" ? body.classCode : undefined;
 
-    const result = await findOrCreateStudentByCode({
+    const result = await signInExistingStudent({
       studentCode,
       displayName,
       classCode,
@@ -27,16 +24,12 @@ export async function POST(request: NextRequest) {
     const cookieStore = await cookies();
     cookieStore.set(STUDENT_SESSION_COOKIE, token, sessionCookieOptions(expiresAt));
 
-    return Response.json(
-      {
-        studentId: result.profileId,
-        studentCode: result.studentCode,
-        displayName: result.displayName,
-        sessionToken: token,
-        created: result.created,
-      },
-      { status: result.created ? 201 : 200 }
-    );
+    return Response.json({
+      studentId: result.profileId,
+      studentCode: result.studentCode,
+      displayName: result.displayName,
+      sessionToken: token,
+    });
   } catch (error) {
     if (error instanceof StudentLoginError) {
       return Response.json({ error: error.message }, { status: error.status });

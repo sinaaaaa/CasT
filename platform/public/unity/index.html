@@ -59,9 +59,9 @@
       var buildUrl = "Build";
       var loaderUrl = buildUrl + "/unity.loader.js";
       var config = {
-        dataUrl: buildUrl + "/82ebcb37d88ff562dad08baf3eb1a5d2.data?v=nt1",
-        frameworkUrl: buildUrl + "/e6c2c3c6ea260cb9d1aa4a3a1807c0ef.js?v=nt1",
-        codeUrl: buildUrl + "/86a973e825043e3f2d0b4c915dce7871.wasm?v=nt1",
+        dataUrl: buildUrl + "/34024d710631ff2b908bf664dd393255.data",
+        frameworkUrl: buildUrl + "/e36037065ff3bf79d8aea1a338e4c9d9.js",
+        codeUrl: buildUrl + "/6990af41d4fe8b6e6cf1bca37a0ffa2a.wasm",
         streamingAssetsUrl: "StreamingAssets",
         companyName: "DefaultCompany",
         productName: "coding-block",
@@ -77,27 +77,41 @@
       // config.matchWebGLToCanvasSize = false;
 
       if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
-        // Mobile device style: fill the whole browser client area with the game canvas:
-
         var meta = document.createElement('meta');
         meta.name = 'viewport';
-        meta.content = 'width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, shrink-to-fit=yes';
+        meta.content = 'width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, shrink-to-fit=yes, viewport-fit=cover';
         document.getElementsByTagName('head')[0].appendChild(meta);
         container.className = "unity-mobile";
         canvas.className = "unity-mobile";
-
-        // To lower canvas resolution on mobile devices to gain some
-        // performance, uncomment the following line:
-        // config.devicePixelRatio = 1;
-
-
-      } else {
-        // Desktop / iframe embed: fill the host frame (play page is 16:9).
-        canvas.style.width = "100%";
-        canvas.style.height = "100%";
-        container.style.width = "100%";
-        container.style.height = "100%";
       }
+
+      function fitGameToWindow() {
+        var innerW = window.innerWidth;
+        var innerH = window.innerHeight;
+        if (window.visualViewport) {
+          innerW = window.visualViewport.width;
+          innerH = window.visualViewport.height;
+        }
+        var aspect = 16 / 9;
+        var width = innerW;
+        var height = width / aspect;
+        if (height > innerH) {
+          height = innerH;
+          width = height * aspect;
+        }
+        width = Math.max(1, Math.floor(width));
+        height = Math.max(1, Math.floor(height));
+        canvas.style.width = width + "px";
+        canvas.style.height = height + "px";
+        container.style.width = width + "px";
+        container.style.height = height + "px";
+      }
+
+      window.addEventListener("resize", fitGameToWindow);
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener("resize", fitGameToWindow);
+      }
+      fitGameToWindow();
 
       loadingBar.style.display = "block";
 

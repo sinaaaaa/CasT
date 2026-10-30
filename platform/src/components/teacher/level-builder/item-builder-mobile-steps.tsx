@@ -35,7 +35,7 @@ export function ItemBuilderMobileSteps({ currentStep, completedSteps, onStepClic
               }}
               className={cn(
                 "shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition",
-                active && "border-[#4F46E5] bg-[#4F46E5] text-white",
+                active && "border-navy bg-navy text-white",
                 !active && done && "border-emerald-200 bg-emerald-50 text-emerald-800",
                 !active && !done && reachable && "border-slate-200 bg-white text-slate-700",
                 !reachable && "cursor-not-allowed border-slate-100 bg-slate-50 text-slate-400"

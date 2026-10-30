@@ -34,7 +34,7 @@ export function StepProgramSetup({ levelType, config, onChange }: Props) {
           icon={Blocks}
           title="Canvas item"
           subtitle={strip.studentJob}
-          accent="violet"
+          accent="amber"
         />
 
         <CanvasLessonEditor config={config} onChange={onChange} />
@@ -77,19 +77,28 @@ export function StepProgramSetup({ levelType, config, onChange }: Props) {
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
         <ItemBuilderStepFrame
           icon={Blocks}
-          title="Student program tools"
-          subtitle="Optional Command Bags and Chunks for the blue palette. Leave empty for classic arrows only."
-          accent="violet"
+          title="The yellow strip is empty — that’s the point"
+          subtitle="Students drag arrows from the palette and press RUN. You can skip this step unless the lesson needs Bags or Chunks."
+          accent="amber"
         />
-        <ItemBuilderPanel
-          title="Command Bags & Chunks"
-          description="First choose Bags or Chunks, then add only that type."
-        >
-          <CommandBagsEditor config={config} onChange={onChange} />
-        </ItemBuilderPanel>
-        <p className="text-center text-xs text-slate-500">
-          Leave empty to use classic arrow buttons from Rules instead.
-        </p>
+        <div className="rounded-2xl border border-[#E8C547]/50 bg-[#FFF8E8] px-5 py-4 text-sm leading-relaxed text-stone-800">
+          <p className="font-bold">You’re ready for a classic coding item.</p>
+          <p className="mt-1 text-stone-600">
+            Continue to play rules, or open advanced tools below if students should reuse a Chunk or draw from a Bag.
+          </p>
+        </div>
+        <details className="group rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 text-sm font-semibold text-slate-800 [&::-webkit-details-marker]:hidden">
+            Advanced · Command Bags & Chunks
+            <span className="text-xs font-normal text-slate-500 group-open:hidden">Optional</span>
+          </summary>
+          <div className="border-t border-slate-100 px-5 pb-5 pt-3">
+            <p className="mb-4 text-sm text-slate-600">
+              First choose Bags or Chunks, then add only that type. Leave empty to keep the classic arrow palette.
+            </p>
+            <CommandBagsEditor config={config} onChange={onChange} />
+          </div>
+        </details>
       </motion.div>
     );
   }
@@ -105,41 +114,33 @@ export function StepProgramSetup({ levelType, config, onChange }: Props) {
           title={drawPath ? "Program students will see" : "Student programming tools"}
           subtitle={
             drawPath
-              ? "Write the program shown in the yellow strip. Students draw that path on the grid."
-              : "Choose how students build programs to trace the geometry — then author Chunks or Bags if needed."
+              ? "These are the same command arrows as in the game and in assessment reports. Fold them into Repeat or a Chunk if the lesson needs it."
+              : "Turn on the blocks students may use. Arrows match the assessment report artwork."
           }
-          accent="violet"
+          accent="amber"
         />
         <ItemBuilderPanel
-          title="Available tools"
-          description={
-            drawPath
-              ? "Choose which blocks you can put in the shown program (arrows, Repeat, Chunks, Bags)."
-              : "Students only see what you turn on. Presets speed up common setups."
-          }
+          title="Student palette"
+          description="Pick a preset, or toggle tools. What is on here is what appears in the game."
         >
           <GeometryPathToolsEditor config={config} onChange={onChange} />
         </ItemBuilderPanel>
-        {showBags ? (
+        {showBags && (
           <ItemBuilderPanel
-            title="Command Bags & Chunks"
-            description="Build reusable pieces students use to trace the shape. Same system as Drag Action items."
+            title="Build Chunks & Bags"
+            description="Author the reusable pieces students will drop into the strip."
           >
             <CommandBagsEditor config={config} onChange={onChange} />
           </ItemBuilderPanel>
-        ) : (
-          <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-center text-sm text-slate-600">
-            Turn on <span className="font-semibold">Action Chunks</span> or{" "}
-            <span className="font-semibold">Command Bags</span> above to author them here.
-          </p>
         )}
         <ItemBuilderPanel
           title={drawPath ? "Shown program" : "Starting program"}
           description={
             drawPath
-              ? "This program is locked in the yellow strip. Students predict it by drawing on the grid."
-              : "Start students with a blank program, or seed a starter program they edit to trace the shape."
+              ? "Students cannot edit this in-game. Fold it into Repeat, wrap it as a Chunk, or rearrange the arrows."
+              : "Start students with a blank program, or seed a starter they edit to trace the shape."
           }
+          className="border-[#E8C547]/40"
         >
           <GeometryStarterProgramEditor config={config} onChange={onChange} />
         </ItemBuilderPanel>
@@ -164,19 +165,31 @@ export function StepProgramSetup({ levelType, config, onChange }: Props) {
     >
       <ItemBuilderStepFrame
         icon={Blocks}
-        title={isEditableDrag ? "Starter program" : "Student program"}
+        title={
+          isEditableDrag
+            ? "Starter program students will fix"
+            : levelType === LevelType.FLAG_PLACEMENT
+              ? "Program students will watch"
+              : showBlanks
+                ? "Sequence with blank slots"
+                : "Student program"
+        }
         subtitle={
           isEditableDrag
-            ? "Students can edit these blocks before RUN."
-            : "Build the command sequence students will see."
+            ? "Put the buggy or incomplete program in the strip. Students edit it, then RUN."
+            : levelType === LevelType.FLAG_PLACEMENT
+              ? "They do not write this — they watch it and place the flag where Robo finishes."
+              : showBlanks
+                ? "Build the sequence and mark the blanks students must fill."
+                : "Build the command sequence students will see."
         }
-        accent="violet"
+        accent="amber"
       />
 
       {isEditableDrag && (
         <ItemBuilderPanel
           title="Command Bags & Chunks (optional)"
-          description="Define Bags or Chunks for the blue bar, then add them to the starter program below. Leave empty for arrows and Repeat."
+          description="Define Bags or Chunks for the yellow strip, then add them to the starter program below. Leave empty for arrows and Repeat."
         >
           <CommandBagsEditor config={config} onChange={onChange} />
         </ItemBuilderPanel>

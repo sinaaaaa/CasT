@@ -14,7 +14,6 @@ import {
   Target,
 } from "lucide-react";
 import {
-  LEVEL_TYPE_LABELS,
   visitSequenceReady,
   geometryPathReady,
   buildGeometryAuthoringSummary,
@@ -22,6 +21,9 @@ import {
   type LevelGameplayConfig,
 } from "@/lib/level-config";
 import { Badge } from "@/components/ui/badge";
+import { getItemFamily, resolveItemActivity } from "@/lib/item-activity";
+import { FAMILY_UI } from "@/lib/item-family-ui";
+import { cn } from "@/lib/utils";
 import { describeProgramStructureReport } from "@/lib/assessment/programStructureAnalysis";
 import { describeDebuggingReport } from "@/lib/assessment/debuggingEditAnalysis";
 
@@ -47,6 +49,8 @@ export function StepPreviewPublish({
   const objectCount = config.gridObjects?.length ?? 0;
   const commandCount = config.guidedActions?.length ?? 0;
   const hasTip = config.cornerHint?.enabled !== false && !!config.cornerHint?.title;
+  const activity = resolveItemActivity(levelType, config);
+  const family = getItemFamily(activity.family);
   const isGeometry = levelType === LevelType.GEOMETRY_PATH;
   const geoSummary = isGeometry ? buildGeometryAuthoringSummary(config) : null;
 
@@ -109,13 +113,22 @@ export function StepPreviewPublish({
       exit={{ opacity: 0, x: -12 }}
       className="space-y-6"
     >
-      <div className="rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/5 via-white to-violet-50/30 p-6 shadow-sm">
+      <div
+        className={cn(
+          "rounded-2xl border border-slate-200 bg-gradient-to-br p-6 shadow-sm",
+          FAMILY_UI[family.id].glow
+        )}
+      >
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-primary">Ready to launch?</p>
-            <h3 className="mt-1 text-xl font-bold text-slate-900">{name.trim() || "Untitled item"}</h3>
-            <div className="mt-2 flex flex-wrap gap-2">
-              <Badge variant="secondary">{LEVEL_TYPE_LABELS[levelType]}</Badge>
+            <p className="text-xs font-semibold uppercase tracking-wider text-[#4F46E5]">Play it, then go live</p>
+            <h3 className="mt-1 text-xl font-bold text-slate-900">{name.trim() || "Name this item"}</h3>
+            <p className="mt-1 text-sm text-slate-600">Students will {activity.studentJob.toLowerCase()}</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <span className={cn("rounded-full px-2.5 py-0.5 text-[11px] font-semibold", FAMILY_UI[family.id].chip)}>
+                {family.title}
+              </span>
+              <Badge variant="secondary">{activity.title}</Badge>
               <Badge variant="outline">Difficulty {difficulty}/5</Badge>
               {published ? (
                 <Badge className="bg-emerald-600">Published</Badge>
@@ -124,7 +137,7 @@ export function StepPreviewPublish({
               )}
             </div>
           </div>
-          <Rocket className="h-10 w-10 text-primary/40" />
+          <Rocket className="h-10 w-10 text-slate-300" />
         </div>
       </div>
 
@@ -186,15 +199,15 @@ export function StepPreviewPublish({
       )}
 
       {reportPreview.lines.length > 0 && (
-        <section className="rounded-2xl border border-indigo-100 bg-indigo-50/40 p-5 shadow-sm">
-          <h4 className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-900">
-            <ClipboardCheck className="h-4 w-4 text-indigo-500" />
+        <section className="rounded-2xl border border-stone-200 bg-[#F7F4EE] p-5 shadow-sm">
+          <h4 className="mb-2 flex items-center gap-2 text-sm font-semibold text-stone-900">
+            <ClipboardCheck className="h-4 w-4 text-[#0F9B8E]" />
             What your report will show
           </h4>
-          <ul className="space-y-1.5 text-sm text-slate-700">
+          <ul className="space-y-1.5 text-sm text-stone-700">
             {reportPreview.lines.map((line) => (
               <li key={line} className="flex gap-2">
-                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-400" />
+                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#0F9B8E]" />
                 <span>{line}</span>
               </li>
             ))}
@@ -258,7 +271,7 @@ export function StepPreviewPublish({
         </label>
       </section>
 
-      <div className="flex items-center gap-3 rounded-xl border border-sky-100 bg-sky-50/50 px-4 py-3 text-sm text-sky-900">
+      <div className="flex items-center gap-3 rounded-xl border border-stone-200 bg-[#FFF8E8] px-4 py-3 text-sm text-stone-800">
         <Gamepad2 className="h-5 w-5 shrink-0" />
         <p>
           <strong>Test in game:</strong> Open Unity with your class login to play-test this item before

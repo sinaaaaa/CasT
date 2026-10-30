@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Lock, Star } from "lucide-react";
+import { Lock, Play, RotateCcw, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   difficultyColor,
@@ -19,13 +19,33 @@ type Props = {
   status: LevelPlayStatus;
   score?: number | null;
   index?: number;
+  queuedForReplay?: boolean;
+  highlight?: boolean;
+  locked?: boolean;
+  lockHint?: string;
+  size?: "default" | "compact";
   onClick?: () => void;
 };
 
-const statusBadge = {
-  completed: { label: "Completed", className: "bg-emerald-100 text-emerald-800" },
-  in_progress: { label: "In Progress", className: "bg-amber-100 text-amber-800" },
-  new: { label: "New", className: "bg-indigo-100 text-indigo-800" },
+const statusBadge: Record<
+  LevelPlayStatus,
+  { label: string; className: string; action: string }
+> = {
+  completed: {
+    label: "Already played",
+    className: "bg-emerald-100 text-emerald-800",
+    action: "Play this again",
+  },
+  in_progress: {
+    label: "Keep going",
+    className: "bg-amber-100 text-amber-800",
+    action: "Pick up here",
+  },
+  new: {
+    label: "Not started",
+    className: "bg-sky-100 text-sky-800",
+    action: "Play this",
+  },
 };
 
 export function SparcLevelCard({
@@ -37,77 +57,116 @@ export function SparcLevelCard({
   status,
   score,
   index = 0,
+  queuedForReplay,
+  highlight,
+  locked,
+  lockHint,
+  size = "default",
   onClick,
 }: Props) {
+  const compact = size === "compact";
   const meta = levelTaskMeta(taskLabel);
   const Icon = meta.icon;
-  const badge = statusBadge[status];
+  const badge = locked
+    ? { label: "Locked", className: "bg-stone-200 text-stone-700", action: lockHint ?? "Finish the current item first" }
+    : queuedForReplay
+      ? { label: "Try again", className: "bg-violet-100 text-violet-800", action: "Play this again" }
+      : statusBadge[status];
+  const showTask = !name.toLowerCase().includes(taskLabel.toLowerCase());
 
   return (
     <motion.button
       type="button"
-      initial={{ opacity: 0, y: 20 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true }}
-      transition={{ delay: index * 0.05 }}
-      whileHover={{ y: -8, scale: 1.02 }}
-      whileTap={{ scale: 0.98 }}
+      initial={false}
+      whileHover={locked ? undefined : { y: compact ? -4 : -6, scale: 1.015 }}
+      whileTap={locked ? undefined : { scale: 0.98 }}
       onClick={onClick}
-      className="group w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4F46E5] focus-visible:ring-offset-2"
+      aria-disabled={locked}
+      title={locked ? lockHint : name}
+      className={cn(
+        "group w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F9B8E] focus-visible:ring-offset-2",
+        locked && "cursor-not-allowed"
+      )}
     >
-      <div className="overflow-hidden rounded-3xl border-2 border-white bg-white shadow-lg shadow-slate-200/80 transition-shadow group-hover:shadow-xl group-hover:shadow-indigo-200/50">
+      <div
+        className={cn(
+          "h-full overflow-hidden border-2 bg-white transition-shadow",
+          compact ? "rounded-2xl shadow-md shadow-slate-200/70" : "rounded-3xl shadow-lg shadow-slate-200/80",
+          locked
+            ? "border-stone-200 shadow-none"
+            : highlight
+              ? "border-teal-300 shadow-teal-100 group-hover:shadow-xl"
+              : "border-white group-hover:shadow-xl group-hover:shadow-indigo-200/40"
+        )}
+      >
         <div
           className={cn(
-            "relative flex h-36 items-center justify-center bg-gradient-to-br",
-            meta.gradient
+            "relative flex items-center justify-center bg-gradient-to-br",
+            meta.gradient,
+            compact ? "h-20" : "h-32",
+            locked && "brightness-[0.92]"
           )}
         >
-          <Icon className="h-16 w-16 text-white/90 drop-shadow-md" strokeWidth={1.5} />
-          <span className="absolute left-4 top-4 flex h-9 w-9 items-center justify-center rounded-xl bg-white/90 text-sm font-bold text-indigo-700 shadow">
+          {locked ? (
+            <Lock className={cn("text-white drop-shadow-md", compact ? "h-8 w-8" : "h-12 w-12")} strokeWidth={2} />
+          ) : (
+            <Icon className={cn("text-white drop-shadow-md", compact ? "h-8 w-8" : "h-14 w-14")} strokeWidth={1.75} />
+          )}
+          <span
+            className={cn(
+              "absolute flex items-center justify-center rounded-xl bg-white/95 font-bold text-stone-800 shadow",
+              compact ? "left-2.5 top-2.5 h-7 w-7 text-xs" : "left-4 top-4 h-9 w-9 text-sm"
+            )}
+          >
             {levelNumber}
           </span>
-          {status === "completed" && score != null && score >= 70 && (
-            <span className="absolute right-4 top-4 flex items-center gap-1 rounded-full bg-white/90 px-2 py-1 text-xs font-bold text-amber-600 shadow">
-              <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+          {!locked && status === "completed" && score != null && score >= 70 && (
+            <span
+              className={cn(
+                "absolute flex items-center gap-1 rounded-full bg-white/95 font-bold text-amber-700 shadow",
+                compact ? "right-2.5 top-2.5 px-1.5 py-0.5 text-[10px]" : "right-4 top-4 px-2 py-1 text-xs"
+              )}
+            >
+              <Star className={cn(compact ? "h-3 w-3" : "h-3.5 w-3.5", "fill-amber-400 text-amber-400")} />
               {score}
             </span>
           )}
-          <span className="absolute bottom-3 right-3 text-2xl opacity-80">{meta.emoji}</span>
         </div>
 
-        <div className="space-y-3 p-5">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className={cn("rounded-full px-2.5 py-0.5 text-xs font-semibold", badge.className)}>
+        <div className={cn(compact ? "space-y-1.5 p-3.5" : "space-y-2.5 p-5", locked && "opacity-90")}>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className={cn("rounded-full font-semibold", compact ? "px-2 py-0.5 text-[10px]" : "px-2.5 py-0.5 text-xs", badge.className)}>
               {badge.label}
             </span>
-            <span className={cn("rounded-full px-2.5 py-0.5 text-xs font-semibold", difficultyColor(difficulty))}>
+            <span className={cn("rounded-full font-semibold", compact ? "px-2 py-0.5 text-[10px]" : "px-2.5 py-0.5 text-xs", difficultyColor(difficulty))}>
               {diffLabel}
             </span>
           </div>
-          <h3 className="text-lg font-bold leading-snug text-slate-900">{name}</h3>
-          <p className="text-sm font-medium text-indigo-600">{taskLabel}</p>
+          <h3 className={cn("font-bold leading-snug text-stone-800", compact ? "text-sm" : "text-lg")}>{name}</h3>
+          {showTask && (
+            <p className={cn("font-semibold text-teal-700", compact ? "text-xs" : "text-sm")}>{taskLabel}</p>
+          )}
+          {!compact && (
+            <p className="text-sm leading-snug text-stone-500">{locked ? lockHint : meta.hint}</p>
+          )}
+          <p
+            className={cn(
+              "inline-flex items-center gap-1.5 font-bold",
+              compact ? "pt-0.5 text-xs" : "pt-1 text-sm",
+              locked ? "text-stone-500" : "text-stone-700 group-hover:text-teal-700"
+            )}
+          >
+            {locked ? (
+              <Lock className={compact ? "h-3.5 w-3.5" : "h-4 w-4"} />
+            ) : queuedForReplay || status === "completed" ? (
+              <RotateCcw className={compact ? "h-3.5 w-3.5" : "h-4 w-4"} />
+            ) : (
+              <Play className={compact ? "h-3.5 w-3.5" : "h-4 w-4"} />
+            )}
+            {locked ? "Locked" : highlight ? "Play next" : badge.action}
+          </p>
         </div>
       </div>
     </motion.button>
-  );
-}
-
-/** Locked preview card for upcoming levels */
-export function SparcLevelCardLocked({ index = 0 }: { index?: number }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      whileInView={{ opacity: 1 }}
-      viewport={{ once: true }}
-      transition={{ delay: index * 0.05 }}
-      className="overflow-hidden rounded-3xl border-2 border-dashed border-slate-200 bg-slate-50/80 opacity-70"
-    >
-      <div className="flex h-36 items-center justify-center bg-slate-100">
-        <Lock className="h-10 w-10 text-slate-400" />
-      </div>
-      <div className="p-5">
-        <p className="text-sm font-medium text-slate-500">More adventures coming soon!</p>
-      </div>
-    </motion.div>
   );
 }

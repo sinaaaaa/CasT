@@ -3,7 +3,7 @@ import { StudentLoginForm } from "@/components/student/student-login-form";
 import { SparcRobot } from "@/components/student/sparc/sparc-robot";
 
 export const metadata = {
-  title: "Sign In — Little Logic Adventure",
+  title: "Sign In | Little Logic Adventure",
   description: "Enter your Student ID to play robot coding challenges.",
 };
 

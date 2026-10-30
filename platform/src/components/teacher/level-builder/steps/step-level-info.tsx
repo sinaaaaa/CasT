@@ -13,15 +13,17 @@ import { ItemTypePicker } from "../item-type-picker";
 import { cn } from "@/lib/utils";
 
 const DIFFICULTY_OPTIONS = [
-  { value: 1, label: "Warm-up", hint: "First exposure" },
-  { value: 2, label: "Easy", hint: "Gentle challenge" },
-  { value: 3, label: "Medium", hint: "Standard practice" },
-  { value: 4, label: "Hard", hint: "Requires planning" },
-  { value: 5, label: "Expert", hint: "Multi-step reasoning" },
+  { value: 1, label: "Warm-up" },
+  { value: 2, label: "Easy" },
+  { value: 3, label: "Medium" },
+  { value: 4, label: "Hard" },
+  { value: 5, label: "Expert" },
 ] as const;
 
 type Props = {
   isEdit: boolean;
+  activityPicked: boolean;
+  onActivityPicked: () => void;
   levelKey: string;
   setLevelKey: (v: string) => void;
   name: string;
@@ -33,7 +35,7 @@ type Props = {
   difficulty: number;
   setDifficulty: (v: number) => void;
   levelType: LevelType;
-  applyType: (t: LevelType) => void;
+  applyActivity: (next: { levelType: LevelType; config: LevelGameplayConfig }) => void;
   config: LevelGameplayConfig;
   setConfig: (c: LevelGameplayConfig) => void;
 };
@@ -41,6 +43,8 @@ type Props = {
 export function StepLevelInfo(props: Props) {
   const {
     isEdit,
+    activityPicked,
+    onActivityPicked,
     levelKey,
     setLevelKey,
     name,
@@ -52,7 +56,7 @@ export function StepLevelInfo(props: Props) {
     difficulty,
     setDifficulty,
     levelType,
-    applyType,
+    applyActivity,
     config,
     setConfig,
   } = props;
@@ -75,140 +79,147 @@ export function StepLevelInfo(props: Props) {
     >
       <ItemBuilderStepFrame
         icon={Sparkles}
-        title="What kind of challenge is this?"
-        subtitle="Start by choosing how students will interact. Everything else adapts to this choice."
-        accent="indigo"
+        title="What will students do?"
+        subtitle={
+          activityPicked
+            ? "Change the activity if you need to, then give it a classroom name below."
+            : "Pick a family, then one activity. The rest of the builder follows this choice."
+        }
+        accent="teal"
       >
-        <ItemTypePicker value={levelType} onChange={applyType} />
+        <ItemTypePicker
+          levelType={levelType}
+          config={config}
+          onApply={applyActivity}
+          startAtFamilyChooser={!isEdit && !activityPicked}
+          onCommitted={onActivityPicked}
+        />
       </ItemBuilderStepFrame>
 
-      <ItemBuilderPanel
-        title="Item purpose"
-        description="Intros are for teaching / practice. Assessment items count toward scores and reports."
-      >
-        <div className="grid gap-3 sm:grid-cols-2">
-          {(
-            [
-              {
-                value: "ASSESSMENT" as const,
-                title: "Assessment item",
-                hint: "Scored and included in teacher reports",
-              },
-              {
-                value: "INTRO" as const,
-                title: "Intro / practice",
-                hint: "Playable, but not counted as assessment",
-              },
-            ] as const
-          ).map((opt) => {
-            const selected = (config.itemPurpose ?? "ASSESSMENT") === opt.value;
-            return (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => setConfig({ ...config, itemPurpose: opt.value })}
-                className={cn(
-                  "rounded-2xl border-2 p-4 text-left transition",
-                  selected
-                    ? "border-indigo-500 bg-indigo-50/60 ring-2 ring-indigo-200"
-                    : "border-slate-200 bg-white hover:border-indigo-200"
-                )}
-              >
-                <p className="text-sm font-bold text-slate-900">{opt.title}</p>
-                <p className="mt-1 text-xs leading-relaxed text-slate-600">{opt.hint}</p>
-              </button>
-            );
-          })}
-        </div>
-      </ItemBuilderPanel>
+      {activityPicked && (
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,0.65fr)]">
+          <ItemBuilderPanel
+            title="Classroom name"
+            description="Students see this. Keep it short and concrete."
+          >
+            <label className="space-y-1.5">
+              <span className="text-sm font-semibold text-slate-800">Display name</span>
+              <Input
+                value={name}
+                onChange={(e) => handleNameChange(e.target.value)}
+                placeholder="e.g. Deliver the newspaper"
+                className="h-12 rounded-xl border-slate-200 text-base"
+                required
+              />
+            </label>
+          </ItemBuilderPanel>
 
-      <ItemBuilderPanel
-        title="Name & identity"
-        description="Students see the display name. The item code is for your records and exports."
-      >
-        <div className="grid gap-4 sm:grid-cols-2">
-          <label className="space-y-1.5 sm:col-span-2">
-            <span className="text-sm font-semibold text-slate-800">Display name</span>
-            <Input
-              value={name}
-              onChange={(e) => handleNameChange(e.target.value)}
-              placeholder="e.g. Deliver the newspaper"
-              className="h-11 rounded-xl border-slate-200"
-              required
-            />
-          </label>
-          <label className="space-y-1.5">
-            <span className="text-sm font-semibold text-slate-800">Item code</span>
-            <Input
-              value={levelKey}
-              onChange={(e) => {
-                levelKeyTouched.current = true;
-                setLevelKey(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "_"));
-              }}
-              placeholder="level_deliver_newspaper"
-              className="h-11 rounded-xl border-slate-200 font-mono text-sm"
-              disabled={isEdit}
-              required
-            />
-            <span className="text-xs text-slate-500">Unique ID — auto-filled from name until you edit it</span>
-          </label>
-          <label className="space-y-1.5">
-            <span className="text-sm font-semibold text-slate-800">Order in sequence</span>
-            <Input
-              type="number"
-              className="h-11 rounded-xl border-slate-200"
-              value={orderIndex}
-              onChange={(e) => setOrderIndex(Number(e.target.value))}
-              min={0}
-            />
-            <span className="text-xs text-slate-500">Lower numbers appear earlier in the item list</span>
-          </label>
-          <label className="space-y-1.5 sm:col-span-2">
-            <span className="text-sm font-semibold text-slate-800">Teacher notes</span>
-            <Textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Private notes — students never see this"
-              rows={2}
-              className="rounded-xl border-slate-200"
-            />
-          </label>
-        </div>
-      </ItemBuilderPanel>
+          <div className="space-y-6">
+            <ItemBuilderPanel title="Difficulty" description="Used in reports and sequencing.">
+              <div className="flex gap-1.5">
+                {DIFFICULTY_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setDifficulty(opt.value)}
+                    className={cn(
+                      "flex-1 rounded-xl border-2 py-2.5 text-center text-[11px] font-bold transition sm:text-xs",
+                      difficulty === opt.value
+                        ? "border-navy bg-navy text-white shadow-sm"
+                        : "border-stone-200 bg-white text-stone-600 hover:border-stone-300"
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </ItemBuilderPanel>
 
-      <ItemBuilderPanel
-        title="Difficulty"
-        description="Helps you filter analytics and balance your item sequence."
-      >
-        <div className="grid gap-2 sm:grid-cols-5">
-          {DIFFICULTY_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => setDifficulty(opt.value)}
-              className={cn(
-                "rounded-xl border-2 px-3 py-3 text-left transition-all",
-                difficulty === opt.value
-                  ? "border-[#4F46E5] bg-indigo-50 shadow-md shadow-indigo-100"
-                  : "border-slate-200 bg-white hover:border-indigo-200"
-              )}
-            >
-              <p className="text-sm font-bold text-slate-900">{opt.label}</p>
-              <p className="mt-0.5 text-xs text-slate-500">{opt.hint}</p>
-            </button>
-          ))}
+            <ItemBuilderPanel title="Counts in reports?">
+              <div className="grid grid-cols-2 gap-2">
+                {(
+                  [
+                    { value: "ASSESSMENT" as const, title: "Assessment", hint: "Scored" },
+                    { value: "INTRO" as const, title: "Practice", hint: "Not scored" },
+                  ] as const
+                ).map((opt) => {
+                  const selected = (config.itemPurpose ?? "ASSESSMENT") === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setConfig({ ...config, itemPurpose: opt.value })}
+                      className={cn(
+                        "rounded-xl border-2 px-3 py-3 text-left transition",
+                        selected
+                          ? "border-[#0F9B8E] bg-[#0F9B8E]/10"
+                          : "border-stone-200 bg-white hover:border-stone-300"
+                      )}
+                    >
+                      <span className="block text-sm font-bold text-slate-900">{opt.title}</span>
+                      <span className="text-[11px] text-slate-500">{opt.hint}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </ItemBuilderPanel>
+          </div>
         </div>
-      </ItemBuilderPanel>
+      )}
 
-      <details className="group rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 font-semibold text-slate-900 [&::-webkit-details-marker]:hidden">
-          <span>Student tip while playing (optional)</span>
-          <ChevronDown className="h-4 w-4 text-slate-400 transition group-open:rotate-180" />
-        </summary>
-        <div className="border-t border-slate-100 px-5 pb-5 pt-2">
-          <CornerHintEditor config={config} onChange={setConfig} label="" />
-        </div>
-      </details>
+      {activityPicked && (
+        <details className="group rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 text-sm font-semibold text-slate-700 [&::-webkit-details-marker]:hidden">
+            <span>More options · code, order, notes, student tip</span>
+            <ChevronDown className="h-4 w-4 text-slate-400 transition group-open:rotate-180" />
+          </summary>
+          <div className="space-y-5 border-t border-slate-100 px-5 pb-5 pt-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="space-y-1.5">
+                <span className="text-sm font-semibold text-slate-800">Item code</span>
+                <Input
+                  value={levelKey}
+                  onChange={(e) => {
+                    levelKeyTouched.current = true;
+                    setLevelKey(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "_"));
+                  }}
+                  placeholder="level_deliver_newspaper"
+                  className="h-11 rounded-xl border-slate-200 font-mono text-sm"
+                  disabled={isEdit}
+                  required
+                />
+              </label>
+              <label className="space-y-1.5">
+                <span className="text-sm font-semibold text-slate-800">Order</span>
+                <Input
+                  type="number"
+                  className="h-11 rounded-xl border-slate-200"
+                  value={orderIndex}
+                  onChange={(e) => setOrderIndex(Number(e.target.value))}
+                  min={0}
+                />
+                <p className="text-xs text-stone-500">
+                  New items line up after the last one in the catalog.
+                </p>
+              </label>
+            </div>
+            <label className="space-y-1.5">
+              <span className="text-sm font-semibold text-slate-800">Private notes</span>
+              <Textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Only you see this"
+                rows={2}
+                className="rounded-xl border-slate-200"
+              />
+            </label>
+            <div>
+              <p className="mb-2 text-sm font-semibold text-slate-800">Student tip while playing</p>
+              <CornerHintEditor config={config} onChange={setConfig} label="" />
+            </div>
+          </div>
+        </details>
+      )}
     </motion.div>
   );
 }

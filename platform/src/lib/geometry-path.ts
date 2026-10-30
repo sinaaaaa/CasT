@@ -90,7 +90,9 @@ export const geometryPathConfigSchema = z.object({
   }),
   /**
    * PROGRAM: students write a program to trace the glowing shape.
-   * DRAW_PATH: the program is shown read-only; students draw that path on the grid (prediction).
+   * DRAW_PATH: teacher draws the shape; the yellow-strip program is generated from it
+   * (and can later be rewritten as Repeat/Chunks). Students see that program read-only
+   * and draw the path it will take.
    */
   studentTask: geometryStudentTaskSchema.default("PROGRAM"),
   /**

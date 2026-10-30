@@ -5,6 +5,7 @@ import {
   levelGameplayConfigSchema,
   type LevelGameplayConfig,
 } from "@/lib/level-config";
+import { classroomItemName, studentItemNumber } from "@/lib/item-name";
 import {
   difficultyLabel,
   resolveLevelTaskLabel,
@@ -13,40 +14,6 @@ import {
 import { resolveGameResumeLevel } from "@/lib/game-resume-level";
 import { getStudentReplayLevelIds } from "@/lib/level-student-replay";
 import type { LevelType } from "@prisma/client";
-
-function computeStreak(attemptDates: Date[]): number {
-  if (attemptDates.length === 0) return 0;
-
-  const dayKeys = new Set(
-    attemptDates.map((d) => {
-      const x = new Date(d);
-      return `${x.getFullYear()}-${x.getMonth()}-${x.getDate()}`;
-    })
-  );
-
-  let streak = 0;
-  const today = new Date();
-  for (let i = 0; i < 365; i++) {
-    const d = new Date(today);
-    d.setDate(today.getDate() - i);
-    const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-    if (dayKeys.has(key)) streak++;
-    else if (i > 0) break;
-  }
-  return streak;
-}
-
-function computeStars(
-  levels: { passed: boolean; score: number | null }[]
-): number {
-  return levels.reduce((sum, l) => {
-    if (!l.passed) return sum;
-    if (l.score == null) return sum + 2;
-    if (l.score >= 90) return sum + 3;
-    if (l.score >= 70) return sum + 2;
-    return sum + 1;
-  }, 0);
-}
 
 export async function getStudentHomeData(studentProfileId: string, studentCode: string) {
   const [progress, playableLevels, recentAttempts] = await Promise.all([
@@ -80,17 +47,21 @@ export async function getStudentHomeData(studentProfileId: string, studentCode: 
     const attempts = prog?.attempts ?? 0;
     const passed = prog?.passed ?? false;
     const queuedForReplay = replayLevelIds.has(level.id);
+    const taskLabel = resolveLevelTaskLabel(level.levelType as LevelType, layoutMode, {
+      geometryTask: cfg.success ? cfg.data.geometryPath?.studentTask : undefined,
+    });
+    const displayName = classroomItemName(level.name, index + 1, taskLabel);
 
     return {
       id: level.id,
       levelKey: level.levelKey,
-      name: level.name,
+      name: displayName,
       orderIndex: level.orderIndex,
-      levelNumber: index + 1,
+      levelNumber: studentItemNumber(displayName, index + 1),
       difficulty: level.difficulty,
       difficultyLabel: difficultyLabel(level.difficulty),
       levelType: level.levelType as LevelType,
-      taskLabel: resolveLevelTaskLabel(level.levelType as LevelType, layoutMode),
+      taskLabel,
       status: resolvePlayStatus(attempts, passed && !queuedForReplay),
       attempts,
       score: prog?.score ?? null,
@@ -100,19 +71,10 @@ export async function getStudentHomeData(studentProfileId: string, studentCode: 
   });
 
   const passedLevels = levels.filter((l) => l.passed);
-  const challengesSolved = passedLevels.length;
-
-  const streak = computeStreak(
-    recentAttempts.filter((a) => a.passed).map((a) => a.endedAt!)
-  );
-
-  const starsEarned = computeStars(
-    progress.levels.map((l) => ({ passed: l.passed, score: l.score }))
-  );
 
   const activity = recentAttempts.slice(0, 5).map((a) => ({
     id: a.id,
-    levelName: a.level.name,
+    levelName: levels.find((level) => level.id === a.levelId)?.name ?? classroomItemName(a.level.name, 1),
     passed: a.passed,
     score: a.score,
     endedAt: a.endedAt?.toISOString() ?? null,
@@ -125,10 +87,9 @@ export async function getStudentHomeData(studentProfileId: string, studentCode: 
 
   return {
     stats: {
-      levelsCompleted: challengesSolved,
-      currentStreak: streak,
-      starsEarned,
-      challengesSolved,
+      levelsCompleted: passedLevels.length,
+      totalLevels: levels.length,
+      remainingLevels: Math.max(0, levels.length - passedLevels.length),
       completionPercent: progress.summary.completionPercent,
     },
     levels,

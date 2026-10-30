@@ -297,7 +297,7 @@ export function StudentProfileView({
                   <CardTitle className="text-lg">Item progress</CardTitle>
                   <CardDescription>
                     Best result per item · {assignedCount} item{assignedCount === 1 ? "" : "s"} with
-                    activity. Reassign a completed item to send it back for practice (history is kept).
+                    activity. Send a finished item back so it appears under Try this again. History is kept.
                   </CardDescription>
                 </div>
                 <div className="relative w-full sm:max-w-xs">
@@ -402,7 +402,7 @@ export function StudentProfileView({
                               reassigningId === level.levelId && "animate-spin"
                             )}
                           />
-                          {queued ? "Reassign again" : "Reassign"}
+                          {queued ? "Send back again" : "Send back to this item"}
                         </Button>
                       )}
                       <Button variant="ghost" size="sm" asChild className="shrink-0">

@@ -22,6 +22,8 @@ public class PlatformLevelLoader : MonoBehaviour
     public string ResumeLevelKey { get; private set; }
     public int ResumeSlot { get; private set; }
     public bool HasServerResume { get; private set; }
+    /// <summary>True when the student picked a specific item on the web dashboard.</summary>
+    public bool ForceSelectedItem { get; private set; }
 
     private void Awake()
     {
@@ -44,6 +46,7 @@ public class PlatformLevelLoader : MonoBehaviour
         ResumeLevelKey = null;
         ResumeSlot = 0;
         HasServerResume = false;
+        ForceSelectedItem = false;
 
         if (!usePlatformLevels)
         {
@@ -56,6 +59,10 @@ public class PlatformLevelLoader : MonoBehaviour
         string studentId = PlayerPrefs.GetString("UserId", "").Trim();
         if (!string.IsNullOrEmpty(studentId))
             url += "?studentId=" + UnityWebRequest.EscapeURL(studentId);
+
+        var webSession = StudentWebConfig.Load();
+        if (webSession != null && !string.IsNullOrWhiteSpace(webSession.resumeLevelKey))
+            url += (url.Contains("?") ? "&" : "?") + "item=" + UnityWebRequest.EscapeURL(webSession.resumeLevelKey.Trim());
 
         using (var req = UnityWebRequest.Get(url))
         {
@@ -77,6 +84,15 @@ public class PlatformLevelLoader : MonoBehaviour
                 AssignmentRestricted = root["assignmentRestricted"]?.Value<bool>() ?? false;
                 ResumeLevelKey = root["resumeLevelKey"]?.ToString();
                 ResumeSlot = root["resumeSlot"]?.Value<int>() ?? 0;
+
+                if (webSession != null && !string.IsNullOrWhiteSpace(webSession.resumeLevelKey))
+                {
+                    ResumeLevelKey = webSession.resumeLevelKey.Trim();
+                    if (webSession.resumeSlot > 0)
+                        ResumeSlot = webSession.resumeSlot;
+                    ForceSelectedItem = true;
+                }
+
                 HasServerResume = !string.IsNullOrEmpty(ResumeLevelKey) && ResumeSlot > 0;
                 bool filteredForStudent = root["filteredForStudent"]?.Value<bool>() ?? false;
                 var levelsToken = root["levels"] as JArray;
