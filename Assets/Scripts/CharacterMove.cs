@@ -1469,20 +1469,7 @@ public partial class CharacterMove : MonoBehaviour
         if (!allowRobotDrag || isProcessing || ManualRobotRotationAnimating) return false;
         if (IsBusyForGridInput) return false;
         LevelData ld = GetCurrentLevelData();
-        if (ld != null && !ld.allowRobotDrag) return false;
-
-        // DRAW_PATH: Pencil/Eraser never grab the robot. Kids must pick the Move tool.
-        if (IsGeometryDrawPathLevel(ld))
-        {
-            var geo = GeometryPathController.Instance;
-            if (geo != null && geo.AllowStudentDrawing)
-            {
-                var draw = GetComponent<GeometryPathDrawInput>();
-                if (draw != null && !draw.IsMoveToolActive)
-                    return false;
-            }
-        }
-        return true;
+        return ld == null || ld.allowRobotDrag;
     }
 
     public bool IsRobotBeingManipulated()
@@ -1986,24 +1973,22 @@ public partial class CharacterMove : MonoBehaviour
         GameObject pencil = ResolveDrawPathIcon(drawPathPencilIcon, "pencil");
         GameObject eraser = ResolveDrawPathIcon(drawPathEraserIcon, "eraser")
                            ?? ResolveDrawPathIcon(null, "erase");
-        GameObject move = ResolveDrawPathIcon(drawPathMoveIcon, "move")
-                          ?? ResolveDrawPathIcon(null, "hand")
-                          ?? ResolveDrawPathIcon(null, "drag");
+        // Hide any leftover Move clone from the previous build (it sat on top of Eraser).
+        GameObject leftoverMove = ResolveDrawPathIcon(drawPathMoveIcon, "drawPathMove")
+                                  ?? ResolveDrawPathIcon(null, "drawPathMove");
+        if (leftoverMove != null) leftoverMove.SetActive(false);
         drawPathPencilIcon = pencil;
         drawPathEraserIcon = eraser;
-        drawPathMoveIcon = move;
+        drawPathMoveIcon = null;
         SetDrawPathSceneIconsVisible(true);
-        draw.BindSceneIcons(pencil, eraser, move);
-        if (drawPathMoveIcon == null)
-            drawPathMoveIcon = ResolveDrawPathIcon(null, "drawPathMove");
+        draw.BindSceneIcons(pencil, eraser);
     }
 
     void HideCommandBagSidebar()
     {
         if (commandBagPanel != null &&
             commandBagPanel.gameObject != drawPathPencilIcon &&
-            commandBagPanel.gameObject != drawPathEraserIcon &&
-            commandBagPanel.gameObject != drawPathMoveIcon)
+            commandBagPanel.gameObject != drawPathEraserIcon)
             commandBagPanel.gameObject.SetActive(false);
         if (commandBagCanvas != null)
             commandBagCanvas.gameObject.SetActive(false);
@@ -2013,7 +1998,6 @@ public partial class CharacterMove : MonoBehaviour
     {
         if (drawPathPencilIcon != null) drawPathPencilIcon.SetActive(on);
         if (drawPathEraserIcon != null) drawPathEraserIcon.SetActive(on);
-        if (drawPathMoveIcon != null) drawPathMoveIcon.SetActive(on);
     }
 
     GameObject ResolveDrawPathIcon(GameObject assigned, string nameHint)

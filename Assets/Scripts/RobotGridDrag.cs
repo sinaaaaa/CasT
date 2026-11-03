@@ -5,7 +5,8 @@ using UnityEngine.EventSystems;
 /// Drag the robot on the grid before RUN. Toy-style: center = move; left/right sides = rotate.
 /// With orbit mode, side press+drag spins the robot smoothly (mouse/touch direction); release snaps to N/E/S/W.
 /// Short tap on a side still triggers a single 90° step.
-/// On DRAW_PATH, CharacterMove only allows this while the Move tool is selected.
+/// On DRAW_PATH with Pencil/Eraser, grab only from a direct hit on the robot body
+/// so nearby drawing does not steal the stroke.
 /// </summary>
 [DisallowMultipleComponent]
 public class RobotGridDrag : MonoBehaviour
@@ -371,7 +372,16 @@ public class RobotGridDrag : MonoBehaviour
         if (characterMove == null || !characterMove.CanDragRobot()) return false;
         EnsureInteractionCamera();
         if (TryGetLateralHitOnRobot(screenPos, out _)) return true;
+        // Soft halo is fine outside DRAW_PATH. While drawing/erasing, require a body hit
+        // so kids can sketch through the robot's cell without grabbing it by accident.
+        if (DrawPathPreciseGrabOnly()) return false;
         return IsWithinGrabRadius(screenPos);
+    }
+
+    static bool DrawPathPreciseGrabOnly()
+    {
+        var geo = GeometryPathController.Instance;
+        return geo != null && geo.AllowStudentDrawing;
     }
 
     /// <summary>Lateral offset of the ray hit on the robot, along robot's flattened right axis (+ = right).</summary>
