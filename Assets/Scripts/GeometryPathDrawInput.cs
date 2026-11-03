@@ -5,7 +5,6 @@ using UnityEngine.UI;
 /// <summary>
 /// DRAW_PATH: Pencil and Eraser on the blue bar.
 /// Draw/erase on the grid; touch the robot itself to move it (soft grab halo is off while drawing).
-/// Kids can press a tool and drag onto the board without lifting — the stroke starts on the grid.
 /// </summary>
 public class GeometryPathDrawInput : MonoBehaviour
 {
@@ -37,7 +36,6 @@ public class GeometryPathDrawInput : MonoBehaviour
     bool _drawing;
     bool _usingTouch;
     bool _strokeMoved;
-    bool _dragFromPalette;
     int _pointerId = -1;
     GameObject _pencilIcon;
     GameObject _eraserIcon;
@@ -65,7 +63,6 @@ public class GeometryPathDrawInput : MonoBehaviour
 
     void OnDisable()
     {
-        _dragFromPalette = false;
         EndStroke(keepPen: true);
         GeometryPathController.Instance?.ClearDrawPointerPreview();
         HideScreenCursor(restoreOs: true);
@@ -107,37 +104,26 @@ public class GeometryPathDrawInput : MonoBehaviour
         {
             if (TrySelectIconAt(pos))
             {
-                // Keep the finger down: drag from the blue bar onto the grid to start drawing.
-                _usingTouch = touch;
-                _pointerId = pointerId;
-                _strokeMoved = false;
-                _lastScreen = pos;
-                _lastTouch = touch;
-                _dragFromPalette = true;
                 EndStroke(keepPen: true);
                 return;
             }
             if (ignoreClicksOverUI && UiDragState.IsScreenPointOverBlockingUi(pos, pointerId))
             {
-                _dragFromPalette = false;
                 EndStroke(keepPen: true);
                 return;
             }
             if (characterMove.IsRobotBeingManipulated())
             {
-                _dragFromPalette = false;
                 EndStroke(keepPen: true);
                 return;
             }
             // Touching the robot body moves it; grid presses draw/erase.
             if (PointerOnRobotBody(pos))
             {
-                _dragFromPalette = false;
                 EndStroke(keepPen: true);
                 return;
             }
 
-            _dragFromPalette = false;
             _usingTouch = touch;
             _pointerId = pointerId;
             _strokeMoved = false;
@@ -149,32 +135,8 @@ public class GeometryPathDrawInput : MonoBehaviour
 
         if (characterMove.IsRobotBeingManipulated())
         {
-            _dragFromPalette = false;
             EndStroke(keepPen: true);
             ShowPreview(geo, null, drawing: false, pos, touch);
-            return;
-        }
-
-        // Pressed pencil/eraser, still holding, slid onto the board → start the stroke now.
-        if (held && _dragFromPalette && !_drawing)
-        {
-            _lastScreen = pos;
-            _lastTouch = touch || _usingTouch;
-            if (IsOverToolIcon(pos, out _))
-                return;
-            if (ignoreClicksOverUI && UiDragState.IsScreenPointOverBlockingUi(pos, pointerId))
-                return;
-            if (PointerOnRobotBody(pos))
-            {
-                _dragFromPalette = false;
-                return;
-            }
-            if (!PickCell(pos, _usingTouch || touch, out _))
-                return;
-
-            _dragFromPalette = false;
-            _usingTouch = touch || _usingTouch;
-            BeginStroke(geo, pos, _usingTouch);
             return;
         }
 
@@ -199,7 +161,6 @@ public class GeometryPathDrawInput : MonoBehaviour
                 if (cleared > 0)
                     characterMove.NotifyGeometryPathDrawingChanged();
             }
-            _dragFromPalette = false;
             EndStroke(keepPen: true);
             if (PickCell(pos, touch, out Vector2Int hover) && !touch)
                 ShowPreview(geo, hover, drawing: false, pos, touch);
@@ -232,7 +193,6 @@ public class GeometryPathDrawInput : MonoBehaviour
 
     public void CancelStrokeForRobotGrab()
     {
-        _dragFromPalette = false;
         EndStroke(keepPen: true);
         GeometryPathController.Instance?.ClearDrawPointerPreview();
         HideScreenCursor(restoreOs: true);
@@ -536,9 +496,7 @@ public class GeometryPathDrawInput : MonoBehaviour
     void EndStroke(bool keepPen)
     {
         _drawing = false;
-        // Keep _dragFromPalette when ending after a tool tap so the same hold can enter the grid.
-        if (!_dragFromPalette)
-            _usingTouch = false;
+        _usingTouch = false;
         _strokeMoved = false;
         _pointerId = -1;
         if (!keepPen) _hasPen = false;
