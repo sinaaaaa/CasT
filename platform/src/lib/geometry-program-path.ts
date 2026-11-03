@@ -354,10 +354,6 @@ export function wrapGeometryProgramAsChunk(config: LevelGameplayConfig): LevelGa
   }
 
   const tools = {
-    individualCommands: true,
-    repeat: false,
-    actionChunks: false,
-    commandBags: false,
     ...DEFAULT_GEOMETRY_PATH.tools,
     ...config.geometryPath?.tools,
     actionChunks: true,
@@ -386,10 +382,6 @@ export function withGeometryRepeatProgram(config: LevelGameplayConfig): LevelGam
   );
   const folded = foldGeometryProgramIntoRepeat(guided);
   const tools = {
-    individualCommands: true,
-    repeat: false,
-    actionChunks: false,
-    commandBags: false,
     ...DEFAULT_GEOMETRY_PATH.tools,
     ...config.geometryPath?.tools,
     individualCommands: true,

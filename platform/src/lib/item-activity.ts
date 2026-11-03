@@ -362,13 +362,15 @@ export function applyItemActivity(
       ...DEFAULT_GEOMETRY_PATH,
       ...config.geometryPath,
       studentTask: activity.geometryTask,
-      seedStarterProgram: activity.geometryTask === "DRAW_PATH" ? true : config.geometryPath?.seedStarterProgram,
-      keepShapeVisibleDuringRun:
-        activity.geometryTask === "DRAW_PATH" ? false : config.geometryPath?.keepShapeVisibleDuringRun,
-      afterShapeBehavior:
-        activity.geometryTask === "DRAW_PATH" ? "SHAPE_COMPLETE" : config.geometryPath?.afterShapeBehavior,
-      validationMode: activity.geometryTask === "DRAW_PATH" ? "EXACT_PATH" : config.geometryPath?.validationMode,
       templateOrigin: origin,
+      ...(activity.geometryTask === "DRAW_PATH"
+        ? {
+            seedStarterProgram: true,
+            keepShapeVisibleDuringRun: false,
+            afterShapeBehavior: "SHAPE_COMPLETE" as const,
+            validationMode: "EXACT_PATH" as const,
+          }
+        : {}),
     };
     config = { ...config, geometryPath: gp };
     if (!wasGeometry) {
