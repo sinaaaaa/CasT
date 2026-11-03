@@ -442,6 +442,8 @@ public partial class CharacterMove : MonoBehaviour
     public GameObject drawPathPencilIcon;
     [Tooltip("Eraser prefab/icon. Used on the blue bar and as the erase cursor on the grid.")]
     public GameObject drawPathEraserIcon;
+    [Tooltip("Optional Move/hand icon. If empty, DRAW_PATH creates a hand tool next to the eraser.")]
+    public GameObject drawPathMoveIcon;
     [Tooltip("ON = resize the blue panel with the sliders below (live in Play Mode). OFF = keep the panel's RectTransform as you set it in the Scene.")]
     public bool autoLayoutCommandBagPanel = true;
 
@@ -1467,7 +1469,20 @@ public partial class CharacterMove : MonoBehaviour
         if (!allowRobotDrag || isProcessing || ManualRobotRotationAnimating) return false;
         if (IsBusyForGridInput) return false;
         LevelData ld = GetCurrentLevelData();
-        return ld == null || ld.allowRobotDrag;
+        if (ld != null && !ld.allowRobotDrag) return false;
+
+        // DRAW_PATH: Pencil/Eraser never grab the robot. Kids must pick the Move tool.
+        if (IsGeometryDrawPathLevel(ld))
+        {
+            var geo = GeometryPathController.Instance;
+            if (geo != null && geo.AllowStudentDrawing)
+            {
+                var draw = GetComponent<GeometryPathDrawInput>();
+                if (draw != null && !draw.IsMoveToolActive)
+                    return false;
+            }
+        }
+        return true;
     }
 
     public bool IsRobotBeingManipulated()
@@ -1971,17 +1986,24 @@ public partial class CharacterMove : MonoBehaviour
         GameObject pencil = ResolveDrawPathIcon(drawPathPencilIcon, "pencil");
         GameObject eraser = ResolveDrawPathIcon(drawPathEraserIcon, "eraser")
                            ?? ResolveDrawPathIcon(null, "erase");
+        GameObject move = ResolveDrawPathIcon(drawPathMoveIcon, "move")
+                          ?? ResolveDrawPathIcon(null, "hand")
+                          ?? ResolveDrawPathIcon(null, "drag");
         drawPathPencilIcon = pencil;
         drawPathEraserIcon = eraser;
+        drawPathMoveIcon = move;
         SetDrawPathSceneIconsVisible(true);
-        draw.BindSceneIcons(pencil, eraser);
+        draw.BindSceneIcons(pencil, eraser, move);
+        if (drawPathMoveIcon == null)
+            drawPathMoveIcon = ResolveDrawPathIcon(null, "drawPathMove");
     }
 
     void HideCommandBagSidebar()
     {
         if (commandBagPanel != null &&
             commandBagPanel.gameObject != drawPathPencilIcon &&
-            commandBagPanel.gameObject != drawPathEraserIcon)
+            commandBagPanel.gameObject != drawPathEraserIcon &&
+            commandBagPanel.gameObject != drawPathMoveIcon)
             commandBagPanel.gameObject.SetActive(false);
         if (commandBagCanvas != null)
             commandBagCanvas.gameObject.SetActive(false);
@@ -1991,6 +2013,7 @@ public partial class CharacterMove : MonoBehaviour
     {
         if (drawPathPencilIcon != null) drawPathPencilIcon.SetActive(on);
         if (drawPathEraserIcon != null) drawPathEraserIcon.SetActive(on);
+        if (drawPathMoveIcon != null) drawPathMoveIcon.SetActive(on);
     }
 
     GameObject ResolveDrawPathIcon(GameObject assigned, string nameHint)

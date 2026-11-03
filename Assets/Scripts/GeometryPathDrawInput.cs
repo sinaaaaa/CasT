@@ -3,43 +3,51 @@ using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 /// <summary>
-/// DRAW_PATH: tap or drag adjacent squares to draw the predicted path.
-/// Pencil and eraser live on the Unity blue bar. Over the grid the OS cursor
-/// is replaced by a large pencil or eraser whose tip is the drawing point.
-/// Drawing owns the press (including over the robot). Moving the robot is a short hold.
+/// DRAW_PATH tools for kids: exclusive Pencil, Eraser, and Move.
+/// Pencil/Eraser draw or clear the path. Move is the only way to grab the robot.
+/// No shared long-press / hold-to-draw — that fights path drawing on tablets.
 /// </summary>
 public class GeometryPathDrawInput : MonoBehaviour
 {
+    public enum Tool
+    {
+        Pencil,
+        Eraser,
+        Move
+    }
+
     public CharacterMove characterMove;
     [Tooltip("Ignore presses that start on buttons, the yellow strip, or the hint panel.")]
     public bool ignoreClicksOverUI = true;
     [Tooltip("On touch, aim this many pixels above the finger so the cell is not hidden under it.")]
     [Range(0f, 96f)] public float touchAimNudgePixels = 52f;
-    [Tooltip("If a press starts on the robot, wait for this much finger travel before drawing so a hold can move the robot instead.")]
-    [Range(8f, 48f)] public float robotPressDrawSlopPixels = 20f;
     public bool logEvents;
 
-    public bool EraserActive => _eraser;
+    public Tool ActiveTool => _tool;
+    public bool IsMoveToolActive => _tool == Tool.Move;
+    public bool AllowsDrawing => _tool == Tool.Pencil || _tool == Tool.Eraser;
+    public bool EraserActive => _tool == Tool.Eraser;
     public bool IsStrokeActive => _drawing;
     public Sprite PencilSprite => _pencilSprite;
     public Sprite EraserSprite => _eraserSprite;
 
+    Tool _tool = Tool.Pencil;
     Vector2Int _pen;
     Vector2Int _pressCell;
     bool _hasPen;
     bool _drawing;
     bool _usingTouch;
     bool _strokeMoved;
-    bool _eraser;
-    bool _deferForRobot;
-    Vector2 _deferScreen;
     int _pointerId = -1;
     GameObject _pencilIcon;
     GameObject _eraserIcon;
+    GameObject _moveIcon;
     Vector3 _pencilIconBaseScale = Vector3.one;
     Vector3 _eraserIconBaseScale = Vector3.one;
+    Vector3 _moveIconBaseScale = Vector3.one;
     Sprite _pencilSprite;
     Sprite _eraserSprite;
+    Sprite _moveSprite;
     Vector2 _lastScreen;
     bool _lastTouch;
     Canvas _cursorCanvas;
@@ -49,7 +57,9 @@ public class GeometryPathDrawInput : MonoBehaviour
     Image _cursorTip;
     Image _cursorTipRing;
     bool _osCursorHidden;
+    bool _createdMoveIcon;
     static Sprite _dotSprite;
+    static Sprite _handSprite;
 
     void Awake()
     {
@@ -68,6 +78,8 @@ public class GeometryPathDrawInput : MonoBehaviour
     {
         DestroyScreenCursor();
         ShowOsCursor(true);
+        if (_createdMoveIcon && _moveIcon != null)
+            Destroy(_moveIcon);
     }
 
     void LateUpdate()
@@ -79,8 +91,8 @@ public class GeometryPathDrawInput : MonoBehaviour
     {
         if (characterMove == null) return;
         var geo = GeometryPathController.Instance;
-        bool canDraw = geo != null && geo.AllowStudentDrawing && !characterMove.IsBusyForGridInput;
-        if (!canDraw)
+        bool canInteract = geo != null && geo.AllowStudentDrawing && !characterMove.IsBusyForGridInput;
+        if (!canInteract)
         {
             EndStroke(keepPen: false);
             geo?.ClearDrawPointerPreview();
@@ -108,9 +120,9 @@ public class GeometryPathDrawInput : MonoBehaviour
                 EndStroke(keepPen: true);
                 return;
             }
-            // DRAW_PATH owns the press so kids can draw across the robot cell.
-            // Robot move uses a short hold (see RobotGridDrag), not this soft grab.
-            if (characterMove.IsRobotBeingManipulated())
+
+            // Move tool: robot drag owns the press. Pencil/eraser never grab the robot.
+            if (!AllowsDrawing || characterMove.IsRobotBeingManipulated())
             {
                 EndStroke(keepPen: true);
                 return;
@@ -121,17 +133,6 @@ public class GeometryPathDrawInput : MonoBehaviour
             _strokeMoved = false;
             _lastScreen = pos;
             _lastTouch = touch;
-
-            // Press on the robot: wait for a slide before drawing so a hold can grab instead.
-            if (IsRobotGrabCandidate(pos, touch))
-            {
-                _deferForRobot = true;
-                _deferScreen = pos;
-                _drawing = false;
-                ShowPreview(geo, null, drawing: false, pos, touch);
-                return;
-            }
-
             BeginStroke(geo, pos, touch);
             return;
         }
@@ -143,24 +144,7 @@ public class GeometryPathDrawInput : MonoBehaviour
             return;
         }
 
-        if (held && _deferForRobot)
-        {
-            _lastScreen = pos;
-            _lastTouch = _usingTouch;
-            var drag = characterMove.GetComponent<RobotGridDrag>();
-            bool grabPending = drag != null && drag.IsDrawPathGrabPending;
-            float travel = Vector2.Distance(pos, _deferScreen);
-            if (!grabPending || travel >= robotPressDrawSlopPixels)
-            {
-                _deferForRobot = false;
-                BeginStroke(geo, _deferScreen, _usingTouch);
-                if (_drawing && PickCell(pos, _usingTouch, out Vector2Int slidCell))
-                    HandleDrag(geo, slidCell);
-            }
-            return;
-        }
-
-        if (held && _drawing)
+        if (held && _drawing && AllowsDrawing)
         {
             _lastScreen = pos;
             _lastTouch = _usingTouch;
@@ -175,32 +159,26 @@ public class GeometryPathDrawInput : MonoBehaviour
 
         if (released)
         {
-            if (_deferForRobot)
-            {
-                // Quick tap on the robot cell: treat as a draw/erase tap, not a grab.
-                _deferForRobot = false;
-                BeginStroke(geo, _deferScreen, _usingTouch || touch);
-            }
-            if (_drawing && _eraser && !_strokeMoved && _hasPen)
+            if (_drawing && _tool == Tool.Eraser && !_strokeMoved && _hasPen)
             {
                 int cleared = geo.EraseEdgesTouching(_pressCell);
                 if (cleared > 0)
                     characterMove.NotifyGeometryPathDrawingChanged();
             }
             EndStroke(keepPen: true);
-            if (PickCell(pos, touch, out Vector2Int hover) && !touch)
+            if (AllowsDrawing && PickCell(pos, touch, out Vector2Int hover) && !touch)
                 ShowPreview(geo, hover, drawing: false, pos, touch);
             else
                 ShowPreview(geo, null, drawing: false, pos, touch);
             return;
         }
 
-        if (!_drawing && !touch)
+        if (!_drawing && !touch && AllowsDrawing)
         {
             _lastScreen = pos;
             _lastTouch = false;
             Vector2 aim = AimPoint(pos, false);
-            if (IsOverDrawIcon(aim, out _))
+            if (IsOverToolIcon(aim, out _))
             {
                 ShowPreview(geo, null, drawing: false);
                 return;
@@ -217,10 +195,8 @@ public class GeometryPathDrawInput : MonoBehaviour
         }
     }
 
-    /// <summary>Called when a long-press claims the robot so the stroke does not keep drawing.</summary>
     public void CancelStrokeForRobotGrab()
     {
-        _deferForRobot = false;
         EndStroke(keepPen: true);
         GeometryPathController.Instance?.ClearDrawPointerPreview();
         HideScreenCursor(restoreOs: true);
@@ -228,24 +204,17 @@ public class GeometryPathDrawInput : MonoBehaviour
 
     void BeginStroke(GeometryPathController geo, Vector2 screenPos, bool touch)
     {
+        if (!AllowsDrawing) return;
         _drawing = true;
-        _deferForRobot = false;
         if (!PickCell(screenPos, touch, out Vector2Int cell))
             return;
         _pressCell = cell;
         HandlePress(geo, cell);
     }
 
-    bool IsRobotGrabCandidate(Vector2 screenPos, bool touch)
-    {
-        if (characterMove == null) return false;
-        var drag = characterMove.GetComponent<RobotGridDrag>();
-        return drag != null && drag.enabled && drag.IsDrawPathGrabCandidate(screenPos, touch);
-    }
-
     void HandlePress(GeometryPathController geo, Vector2Int cell)
     {
-        if (_eraser)
+        if (_tool == Tool.Eraser)
         {
             _pen = cell;
             _hasPen = true;
@@ -271,7 +240,7 @@ public class GeometryPathDrawInput : MonoBehaviour
     {
         if (!_hasPen)
         {
-            _pen = _eraser ? cell : characterMove.RobotGridPosition;
+            _pen = _tool == Tool.Eraser ? cell : characterMove.RobotGridPosition;
             _hasPen = true;
         }
 
@@ -282,12 +251,12 @@ public class GeometryPathDrawInput : MonoBehaviour
         }
 
         _strokeMoved = true;
-        int changes = _eraser
+        int changes = _tool == Tool.Eraser
             ? geo.EraseDrawnPath(_pen, cell)
             : geo.ConnectDrawnPath(_pen, cell);
         if (changes > 0)
         {
-            if (logEvents) Debug.Log($"[GeometryPathDraw] {(_eraser ? "erase" : "draw")} {_pen} -> {cell} ({changes})");
+            if (logEvents) Debug.Log($"[GeometryPathDraw] {(_tool == Tool.Eraser ? "erase" : "draw")} {_pen} -> {cell} ({changes})");
             characterMove.NotifyGeometryPathDrawingChanged();
         }
         _pen = cell;
@@ -307,6 +276,7 @@ public class GeometryPathDrawInput : MonoBehaviour
     public void ResetForNewAttempt()
     {
         EndStroke(keepPen: false);
+        SetTool(Tool.Pencil, refreshPreview: false);
         if (characterMove != null)
         {
             _pen = characterMove.RobotGridPosition;
@@ -327,63 +297,144 @@ public class GeometryPathDrawInput : MonoBehaviour
         }
     }
 
-    public void BindSceneIcons(GameObject pencilIcon, GameObject eraserIcon)
+    public void BindSceneIcons(GameObject pencilIcon, GameObject eraserIcon, GameObject moveIcon = null)
     {
         _pencilIcon = pencilIcon;
         _eraserIcon = eraserIcon;
+        _moveIcon = moveIcon;
         if (_pencilIcon != null) _pencilIconBaseScale = _pencilIcon.transform.localScale;
         if (_eraserIcon != null) _eraserIconBaseScale = _eraserIcon.transform.localScale;
+
         _pencilSprite = ReadSprite(_pencilIcon) ?? LoadSprite("DrawTools/pencil");
         _eraserSprite = ReadSprite(_eraserIcon) ?? LoadSprite("DrawTools/eraser");
+        _moveSprite = ReadSprite(_moveIcon) ?? LoadSprite("DrawTools/move") ?? HandSprite();
+
+        if (_moveIcon == null)
+            _moveIcon = EnsureMoveIcon();
+        if (_moveIcon != null)
+            _moveIconBaseScale = _moveIcon.transform.localScale;
+
         NeutralizePaletteBackground();
-        WireIcon(_pencilIcon, eraser: false);
-        WireIcon(_eraserIcon, eraser: true);
-        ApplyIconSelection();
+        WireIcon(_pencilIcon, Tool.Pencil);
+        WireIcon(_eraserIcon, Tool.Eraser);
+        WireIcon(_moveIcon, Tool.Move);
+        SetTool(Tool.Pencil, refreshPreview: false);
         GeometryPathController.Instance?.SetDrawToolSprites(_pencilSprite, _eraserSprite);
     }
 
-    public void SetEraser(bool eraser)
+    /// <summary>Kids pick one job at a time: draw, erase, or move the robot.</summary>
+    public void SetTool(Tool tool, bool refreshPreview = true)
     {
-        _eraser = eraser;
+        _tool = tool;
         EndStroke(keepPen: true);
         ApplyIconSelection();
         if (EventSystem.current != null)
             EventSystem.current.SetSelectedGameObject(null);
+        if (!refreshPreview) return;
         var geo = GeometryPathController.Instance;
         if (geo != null && geo.AllowStudentDrawing)
             ShowPreview(geo, null, drawing: false);
+        if (_tool == Tool.Move)
+            HideScreenCursor(restoreOs: true);
+    }
+
+    public void SetEraser(bool eraser) => SetTool(eraser ? Tool.Eraser : Tool.Pencil);
+
+    GameObject EnsureMoveIcon()
+    {
+        Transform parent = null;
+        if (_eraserIcon != null) parent = _eraserIcon.transform.parent;
+        else if (_pencilIcon != null) parent = _pencilIcon.transform.parent;
+        if (parent == null) return null;
+
+        Transform existing = parent.Find("drawPathMove");
+        if (existing != null)
+        {
+            _createdMoveIcon = false;
+            return existing.gameObject;
+        }
+
+        GameObject template = _eraserIcon != null ? _eraserIcon : _pencilIcon;
+        GameObject go;
+        if (template != null)
+        {
+            go = Instantiate(template, parent);
+            go.name = "drawPathMove";
+            // Place after eraser in the blue bar.
+            int sibling = template.transform.GetSiblingIndex() + 1;
+            go.transform.SetSiblingIndex(Mathf.Clamp(sibling, 0, parent.childCount - 1));
+        }
+        else
+        {
+            go = new GameObject("drawPathMove", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
+            go.transform.SetParent(parent, false);
+            var rt = go.GetComponent<RectTransform>();
+            rt.sizeDelta = new Vector2(72f, 72f);
+        }
+
+        var img = go.GetComponent<Image>();
+        if (img == null) img = go.GetComponentInChildren<Image>(true);
+        if (img != null)
+        {
+            img.sprite = _moveSprite;
+            img.preserveAspect = true;
+            img.color = Color.white;
+            img.raycastTarget = true;
+        }
+
+        // Strip leftover pencil/eraser button listeners from the clone.
+        var buttons = go.GetComponentsInChildren<Button>(true);
+        for (int i = 0; i < buttons.Length; i++)
+            buttons[i].onClick.RemoveAllListeners();
+
+        _createdMoveIcon = true;
+        go.SetActive(true);
+        return go;
     }
 
     void ShowPreview(GeometryPathController geo, Vector2Int? hover, bool drawing, Vector2? screen = null, bool touch = false)
     {
+        if (!AllowsDrawing)
+        {
+            geo.ClearDrawPointerPreview();
+            return;
+        }
         Vector2 aim = screen.HasValue ? AimPoint(screen.Value, touch) : AimPoint(_lastScreen, _lastTouch);
         Vector3? cursorWorld = null;
         if (characterMove != null && characterMove.TryScreenToGridWorld(aim, out Vector3 world))
             cursorWorld = world;
         else if (hover.HasValue)
             cursorWorld = characterMove != null ? characterMove.GridCellToWorld(hover.Value) : (Vector3?)null;
-        geo.SetDrawPointerPreview(hover, _hasPen ? _pen : (Vector2Int?)null, drawing, _eraser, cursorWorld);
+        geo.SetDrawPointerPreview(hover, _hasPen ? _pen : (Vector2Int?)null, drawing, _tool == Tool.Eraser, cursorWorld);
     }
 
     bool TrySelectIconAt(Vector2 screenPos)
     {
-        if (!IsOverDrawIcon(screenPos, out bool erase)) return false;
-        SetEraser(erase);
+        if (!IsOverToolIcon(screenPos, out Tool tool)) return false;
+        SetTool(tool);
         return true;
     }
 
-    bool IsOverDrawIcon(Vector2 screenPos, out bool erase)
+    bool IsOverToolIcon(Vector2 screenPos, out Tool tool)
     {
-        erase = false;
+        tool = Tool.Pencil;
         GameObject top = TopUiHit(screenPos);
         if (top == null) return false;
+        if (BelongsToIcon(top, _moveIcon))
+        {
+            tool = Tool.Move;
+            return true;
+        }
         if (BelongsToIcon(top, _eraserIcon))
         {
-            erase = true;
+            tool = Tool.Eraser;
             return true;
         }
         if (BelongsToIcon(top, _pencilIcon))
+        {
+            tool = Tool.Pencil;
             return true;
+        }
         return false;
     }
 
@@ -402,7 +453,7 @@ public class GeometryPathDrawInput : MonoBehaviour
         return hit == icon || hit.transform.IsChildOf(icon.transform);
     }
 
-    void WireIcon(GameObject go, bool eraser)
+    void WireIcon(GameObject go, Tool tool)
     {
         if (go == null) return;
         go.SetActive(true);
@@ -421,8 +472,8 @@ public class GeometryPathDrawInput : MonoBehaviour
             if (graphic != null) btn.targetGraphic = graphic;
         }
         btn.onClick.RemoveAllListeners();
-        bool erase = eraser;
-        btn.onClick.AddListener(() => SetEraser(erase));
+        Tool chosen = tool;
+        btn.onClick.AddListener(() => SetTool(chosen));
         btn.interactable = true;
         btn.enabled = true;
         btn.navigation = new Navigation { mode = Navigation.Mode.None };
@@ -434,6 +485,7 @@ public class GeometryPathDrawInput : MonoBehaviour
         Transform parent = null;
         if (_pencilIcon != null) parent = _pencilIcon.transform.parent;
         else if (_eraserIcon != null) parent = _eraserIcon.transform.parent;
+        else if (_moveIcon != null) parent = _moveIcon.transform.parent;
         if (parent == null) return;
 
         var panelImg = parent.GetComponent<Image>();
@@ -447,7 +499,7 @@ public class GeometryPathDrawInput : MonoBehaviour
             if (childBtn != null)
                 childBtn.navigation = new Navigation { mode = Navigation.Mode.None };
 
-            if (child.gameObject == _pencilIcon || child.gameObject == _eraserIcon)
+            if (child.gameObject == _pencilIcon || child.gameObject == _eraserIcon || child.gameObject == _moveIcon)
                 continue;
             if (!child.name.Equals("blue", System.StringComparison.OrdinalIgnoreCase))
                 continue;
@@ -465,8 +517,9 @@ public class GeometryPathDrawInput : MonoBehaviour
 
     void ApplyIconSelection()
     {
-        SetIconSelected(_pencilIcon, _pencilIconBaseScale, !_eraser);
-        SetIconSelected(_eraserIcon, _eraserIconBaseScale, _eraser);
+        SetIconSelected(_pencilIcon, _pencilIconBaseScale, _tool == Tool.Pencil);
+        SetIconSelected(_eraserIcon, _eraserIconBaseScale, _tool == Tool.Eraser);
+        SetIconSelected(_moveIcon, _moveIconBaseScale, _tool == Tool.Move);
     }
 
     static void SetIconSelected(GameObject go, Vector3 baseScale, bool selected)
@@ -481,16 +534,17 @@ public class GeometryPathDrawInput : MonoBehaviour
 
     Sprite CursorSprite()
     {
+        if (_tool == Tool.Move) return _moveSprite;
         GameObject assigned = null;
         if (characterMove != null)
-            assigned = _eraser ? characterMove.drawPathEraserIcon : characterMove.drawPathPencilIcon;
+            assigned = _tool == Tool.Eraser ? characterMove.drawPathEraserIcon : characterMove.drawPathPencilIcon;
         Sprite sprite = ReadSprite(assigned);
         if (sprite != null) return sprite;
-        sprite = _eraser ? _eraserSprite : _pencilSprite;
+        sprite = _tool == Tool.Eraser ? _eraserSprite : _pencilSprite;
         if (sprite != null) return sprite;
-        sprite = ReadSprite(_eraser ? _eraserIcon : _pencilIcon);
+        sprite = ReadSprite(_tool == Tool.Eraser ? _eraserIcon : _pencilIcon);
         if (sprite != null) return sprite;
-        return LoadSprite(_eraser ? "DrawTools/eraser" : "DrawTools/pencil");
+        return LoadSprite(_tool == Tool.Eraser ? "DrawTools/eraser" : "DrawTools/pencil");
     }
 
     static Sprite ReadSprite(GameObject go)
@@ -516,7 +570,6 @@ public class GeometryPathDrawInput : MonoBehaviour
     void EndStroke(bool keepPen)
     {
         _drawing = false;
-        _deferForRobot = false;
         _usingTouch = false;
         _strokeMoved = false;
         _pointerId = -1;
@@ -545,7 +598,7 @@ public class GeometryPathDrawInput : MonoBehaviour
         }
         var geo = GeometryPathController.Instance;
         bool canDraw = geo != null && geo.AllowStudentDrawing && !characterMove.IsBusyForGridInput;
-        if (!canDraw)
+        if (!canDraw || !AllowsDrawing)
         {
             HideScreenCursor(restoreOs: true);
             return;
@@ -557,18 +610,16 @@ public class GeometryPathDrawInput : MonoBehaviour
             return;
         }
 
-        // Never ride the pencil/eraser along while the kid is moving the robot.
         if (characterMove.IsRobotBeingManipulated())
         {
             HideScreenCursor(restoreOs: true);
             return;
         }
 
-        bool overTool = IsOverDrawIcon(pos, out _);
+        bool overTool = IsOverToolIcon(pos, out _);
         bool overUi = ignoreClicksOverUI && UiDragState.IsScreenPointOverBlockingUi(pos, pointerId);
-        bool show = !overTool && !overUi && _drawing;
-        if (!touch) show = !overTool && !overUi;
-        if (touch) show = show && held;
+        bool show = !overTool && !overUi;
+        if (touch) show = show && (_drawing || held);
 
         Vector2 cursorPos = AimPoint(pos, touch);
         UpdateScreenCursor(cursorPos, show, _drawing || (touch && held && show));
@@ -598,7 +649,7 @@ public class GeometryPathDrawInput : MonoBehaviour
         _cursorShadow.color = new Color(0.05f, 0.08f, 0.16f, 0.28f);
 
         Vector2 tip = TipPivot();
-        float size = _eraser ? 100f : 112f;
+        float size = _tool == Tool.Eraser ? 100f : 112f;
         if (drawing) size *= 0.92f;
         _cursorRt.pivot = new Vector2(0.5f, 0.5f);
         _cursorRt.sizeDelta = Vector2.zero;
@@ -612,7 +663,7 @@ public class GeometryPathDrawInput : MonoBehaviour
 
         float pulse = drawing ? 1f : 0.82f + 0.08f * Mathf.Sin(Time.unscaledTime * 6.2f);
         float fill = (drawing ? 28f : 22f) * pulse;
-        Color mark = _eraser
+        Color mark = _tool == Tool.Eraser
             ? new Color(1f, 0.48f, 0.68f, drawing ? 0.98f : 0.88f)
             : new Color(1f, 0.84f, 0.12f, drawing ? 1f : 0.92f);
         PlaceTipMark(_cursorTipRing, fill + 8f, new Color(1f, 1f, 1f, 0.95f));
@@ -708,7 +759,7 @@ public class GeometryPathDrawInput : MonoBehaviour
 
     Vector2 TipPivot()
     {
-        return _eraser ? new Vector2(0.22f, 0.20f) : new Vector2(0.13f, 0.18f);
+        return _tool == Tool.Eraser ? new Vector2(0.22f, 0.20f) : new Vector2(0.13f, 0.18f);
     }
 
     void HideScreenCursor(bool restoreOs)
@@ -772,6 +823,47 @@ public class GeometryPathDrawInput : MonoBehaviour
         _dotSprite = Sprite.Create(tex, new Rect(0f, 0f, n, n), new Vector2(0.5f, 0.5f), n);
         _dotSprite.name = "DrawToolTipDot";
         return _dotSprite;
+    }
+
+    static Sprite HandSprite()
+    {
+        if (_handSprite != null) return _handSprite;
+        const int n = 64;
+        var tex = new Texture2D(n, n, TextureFormat.RGBA32, false);
+        tex.wrapMode = TextureWrapMode.Clamp;
+        tex.filterMode = FilterMode.Bilinear;
+        for (int y = 0; y < n; y++)
+            for (int x = 0; x < n; x++)
+                tex.SetPixel(x, y, Color.clear);
+
+        // Simple open-hand silhouette so Move is readable without art assets.
+        void Disk(float cx, float cy, float r, Color col)
+        {
+            int x0 = Mathf.Max(0, Mathf.FloorToInt(cx - r - 1));
+            int x1 = Mathf.Min(n - 1, Mathf.CeilToInt(cx + r + 1));
+            int y0 = Mathf.Max(0, Mathf.FloorToInt(cy - r - 1));
+            int y1 = Mathf.Min(n - 1, Mathf.CeilToInt(cy + r + 1));
+            for (int y = y0; y <= y1; y++)
+            {
+                for (int x = x0; x <= x1; x++)
+                {
+                    float d = Vector2.Distance(new Vector2(x, y), new Vector2(cx, cy));
+                    if (d <= r) tex.SetPixel(x, y, col);
+                }
+            }
+        }
+
+        Color fill = Color.white;
+        Disk(32f, 26f, 14f, fill);
+        Disk(18f, 40f, 6.5f, fill);
+        Disk(26f, 46f, 6.2f, fill);
+        Disk(34f, 48f, 6.2f, fill);
+        Disk(42f, 44f, 6f, fill);
+        Disk(48f, 34f, 6.5f, fill);
+        tex.Apply(false, false);
+        _handSprite = Sprite.Create(tex, new Rect(0f, 0f, n, n), new Vector2(0.5f, 0.5f), n);
+        _handSprite.name = "DrawToolMoveHand";
+        return _handSprite;
     }
 
     static void DestroyLegacyOverlayToolbar()
