@@ -5,11 +5,16 @@ using UnityEngine.EventSystems;
 /// Drag the robot on the grid before RUN. Toy-style: center = move; left/right sides = rotate.
 /// With orbit mode, side press+drag spins the robot smoothly (mouse/touch direction); release snaps to N/E/S/W.
 /// Short tap on a side still triggers a single 90° step.
+/// On DRAW_PATH, pencil/eraser own the press so kids can draw over the robot; grab uses a short hold instead.
 /// </summary>
 [DisallowMultipleComponent]
 public class RobotGridDrag : MonoBehaviour
 {
     public CharacterMove characterMove;
+    [Tooltip("DRAW_PATH: hold on the robot this long before grab so a draw stroke can start on the same press.")]
+    [Range(0.22f, 0.75f)] public float drawPathRobotLongPressSeconds = 0.4f;
+    [Tooltip("If the finger slides farther than this during the hold, cancel robot grab and keep drawing.")]
+    [Range(10f, 64f)] public float drawPathLongPressCancelPixels = 24f;
 
     private enum InteractionMode
     {
@@ -33,6 +38,10 @@ public class RobotGridDrag : MonoBehaviour
     private bool _usingTouch;
     private bool _grabPoseActive;
     private Vector3 _grabBasePosition;
+    private bool _pendingDrawPathGrab;
+    private Vector2 _pendingGrabScreen;
+    private float _pendingGrabStartTime;
+    private bool _pendingGrabTouch;
 
     public bool IsManipulating => _mode != InteractionMode.None || _moveDragging;
 
@@ -53,6 +62,7 @@ public class RobotGridDrag : MonoBehaviour
     {
         if (characterMove == null) return;
         HandleTouchInput();
+        TickPendingDrawPathGrab();
         if (!_moveDragging || !characterMove.CanDragRobot()) return;
         if (characterMove.rotateRobotWithScrollWhileDragging)
         {
@@ -74,6 +84,7 @@ public class RobotGridDrag : MonoBehaviour
         {
             if (_activeTouchFingerId >= 0 && (_mode != InteractionMode.None || _moveDragging))
                 EndPointerInteraction();
+            CancelPendingDrawPathGrab();
             _activeTouchFingerId = -1;
             return;
         }
@@ -83,6 +94,7 @@ public class RobotGridDrag : MonoBehaviour
         {
             if (_activeTouchFingerId >= 0 && (_mode != InteractionMode.None || _moveDragging))
                 EndPointerInteraction();
+            CancelPendingDrawPathGrab();
             return;
         }
 
@@ -95,7 +107,10 @@ public class RobotGridDrag : MonoBehaviour
         if (UiDragState.IsDragging)
         {
             if (t.phase == TouchPhase.Ended || t.phase == TouchPhase.Canceled)
+            {
                 EndPointerInteraction();
+                CancelPendingDrawPathGrab();
+            }
             return;
         }
 
@@ -104,18 +119,23 @@ public class RobotGridDrag : MonoBehaviour
             EnsureInteractionCamera();
             if (UiDragState.IsDragging)
                 return;
-            if (WouldBeginGrab(t.position))
-            {
-                BeginPointerInteraction(t.position, touch: true);
+            if (TryBeginOrArmGrab(t.position, touch: true))
                 return;
-            }
             if (UiDragState.ShouldBlockWorldPointer(t.position, t.fingerId))
                 return;
         }
         else if (t.phase == TouchPhase.Moved)
-            ContinuePointerInteraction(t.position);
+        {
+            if (_pendingDrawPathGrab)
+                TrackPendingDrawPathGrab(t.position);
+            else
+                ContinuePointerInteraction(t.position);
+        }
         else if (t.phase == TouchPhase.Ended || t.phase == TouchPhase.Canceled)
+        {
+            CancelPendingDrawPathGrab();
             EndPointerInteraction();
+        }
     }
 
     private void OnMouseDown()
@@ -123,12 +143,139 @@ public class RobotGridDrag : MonoBehaviour
         if (Input.touchCount > 0) return;
         EnsureInteractionCamera();
         if (UiDragState.IsDragging) return;
-        if (WouldBeginGrab(Input.mousePosition))
+        if (TryBeginOrArmGrab(Input.mousePosition, touch: false))
+            return;
+        if (UiDragState.ShouldBlockWorldPointer(Input.mousePosition)) return;
+    }
+
+    private void OnMouseDrag()
+    {
+        if (Input.touchCount > 0) return;
+        if (_pendingDrawPathGrab)
         {
-            BeginPointerInteraction(Input.mousePosition, touch: false);
+            TrackPendingDrawPathGrab(Input.mousePosition);
             return;
         }
-        if (UiDragState.ShouldBlockWorldPointer(Input.mousePosition)) return;
+        ContinuePointerInteraction(Input.mousePosition);
+    }
+
+    private void OnMouseUp()
+    {
+        if (Input.touchCount > 0) return;
+        CancelPendingDrawPathGrab();
+        EndPointerInteraction();
+    }
+
+    bool TryBeginOrArmGrab(Vector2 screenPos, bool touch)
+    {
+        if (StudentDrawingOwnsPresses())
+        {
+            if (!IsRobotGrabCandidate(screenPos, touch))
+                return false;
+            ArmPendingDrawPathGrab(screenPos, touch);
+            return true;
+        }
+
+        if (!WouldBeginGrab(screenPos))
+            return false;
+        BeginPointerInteraction(screenPos, touch);
+        return true;
+    }
+
+    void ArmPendingDrawPathGrab(Vector2 screenPos, bool touch)
+    {
+        _pendingDrawPathGrab = true;
+        _pendingGrabScreen = screenPos;
+        _pendingGrabStartTime = Time.unscaledTime;
+        _pendingGrabTouch = touch;
+        _usingTouch = touch;
+        _activeTouchFingerId = touch && Input.touchCount > 0 ? Input.GetTouch(0).fingerId : -1;
+    }
+
+    void TrackPendingDrawPathGrab(Vector2 screenPos)
+    {
+        if (!_pendingDrawPathGrab) return;
+        // Keep the original press point so a real slide cancels grab and keeps drawing.
+        if (Vector2.Distance(screenPos, _pendingGrabScreen) > drawPathLongPressCancelPixels)
+            CancelPendingDrawPathGrab();
+    }
+
+    void TickPendingDrawPathGrab()
+    {
+        if (!_pendingDrawPathGrab) return;
+
+        bool held;
+        Vector2 pos;
+        if (_pendingGrabTouch)
+        {
+            if (Input.touchCount == 0)
+            {
+                CancelPendingDrawPathGrab();
+                return;
+            }
+            Touch t = Input.GetTouch(0);
+            if (_activeTouchFingerId >= 0 && t.fingerId != _activeTouchFingerId)
+            {
+                CancelPendingDrawPathGrab();
+                return;
+            }
+            held = t.phase == TouchPhase.Began || t.phase == TouchPhase.Moved || t.phase == TouchPhase.Stationary;
+            pos = t.position;
+        }
+        else
+        {
+            if (Input.touchCount > 0)
+            {
+                CancelPendingDrawPathGrab();
+                return;
+            }
+            held = Input.GetMouseButton(0);
+            pos = Input.mousePosition;
+        }
+
+        if (!held)
+        {
+            CancelPendingDrawPathGrab();
+            return;
+        }
+
+        TrackPendingDrawPathGrab(pos);
+        if (!_pendingDrawPathGrab) return;
+
+        if (Time.unscaledTime - _pendingGrabStartTime < drawPathRobotLongPressSeconds)
+            return;
+
+        _pendingDrawPathGrab = false;
+        BeginPointerInteraction(pos, _pendingGrabTouch);
+    }
+
+    void CancelPendingDrawPathGrab()
+    {
+        _pendingDrawPathGrab = false;
+        _pendingGrabTouch = false;
+    }
+
+    static bool StudentDrawingOwnsPresses()
+    {
+        var geo = GeometryPathController.Instance;
+        return geo != null && geo.AllowStudentDrawing;
+    }
+
+    /// <summary>True when a DRAW_PATH press is on the robot and may become a long-press grab.</summary>
+    public bool IsDrawPathGrabCandidate(Vector2 screenPos, bool touch = false)
+    {
+        return StudentDrawingOwnsPresses() && IsRobotGrabCandidate(screenPos, touch);
+    }
+
+    public bool IsDrawPathGrabPending => _pendingDrawPathGrab;
+
+    bool IsRobotGrabCandidate(Vector2 screenPos, bool touch)
+    {
+        if (characterMove == null || !characterMove.CanDragRobot()) return false;
+        EnsureInteractionCamera();
+        _usingTouch = touch;
+        if (TryGetLateralHitOnRobot(screenPos, out _)) return true;
+        return IsWithinGrabRadius(screenPos, tightForDrawPath: true);
     }
 
     private void EnsureInteractionCamera()
@@ -146,6 +293,9 @@ public class RobotGridDrag : MonoBehaviour
         if (_camera == null) return;
 
         _usingTouch = touch;
+        _pendingDrawPathGrab = false;
+        var draw = characterMove.GetComponent<GeometryPathDrawInput>();
+        draw?.CancelStrokeForRobotGrab();
         characterMove.NotifyRobotManipulationStarted();
         GameInteractionSounds.PlayRobotTouch();
         GameHaptics.PlayGrab();
@@ -188,12 +338,6 @@ public class RobotGridDrag : MonoBehaviour
         Vector3 world = GetPointerWorldOnFloor(screenPos);
         _offset = transform.position - world;
         _offset.y += GrabLiftHeight();
-    }
-
-    private void OnMouseDrag()
-    {
-        if (Input.touchCount > 0) return;
-        ContinuePointerInteraction(Input.mousePosition);
     }
 
     private void ContinuePointerInteraction(Vector2 screenPos)
@@ -295,17 +439,12 @@ public class RobotGridDrag : MonoBehaviour
             characterMove.SetRobotFacingDirection(fd);
     }
 
-    private void OnMouseUp()
-    {
-        if (Input.touchCount > 0) return;
-        EndPointerInteraction();
-    }
-
     private void EndPointerInteraction()
     {
         if (characterMove == null)
             return;
 
+        CancelPendingDrawPathGrab();
         characterMove.NotifyRobotManipulationEnded();
         ClearGrabPose();
 
@@ -360,15 +499,18 @@ public class RobotGridDrag : MonoBehaviour
         _mode = InteractionMode.None;
         _moveDragging = false;
         _usingTouch = false;
+        CancelPendingDrawPathGrab();
         ClearGrabPose();
     }
 
     public bool WouldBeginGrab(Vector2 screenPos)
     {
         if (characterMove == null || !characterMove.CanDragRobot()) return false;
+        // DRAW_PATH: draw owns the press; grab waits for the long-press arming path.
+        if (StudentDrawingOwnsPresses()) return false;
         EnsureInteractionCamera();
         if (TryGetLateralHitOnRobot(screenPos, out _)) return true;
-        return IsWithinGrabRadius(screenPos);
+        return IsWithinGrabRadius(screenPos, tightForDrawPath: false);
     }
 
     private bool DoesPointerHitRobot(Vector2 screenPos)
@@ -413,28 +555,33 @@ public class RobotGridDrag : MonoBehaviour
         return false;
     }
 
-    bool IsWithinGrabRadius(Vector2 screenPos)
+    bool IsWithinGrabRadius(Vector2 screenPos, bool tightForDrawPath)
     {
         EnsureInteractionCamera();
         if (_camera == null) return false;
         Bounds b = characterMove != null ? characterMove.RobotVisibleBounds() : new Bounds(transform.position, Vector3.one);
         Vector3 robotScreen = _camera.WorldToScreenPoint(b.center);
         if (robotScreen.z < 0.05f) return false;
-        float radius = GrabScreenRadius(b);
+        float radius = GrabScreenRadius(b, tightForDrawPath);
         return Vector2.Distance(screenPos, new Vector2(robotScreen.x, robotScreen.y)) <= radius;
     }
 
-    float GrabScreenRadius(Bounds worldBounds)
+    float GrabScreenRadius(Bounds worldBounds, bool tightForDrawPath)
     {
         EnsureInteractionCamera();
-        if (_camera == null) return 88f;
+        if (_camera == null) return tightForDrawPath ? 52f : 88f;
         Vector3 c = worldBounds.center;
         Vector3 edge = c + _camera.transform.right * (worldBounds.extents.x + worldBounds.extents.z) * 0.5f;
         Vector2 sc = _camera.WorldToScreenPoint(c);
         Vector2 se = _camera.WorldToScreenPoint(edge);
-        float fromMesh = Vector2.Distance(sc, se) + 36f;
-        float minPx = _usingTouch || Input.touchCount > 0 ? 72f : 56f;
-        return Mathf.Clamp(fromMesh, minPx, 140f);
+        float pad = tightForDrawPath ? 18f : 36f;
+        float fromMesh = Vector2.Distance(sc, se) + pad;
+        bool touch = _usingTouch || Input.touchCount > 0;
+        float minPx = tightForDrawPath
+            ? (touch ? 44f : 36f)
+            : (touch ? 72f : 56f);
+        float maxPx = tightForDrawPath ? 84f : 140f;
+        return Mathf.Clamp(fromMesh, minPx, maxPx);
     }
 
     float GrabLiftHeight()

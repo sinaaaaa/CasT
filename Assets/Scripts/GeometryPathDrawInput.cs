@@ -6,6 +6,7 @@ using UnityEngine.UI;
 /// DRAW_PATH: tap or drag adjacent squares to draw the predicted path.
 /// Pencil and eraser live on the Unity blue bar. Over the grid the OS cursor
 /// is replaced by a large pencil or eraser whose tip is the drawing point.
+/// Drawing owns the press (including over the robot). Moving the robot is a short hold.
 /// </summary>
 public class GeometryPathDrawInput : MonoBehaviour
 {
@@ -14,9 +15,12 @@ public class GeometryPathDrawInput : MonoBehaviour
     public bool ignoreClicksOverUI = true;
     [Tooltip("On touch, aim this many pixels above the finger so the cell is not hidden under it.")]
     [Range(0f, 96f)] public float touchAimNudgePixels = 52f;
+    [Tooltip("If a press starts on the robot, wait for this much finger travel before drawing so a hold can move the robot instead.")]
+    [Range(8f, 48f)] public float robotPressDrawSlopPixels = 20f;
     public bool logEvents;
 
     public bool EraserActive => _eraser;
+    public bool IsStrokeActive => _drawing;
     public Sprite PencilSprite => _pencilSprite;
     public Sprite EraserSprite => _eraserSprite;
 
@@ -27,6 +31,8 @@ public class GeometryPathDrawInput : MonoBehaviour
     bool _usingTouch;
     bool _strokeMoved;
     bool _eraser;
+    bool _deferForRobot;
+    Vector2 _deferScreen;
     int _pointerId = -1;
     GameObject _pencilIcon;
     GameObject _eraserIcon;
@@ -102,21 +108,31 @@ public class GeometryPathDrawInput : MonoBehaviour
                 EndStroke(keepPen: true);
                 return;
             }
-            if (PointerOnRobot(pos))
+            // DRAW_PATH owns the press so kids can draw across the robot cell.
+            // Robot move uses a short hold (see RobotGridDrag), not this soft grab.
+            if (characterMove.IsRobotBeingManipulated())
             {
                 EndStroke(keepPen: true);
                 return;
             }
-            _drawing = true;
+
             _usingTouch = touch;
             _pointerId = pointerId;
             _strokeMoved = false;
             _lastScreen = pos;
             _lastTouch = touch;
-            if (!PickCell(pos, touch, out Vector2Int cell))
+
+            // Press on the robot: wait for a slide before drawing so a hold can grab instead.
+            if (IsRobotGrabCandidate(pos, touch))
+            {
+                _deferForRobot = true;
+                _deferScreen = pos;
+                _drawing = false;
+                ShowPreview(geo, null, drawing: false, pos, touch);
                 return;
-            _pressCell = cell;
-            HandlePress(geo, cell);
+            }
+
+            BeginStroke(geo, pos, touch);
             return;
         }
 
@@ -124,6 +140,23 @@ public class GeometryPathDrawInput : MonoBehaviour
         {
             EndStroke(keepPen: true);
             ShowPreview(geo, null, drawing: false, pos, touch);
+            return;
+        }
+
+        if (held && _deferForRobot)
+        {
+            _lastScreen = pos;
+            _lastTouch = _usingTouch;
+            var drag = characterMove.GetComponent<RobotGridDrag>();
+            bool grabPending = drag != null && drag.IsDrawPathGrabPending;
+            float travel = Vector2.Distance(pos, _deferScreen);
+            if (!grabPending || travel >= robotPressDrawSlopPixels)
+            {
+                _deferForRobot = false;
+                BeginStroke(geo, _deferScreen, _usingTouch);
+                if (_drawing && PickCell(pos, _usingTouch, out Vector2Int slidCell))
+                    HandleDrag(geo, slidCell);
+            }
             return;
         }
 
@@ -142,6 +175,12 @@ public class GeometryPathDrawInput : MonoBehaviour
 
         if (released)
         {
+            if (_deferForRobot)
+            {
+                // Quick tap on the robot cell: treat as a draw/erase tap, not a grab.
+                _deferForRobot = false;
+                BeginStroke(geo, _deferScreen, _usingTouch || touch);
+            }
             if (_drawing && _eraser && !_strokeMoved && _hasPen)
             {
                 int cleared = geo.EraseEdgesTouching(_pressCell);
@@ -166,11 +205,6 @@ public class GeometryPathDrawInput : MonoBehaviour
                 ShowPreview(geo, null, drawing: false);
                 return;
             }
-            if (PointerOnRobot(aim))
-            {
-                ShowPreview(geo, null, drawing: false);
-                return;
-            }
             if (ignoreClicksOverUI && UiDragState.IsScreenPointOverBlockingUi(aim, pointerId))
             {
                 ShowPreview(geo, null, drawing: false);
@@ -181,6 +215,32 @@ public class GeometryPathDrawInput : MonoBehaviour
             else
                 ShowPreview(geo, null, drawing: false, pos, false);
         }
+    }
+
+    /// <summary>Called when a long-press claims the robot so the stroke does not keep drawing.</summary>
+    public void CancelStrokeForRobotGrab()
+    {
+        _deferForRobot = false;
+        EndStroke(keepPen: true);
+        GeometryPathController.Instance?.ClearDrawPointerPreview();
+        HideScreenCursor(restoreOs: true);
+    }
+
+    void BeginStroke(GeometryPathController geo, Vector2 screenPos, bool touch)
+    {
+        _drawing = true;
+        _deferForRobot = false;
+        if (!PickCell(screenPos, touch, out Vector2Int cell))
+            return;
+        _pressCell = cell;
+        HandlePress(geo, cell);
+    }
+
+    bool IsRobotGrabCandidate(Vector2 screenPos, bool touch)
+    {
+        if (characterMove == null) return false;
+        var drag = characterMove.GetComponent<RobotGridDrag>();
+        return drag != null && drag.enabled && drag.IsDrawPathGrabCandidate(screenPos, touch);
     }
 
     void HandlePress(GeometryPathController geo, Vector2Int cell)
@@ -258,6 +318,7 @@ public class GeometryPathDrawInput : MonoBehaviour
     void SyncPenToRobotIfEmpty(GeometryPathController geo)
     {
         if (_drawing) return;
+        if (characterMove != null && characterMove.IsRobotBeingManipulated()) return;
         if (geo.HasStudentDrawing && _hasPen) return;
         if (!geo.HasStudentDrawing)
         {
@@ -309,13 +370,6 @@ public class GeometryPathDrawInput : MonoBehaviour
         if (!IsOverDrawIcon(screenPos, out bool erase)) return false;
         SetEraser(erase);
         return true;
-    }
-
-    bool PointerOnRobot(Vector2 screenPos)
-    {
-        if (characterMove == null) return false;
-        var drag = characterMove.GetComponent<RobotGridDrag>();
-        return drag != null && drag.enabled && drag.WouldBeginGrab(screenPos);
     }
 
     bool IsOverDrawIcon(Vector2 screenPos, out bool erase)
@@ -462,6 +516,7 @@ public class GeometryPathDrawInput : MonoBehaviour
     void EndStroke(bool keepPen)
     {
         _drawing = false;
+        _deferForRobot = false;
         _usingTouch = false;
         _strokeMoved = false;
         _pointerId = -1;
@@ -502,13 +557,21 @@ public class GeometryPathDrawInput : MonoBehaviour
             return;
         }
 
+        // Never ride the pencil/eraser along while the kid is moving the robot.
+        if (characterMove.IsRobotBeingManipulated())
+        {
+            HideScreenCursor(restoreOs: true);
+            return;
+        }
+
         bool overTool = IsOverDrawIcon(pos, out _);
         bool overUi = ignoreClicksOverUI && UiDragState.IsScreenPointOverBlockingUi(pos, pointerId);
-        bool show = !overTool && !overUi;
-        if (touch) show = show && (_drawing || held);
+        bool show = !overTool && !overUi && _drawing;
+        if (!touch) show = !overTool && !overUi;
+        if (touch) show = show && held;
 
         Vector2 cursorPos = AimPoint(pos, touch);
-        UpdateScreenCursor(cursorPos, show, _drawing || (touch && held));
+        UpdateScreenCursor(cursorPos, show, _drawing || (touch && held && show));
     }
 
     void UpdateScreenCursor(Vector2 screenPos, bool visible, bool drawing)

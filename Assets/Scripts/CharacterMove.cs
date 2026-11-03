@@ -3700,15 +3700,16 @@ public partial class CharacterMove : MonoBehaviour
         if (cam == null) return false;
 
         Ray ray = cam.ScreenPointToRay(screenPos);
+        // Prefer the floor plane so the robot mesh does not steal DRAW_PATH cell picks.
         Vector3 world;
-        const float maxDist = 5000f;
-        if (Physics.Raycast(ray, out RaycastHit hit, maxDist, ~0, QueryTriggerInteraction.Ignore))
-            world = hit.point;
+        Plane gridPlane = new Plane(Vector3.up, new Vector3(0f, robotStartWorldPos.y, 0f));
+        if (gridPlane.Raycast(ray, out float planeDist))
+            world = ray.GetPoint(planeDist);
         else
         {
-            Plane gridPlane = new Plane(Vector3.up, new Vector3(0f, robotStartWorldPos.y, 0f));
-            if (!gridPlane.Raycast(ray, out float dist)) return false;
-            world = ray.GetPoint(dist);
+            const float maxDist = 5000f;
+            if (!TryRaycastGridWorldIgnoringRobot(ray, maxDist, out world))
+                return false;
         }
 
         Vector2Int raw = WorldToGridCell(world);
@@ -3742,16 +3743,31 @@ public partial class CharacterMove : MonoBehaviour
         Camera cam = gridInteractionCamera != null ? gridInteractionCamera : Camera.main;
         if (cam == null) return false;
         Ray ray = cam.ScreenPointToRay(screenPos);
-        const float maxDist = 5000f;
-        if (Physics.Raycast(ray, out RaycastHit hit, maxDist, ~0, QueryTriggerInteraction.Ignore))
+        Plane gridPlane = new Plane(Vector3.up, new Vector3(0f, robotStartWorldPos.y, 0f));
+        if (gridPlane.Raycast(ray, out float dist))
         {
-            world = hit.point;
+            world = ray.GetPoint(dist);
             return true;
         }
-        Plane gridPlane = new Plane(Vector3.up, new Vector3(0f, robotStartWorldPos.y, 0f));
-        if (!gridPlane.Raycast(ray, out float dist)) return false;
-        world = ray.GetPoint(dist);
-        return true;
+        return TryRaycastGridWorldIgnoringRobot(ray, 5000f, out world);
+    }
+
+    bool TryRaycastGridWorldIgnoringRobot(Ray ray, float maxDist, out Vector3 world)
+    {
+        world = Vector3.zero;
+        var hits = Physics.RaycastAll(ray, maxDist, ~0, QueryTriggerInteraction.Ignore);
+        if (hits == null || hits.Length == 0) return false;
+        System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+        for (int i = 0; i < hits.Length; i++)
+        {
+            var h = hits[i];
+            if (h.collider == null) continue;
+            Transform t = h.collider.transform;
+            if (t == transform || t.IsChildOf(transform)) continue;
+            world = h.point;
+            return true;
+        }
+        return false;
     }
 
     // -------------------------------------------------------------------
