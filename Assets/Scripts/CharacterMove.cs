@@ -9238,12 +9238,68 @@ public partial class CharacterMove : MonoBehaviour
         return HtmlToTmpRichText.Convert(resolved);
     }
 
+    /// <summary>True when teacher left popup text empty (or TipTap saved an empty paragraph).</summary>
+    private static bool IsBlankPopupMessage(string tmpRich)
+    {
+        if (string.IsNullOrWhiteSpace(tmpRich)) return true;
+        string plain = System.Text.RegularExpressions.Regex.Replace(tmpRich, "<[^>]+>", "");
+        plain = plain.Replace("&nbsp;", " ").Trim();
+        return string.IsNullOrWhiteSpace(plain);
+    }
+
+    private string ResolveMaxAttemptsPopupText(LevelData levelData, string failureReason)
+    {
+        string msg = GetConfiguredPopupText(levelData?.maxAttemptsMessage, levelData, failureReason);
+        if (!IsBlankPopupMessage(msg)) return msg;
+
+        int max = levelData != null ? Mathf.Max(1, levelData.maxAttempts) : 1;
+        string reasonLine = string.IsNullOrWhiteSpace(failureReason) ? "" : $"\n\n{failureReason.Trim()}";
+        if (max <= 1)
+            return $"That was your only try.{reasonLine}\n\nTap Continue to try this item again.";
+        return $"You used all {max} tries.{reasonLine}\n\nTap Continue to try this item again.";
+    }
+
+    private string ResolveSuccessPopupText(LevelData levelData)
+    {
+        string msg = GetConfiguredPopupText(levelData?.attemptSuccessMessage, levelData);
+        if (!IsBlankPopupMessage(msg)) return msg;
+        return "Nice work!";
+    }
+
     private static void SetRichPopupText(TextMeshProUGUI tmp, string message)
     {
         if (tmp == null) return;
         tmp.richText = true;
         tmp.extraPadding = true;
         tmp.text = message ?? "";
+    }
+
+    /// <summary>Fill-in-blank items: correct blank choices are the win condition.</summary>
+    private bool TryCompleteGuidedBlankSuccess(LevelData levelData)
+    {
+        if (!IsGuidedBlankChoiceLevel() || !IsBlankAnswerCorrect())
+            return false;
+
+        hasReachedEndObject = true;
+        visitedEndObjectThisLevel = true;
+        pendingLevelPassed = true;
+        StartCoroutine(CompleteLevelSuccessfully());
+        return true;
+    }
+
+    /// <summary>Grid items with authored correctPrograms: matching the program counts as a pass.</summary>
+    private bool TryCompleteCorrectProgramSuccess(LevelData levelData)
+    {
+        if (levelData == null || UsesCanvas(levelData)) return false;
+        if (levelData.correctPrograms == null || levelData.correctPrograms.Count == 0) return false;
+        if (!StudentProgramMatchesCorrectPatterns(levelData)) return false;
+
+        hasReachedEndObject = true;
+        visitedEndObjectThisLevel = true;
+        pendingLevelPassed = true;
+        HideEndObjectAtCurrentPosition();
+        StartCoroutine(CompleteLevelSuccessfully());
+        return true;
     }
 
     private void ApplyStudentResetButton(LevelData levelData)
@@ -9341,7 +9397,9 @@ public partial class CharacterMove : MonoBehaviour
             _skipNextPlatformReport = true;
             if (successPopup != null && successPopupText != null)
             {
-                SetRichPopupText(successPopupText, GetConfiguredPopupText(levelData.maxAttemptsMessage, levelData, failureReason));
+                // Same Continue button as a real pass — always show clear "out of tries" copy
+                // so kids do not think they won and then see "Try this one again".
+                SetRichPopupText(successPopupText, ResolveMaxAttemptsPopupText(levelData, failureReason));
                 successPopup.SetActive(true);
                 BringUiPopupToFront(successPopup);
                 GameInteractionSounds.PlayFailPopup();
@@ -9636,6 +9694,14 @@ public partial class CharacterMove : MonoBehaviour
                 yield break;
             }
 
+            if (UsesGuidedBlankFlow(levelData) && IsBlankAnswerCorrect() && IsGuidedBlankChoiceLevel())
+            {
+                FinishInstantRunQueueUI(executedActions);
+                isProcessing = false;
+                if (TryCompleteGuidedBlankSuccess(levelData))
+                    yield break;
+            }
+
             if (levelData != null && levelData.useFlagPlacement && IsFlagPlaced)
             {
                 bool flagCorrect = IsFlagPredictionCorrect(levelData);
@@ -9712,8 +9778,10 @@ public partial class CharacterMove : MonoBehaviour
                     StartCoroutine(CompleteLevelSuccessfully());
                     yield break;
                 }
+            }
 
-                HandleRunFailure(levelData, null);
+            if (TryCompleteCorrectProgramSuccess(levelData))
+            {
                 ResetRobotToLevelStart();
                 SnapRobotToLogicalGridCell();
                 yield break;
@@ -9806,6 +9874,9 @@ public partial class CharacterMove : MonoBehaviour
                 HandleRunFailure(levelData, null);
                 yield break;
             }
+
+            if (TryCompleteGuidedBlankSuccess(levelData))
+                yield break;
         }
 
         if (levelData != null && levelData.useFlagPlacement && IsFlagPlaced)
@@ -9870,12 +9941,12 @@ public partial class CharacterMove : MonoBehaviour
                 StartCoroutine(CompleteLevelSuccessfully());
                 yield break;
             }
-
-            HandleRunFailure(levelData, null);
-            yield break;
         }
 
-        Debug.Log($"[ProcessActions] Robot did not reach end object. attempt={currentAttempt} max={levelData.maxAttempts}");
+        if (TryCompleteCorrectProgramSuccess(levelData))
+            yield break;
+
+        Debug.Log($"[ProcessActions] Robot did not pass. attempt={currentAttempt} max={levelData.maxAttempts} reachedEnd={robotReachedEndObject}");
         HandleRunFailure(levelData, null);
         yield break; 
         }
@@ -10819,7 +10890,7 @@ public partial class CharacterMove : MonoBehaviour
         }
         else if (successPopup != null && successPopupText != null)
         {
-            SetRichPopupText(successPopupText, GetConfiguredPopupText(completedLevel?.attemptSuccessMessage, completedLevel));
+            SetRichPopupText(successPopupText, ResolveSuccessPopupText(completedLevel));
             successPopup.SetActive(true);
             BringUiPopupToFront(successPopup);
             GameInteractionSounds.PlaySuccessPopup();

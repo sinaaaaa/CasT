@@ -35,7 +35,7 @@ function buildUnityUrl(baseUrl: string, config: StudentGameConfig): string {
   url.searchParams.set("studentCode", config.studentCode);
   url.searchParams.set("token", config.sessionToken);
   url.searchParams.set("apiBaseUrl", config.apiBaseUrl);
-  url.searchParams.set("v", "ios-lowmem-2");
+  url.searchParams.set("v", "ipad-fs-attempts-1");
   if (config.gameApiKey) {
     url.searchParams.set("gameApiKey", config.gameApiKey);
   }
@@ -61,15 +61,10 @@ function canUseNativeFullscreen(el: HTMLElement | null): boolean {
   return typeof el.requestFullscreen === "function" || typeof el.webkitRequestFullscreen === "function";
 }
 
-/** Prefer CSS fill on iOS/iPad — requestFullscreen is missing or crashes Safari. */
-function prefersCssImmersiveFullscreen(): boolean {
+/** iPhone Safari still has no Element.requestFullscreen. iPadOS 16.4+ does. */
+function isIPhoneDevice(): boolean {
   if (typeof navigator === "undefined") return false;
-  const ua = navigator.userAgent || "";
-  if (/iPhone|iPad|iPod/i.test(ua)) return true;
-  // iPadOS 13+ often spoofs Macintosh desktop Safari.
-  if (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1) return true;
-  if (/Mac/i.test(ua) && navigator.maxTouchPoints > 1 && "ontouchend" in document) return true;
-  return false;
+  return /iPhone|iPod/i.test(navigator.userAgent || "");
 }
 
 function setPlayViewportLock(locked: boolean) {
@@ -208,7 +203,8 @@ export function StudentPlayClient({
       return;
     }
 
-    if (prefersCssImmersiveFullscreen() || !canUseNativeFullscreen(shell)) return;
+    // iPhone has no Element fullscreen API. iPad + desktop can request it.
+    if (isIPhoneDevice() || !canUseNativeFullscreen(shell)) return;
 
     try {
       const target = shell as HTMLElement & { webkitRequestFullscreen?: () => Promise<void> };
@@ -224,7 +220,8 @@ export function StudentPlayClient({
     }
   }, []);
 
-  const showFullscreenButton = !prefersCssImmersiveFullscreen();
+  // Show on iPad/desktop. Hide only on iPhone where the API does not exist.
+  const showFullscreenButton = !isIPhoneDevice();
 
   const controlButtonClass =
     "pointer-events-auto inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/25 bg-slate-950/80 text-white shadow-lg backdrop-blur transition hover:bg-slate-900/95 sm:h-10 sm:w-10";
