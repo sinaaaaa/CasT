@@ -11,10 +11,14 @@ const LevelAssignmentEditor = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex items-center justify-center gap-2 px-6 py-16 text-muted-foreground">
+      <div className="overflow-hidden rounded-2xl border border-stone-200/90 bg-white shadow-sm ring-1 ring-stone-100">
+        <div className="border-b border-stone-100 bg-[#F7F4EE] px-6 py-5">
+          <div className="h-5 w-36 animate-pulse rounded bg-stone-200/80" />
+          <div className="mt-2 h-4 w-64 animate-pulse rounded bg-stone-200/60" />
+        </div>
+        <div className="flex items-center justify-center gap-2 px-6 py-16 text-stone-500">
           <Loader2 className="h-5 w-5 animate-spin" />
-          Loading assignments…
+          Loading playlist…
         </div>
       </div>
     ),

@@ -5608,6 +5608,8 @@ public partial class CharacterMove : MonoBehaviour
         Canvas.ForceUpdateCanvases();
         yield return null;
         yield return null; // one more frame so camera / layout settle
+        // Give Safari on old iPads a chance to reclaim memory after item setup.
+        yield return WebGLDeviceGuard.SoftReclaim();
 
         float minBoot = levelTransition != null ? levelTransition.bootMinCoverSeconds : 0.85f;
         float elapsed = Time.unscaledTime - bootStarted;

@@ -3,6 +3,10 @@ import { z } from "zod";
 import { assertClassAccess } from "@/lib/class-access";
 import { requireTeacher } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
+import {
+  addStudentLevelAssignments,
+  resolveAssignedByTeacherId,
+} from "@/lib/level-student-assignments";
 
 const enrollSchema = z.object({
   studentId: z.string().min(1),
@@ -11,7 +15,7 @@ const enrollSchema = z.object({
 type RouteParams = { params: Promise<{ id: string }> };
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
-  const { error, scope } = await requireTeacher();
+  const { error, session, scope } = await requireTeacher();
   if (error) return error;
 
   const { id: classId } = await params;
@@ -39,7 +43,26 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     update: {},
   });
 
-  return Response.json({ ok: true });
+  // Give the new student the class item list so their game matches classmates.
+  const classLevels = await prisma.levelClassAssignment.findMany({
+    where: { classId },
+    select: { levelId: true },
+  });
+  let classItemsAdded = 0;
+  if (classLevels.length > 0) {
+    const teacherId = await resolveAssignedByTeacherId(
+      session!.user.id,
+      session!.user.teacherProfileId
+    );
+    await addStudentLevelAssignments(
+      body.studentId,
+      classLevels.map((r) => r.levelId),
+      teacherId
+    );
+    classItemsAdded = classLevels.length;
+  }
+
+  return Response.json({ ok: true, classItemsAdded });
 }
 
 export async function DELETE(request: NextRequest, { params }: RouteParams) {

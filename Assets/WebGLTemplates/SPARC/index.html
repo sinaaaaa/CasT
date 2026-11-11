@@ -6,6 +6,26 @@
     <title>Unity WebGL Player | {{{ PRODUCT_NAME }}}</title>
     <link rel="shortcut icon" href="TemplateData/favicon.ico">
     <link rel="stylesheet" href="TemplateData/style.css">
+    <script>
+      /* sparc-webgl-guards: iOS Safari crashes if Unity calls screen.orientation.lock */
+      (function () {
+        try {
+          var o = screen.orientation;
+          if (!o) screen.orientation = o = {};
+          if (typeof o.lock !== "function") {
+            o.lock = function () { return Promise.resolve(); };
+          }
+        } catch (e) {}
+      })();
+      /* sparc-fullscreen-error-guard */
+      (function () {
+        var orig = window.alert;
+        window.alert = function (m) {
+          if (typeof m === "string" && /Fullscreen request denied/i.test(m)) return;
+          return orig.apply(this, arguments);
+        };
+      })();
+    </script>
   </head>
   <body>
     <div id="unity-container" class="unity-desktop">
@@ -30,6 +50,18 @@
       var progressBarFull = document.querySelector("#unity-progress-bar-full");
       var fullscreenButton = document.querySelector("#unity-fullscreen-button");
       var warningBanner = document.querySelector("#unity-warning");
+
+      function isAppleTouchDevice() {
+        var ua = navigator.userAgent || "";
+        if (/iPhone|iPad|iPod/i.test(ua)) return true;
+        // iPadOS 13+ often reports as Macintosh desktop Safari.
+        if (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1) return true;
+        return false;
+      }
+
+      function isMobileOrTablet() {
+        return isAppleTouchDevice() || /Android/i.test(navigator.userAgent || "");
+      }
 
       function unityShowBanner(msg, type) {
         function updateBannerVisibility() {
@@ -68,7 +100,10 @@
         showBanner: unityShowBanner,
       };
 
-      if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+      // Old iPads crash when rendering at full Retina scale + growing WASM heap.
+      if (isMobileOrTablet()) {
+        config.devicePixelRatio = 1;
+        config.powerPreference = "low-power";
         var meta = document.createElement('meta');
         meta.name = 'viewport';
         meta.content = 'width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, shrink-to-fit=yes, viewport-fit=cover';
@@ -113,11 +148,24 @@
         createUnityInstance(canvas, config, (progress) => {
           progressBarFull.style.width = 100 * progress + "%";
               }).then((unityInstance) => {
+                window.unityInstance = unityInstance;
                 loadingBar.style.display = "none";
-                fullscreenButton.onclick = () => {
-                  unityInstance.SetFullscreen(1);
-                };
+                // Never call Unity SetFullscreen on iPad/iPhone — it crashes Safari
+                // ("A problem occurred with this webpage").
+                if (fullscreenButton) {
+                  fullscreenButton.style.display = "none";
+                  fullscreenButton.onclick = null;
+                }
+                if (unityInstance && typeof unityInstance.SetFullscreen === "function" && isAppleTouchDevice()) {
+                  unityInstance.SetFullscreen = function () { return; };
+                }
               }).catch((message) => {
+                if (typeof message === "string" && /Fullscreen request denied/i.test(message)) return;
+                var text = String(message || "");
+                if (/memory|out of memory|Array buffer allocation|WebAssembly/i.test(text)) {
+                  alert("This device does not have enough free memory for the game. Close other tabs/apps and try again, or use a newer tablet/computer.");
+                  return;
+                }
                 alert(message);
               });
             };

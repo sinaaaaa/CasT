@@ -287,6 +287,12 @@ public static class WebGLBuildScript
                 html = guard + html;
         }
 
+        // Never wire Unity SetFullscreen (crashes iPad Safari / denied in iframes).
+        html = System.Text.RegularExpressions.Regex.Replace(
+            html,
+            @"fullscreenButton\.onclick\s*=\s*\(\)\s*=>\s*\{\s*unityInstance\.SetFullscreen\(1\);\s*\};",
+            "if(fullscreenButton){fullscreenButton.style.display='none';fullscreenButton.onclick=null;}");
+
         File.WriteAllText(indexPath, html);
     }
 }

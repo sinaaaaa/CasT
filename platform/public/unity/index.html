@@ -6,6 +6,26 @@
     <title>Unity WebGL Player | coding-block</title>
     <link rel="shortcut icon" href="TemplateData/favicon.ico">
     <link rel="stylesheet" href="TemplateData/style.css">
+    <script>
+      /* sparc-webgl-guards: iOS Safari crashes if Unity calls screen.orientation.lock */
+      (function () {
+        try {
+          var o = screen.orientation;
+          if (!o) screen.orientation = o = {};
+          if (typeof o.lock !== "function") {
+            o.lock = function () { return Promise.resolve(); };
+          }
+        } catch (e) {}
+      })();
+      /* sparc-fullscreen-error-guard */
+      (function () {
+        var orig = window.alert;
+        window.alert = function (m) {
+          if (typeof m === "string" && /Fullscreen request denied/i.test(m)) return;
+          return orig.apply(this, arguments);
+        };
+      })();
+    </script>
   </head>
   <body>
     <div id="unity-container" class="unity-desktop">
@@ -31,6 +51,18 @@
       var fullscreenButton = document.querySelector("#unity-fullscreen-button");
       var warningBanner = document.querySelector("#unity-warning");
 
+      function isAppleTouchDevice() {
+        var ua = navigator.userAgent || "";
+        if (/iPhone|iPad|iPod/i.test(ua)) return true;
+        // iPadOS 13+ often reports as Macintosh desktop Safari.
+        if (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1) return true;
+        return false;
+      }
+
+      function isMobileOrTablet() {
+        return isAppleTouchDevice() || /Android/i.test(navigator.userAgent || "");
+      }
+
       function unityShowBanner(msg, type) {
         function updateBannerVisibility() {
           warningBanner.style.display = warningBanner.children.length ? 'block' : 'none';
@@ -52,9 +84,9 @@
       var buildUrl = "Build";
       var loaderUrl = buildUrl + "/unity.loader.js";
       var config = {
-        dataUrl: buildUrl + "/5001938ff822d5ffdfed2f2afdaf5782.data",
-        frameworkUrl: buildUrl + "/dc5f2cd91d2539c1b5588d19631a696d.js",
-        codeUrl: buildUrl + "/39877f7c390918529d4fb7215537c9ef.wasm",
+        dataUrl: buildUrl + "/bb33d1592be3669fcfd3935f861ecb36.data",
+        frameworkUrl: buildUrl + "/293fbb9015d59225a217c53f99173d08.js",
+        codeUrl: buildUrl + "/2dc5fb85d9714f58a0ad3b518bf706bd.wasm",
         streamingAssetsUrl: "StreamingAssets",
         companyName: "DefaultCompany",
         productName: "coding-block",
@@ -62,7 +94,10 @@
         showBanner: unityShowBanner,
       };
 
-      if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+      // Old iPads crash when rendering at full Retina scale + growing WASM heap.
+      if (isMobileOrTablet()) {
+        config.devicePixelRatio = 1;
+        config.powerPreference = "low-power";
         var meta = document.createElement('meta');
         meta.name = 'viewport';
         meta.content = 'width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, shrink-to-fit=yes, viewport-fit=cover';
@@ -107,11 +142,24 @@
         createUnityInstance(canvas, config, (progress) => {
           progressBarFull.style.width = 100 * progress + "%";
               }).then((unityInstance) => {
+                window.unityInstance = unityInstance;
                 loadingBar.style.display = "none";
-                fullscreenButton.onclick = () => {
-                  unityInstance.SetFullscreen(1);
-                };
+                // Never call Unity SetFullscreen on iPad/iPhone — it crashes Safari
+                // ("A problem occurred with this webpage").
+                if (fullscreenButton) {
+                  fullscreenButton.style.display = "none";
+                  fullscreenButton.onclick = null;
+                }
+                if (unityInstance && typeof unityInstance.SetFullscreen === "function" && isAppleTouchDevice()) {
+                  unityInstance.SetFullscreen = function () { return; };
+                }
               }).catch((message) => {
+                if (typeof message === "string" && /Fullscreen request denied/i.test(message)) return;
+                var text = String(message || "");
+                if (/memory|out of memory|Array buffer allocation|WebAssembly/i.test(text)) {
+                  alert("This device does not have enough free memory for the game. Close other tabs/apps and try again, or use a newer tablet/computer.");
+                  return;
+                }
                 alert(message);
               });
             };

@@ -35,7 +35,7 @@ function buildUnityUrl(baseUrl: string, config: StudentGameConfig): string {
   url.searchParams.set("studentCode", config.studentCode);
   url.searchParams.set("token", config.sessionToken);
   url.searchParams.set("apiBaseUrl", config.apiBaseUrl);
-  url.searchParams.set("v", "fit-canvas-16-9-2");
+  url.searchParams.set("v", "ios-lowmem-2");
   if (config.gameApiKey) {
     url.searchParams.set("gameApiKey", config.gameApiKey);
   }
@@ -61,12 +61,14 @@ function canUseNativeFullscreen(el: HTMLElement | null): boolean {
   return typeof el.requestFullscreen === "function" || typeof el.webkitRequestFullscreen === "function";
 }
 
-/** Prefer CSS fill on iOS — requestFullscreen is missing or a no-op there. */
+/** Prefer CSS fill on iOS/iPad — requestFullscreen is missing or crashes Safari. */
 function prefersCssImmersiveFullscreen(): boolean {
   if (typeof navigator === "undefined") return false;
-  const ua = navigator.userAgent;
+  const ua = navigator.userAgent || "";
   if (/iPhone|iPad|iPod/i.test(ua)) return true;
+  // iPadOS 13+ often spoofs Macintosh desktop Safari.
   if (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1) return true;
+  if (/Mac/i.test(ua) && navigator.maxTouchPoints > 1 && "ontouchend" in document) return true;
   return false;
 }
 

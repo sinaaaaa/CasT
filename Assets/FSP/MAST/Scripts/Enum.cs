@@ -1,5 +1,4 @@
-﻿#if (UNITY_EDITOR)
-namespace MAST
+﻿namespace MAST
 {
     // Palette background
     public enum PaleteBGColor { Dark = 0, Gray = 1 , Light = 2 }
@@ -22,4 +21,3 @@ namespace MAST
     // Raycast direction for Prefab placement
     public enum DirectionVector { Up = 0, Down = 1, Left = 2, Right = 3, Forward = 4, Back = 5 }
 }
-#endif

@@ -1,8 +1,6 @@
 ﻿using System;
 using UnityEngine;
 
-#if (UNITY_EDITOR)
-
 namespace MAST
 {
     public class DataClass
@@ -77,5 +75,3 @@ namespace MAST
         }
     }
 }
-
-#endif
