@@ -1561,6 +1561,7 @@ public partial class CharacterMove : MonoBehaviour
             facingDirection = NormalizeNumberLineFacing(facingDirection, ld);
         ManualOrbitDragActive = false;
         ApplyRobotFacingRotation();
+        RestoreAnimatorAfterOrbitIfIdle();
     }
 
     private void StopManualRobotRotationIfAny()
@@ -1571,6 +1572,25 @@ public partial class CharacterMove : MonoBehaviour
             _manualRobotRotationCoroutine = null;
         }
         ManualRobotRotationAnimating = false;
+        RestoreAnimatorAfterOrbitIfIdle();
+    }
+
+    /// <summary>
+    /// DRAW_PATH / orbit / turn can leave Animator disabled. Re-enable before RUN so
+    /// MoveCoroutine's isWalking actually plays instead of a frozen slide.
+    /// </summary>
+    private void EnsureAnimatorReadyForRun()
+    {
+        ManualOrbitDragActive = false;
+        ManualRobotRotationAnimating = false;
+        if (_manualRobotRotationCoroutine != null)
+        {
+            StopCoroutine(_manualRobotRotationCoroutine);
+            _manualRobotRotationCoroutine = null;
+        }
+        if (animator == null) return;
+        animator.enabled = true;
+        animator.SetBool("isWalking", false);
     }
 
     private void StopLevelStartFacingRoutine()
@@ -2753,22 +2773,25 @@ public partial class CharacterMove : MonoBehaviour
         }
 
         transform.rotation = endRot;
-        if (animator != null)
-            animator.enabled = animatorWasEnabled;
 
         ApplyRobotQuarterTurnImmediate(clockwise);
         SnapRobotToLogicalGridCell();
 
         ManualRobotRotationAnimating = false;
         _manualRobotRotationCoroutine = null;
+        if (animator != null)
+            animator.enabled = animatorWasEnabled || !ManualOrbitDragActive;
+        RestoreAnimatorAfterOrbitIfIdle();
     }
 
     private void OnDisable()
     {
+        ManualOrbitDragActive = false;
         StopManualRobotRotationIfAny();
         StopLevelStartFacingRoutine();
         _levelStartFacingLockFrames = 0;
-        ManualOrbitDragActive = false;
+        if (animator != null)
+            animator.enabled = true;
     }
 
     private void SetupRobotDrag(LevelData levelData)
@@ -9198,6 +9221,7 @@ public partial class CharacterMove : MonoBehaviour
         }
 
         ResetRobotToLevelStart();
+        EnsureAnimatorReadyForRun();
         GeometryPathController.Instance?.BeginRunTracking();
 
         attemptStartGridPos = robotGridPosition;
@@ -10058,11 +10082,10 @@ public partial class CharacterMove : MonoBehaviour
         // Ensure final rotation is exact
         transform.rotation = endRotation;
         
-        // Re-enable animator
+        // Re-enable for the rest of the RUN. Do not restore a pre-RUN disabled state
+        // (orbit/manual turn) or the next MoveCoroutine will slide with frozen legs.
         if (animator != null)
-        {
-            animator.enabled = animatorWasEnabled;
-        }
+            animator.enabled = isProcessing || animatorWasEnabled;
 
         // Update facingDirection based on the actual target angle
         Vector2Int oldFacing = facingDirection;
@@ -10084,6 +10107,9 @@ public partial class CharacterMove : MonoBehaviour
     public IEnumerator MoveCoroutine(Vector3 direction)
     {
         _lastMoveBlocked = false;
+        if (animator != null && !animator.enabled)
+            animator.enabled = true;
+
         Vector2Int candidateCell = robotGridPosition;
         bool isLinearMove = direction == Vector3.forward || direction == -Vector3.forward;
         if (isLinearMove)
