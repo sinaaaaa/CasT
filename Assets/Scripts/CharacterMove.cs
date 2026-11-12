@@ -5902,13 +5902,8 @@ public partial class CharacterMove : MonoBehaviour
 
         successPopup.SetActive(false);
 
-        // Used up tries without a pass: stay here so Play next does not skip ahead.
-        if (!pendingLevelPassed)
-        {
-            yield return RetrySameItemAfterFailedAttempts();
-            yield break;
-        }
-
+        // Pass or out of tries: always move on. Do not reload the same item.
+        bool finishedPassed = pendingLevelPassed;
         int finishedSlot = currentLevel;
         int nextLevel = currentLevel + 1;
         if (!CanAdvanceToSlot(nextLevel))
@@ -5921,36 +5916,7 @@ public partial class CharacterMove : MonoBehaviour
 
         currentLevel = nextLevel;
         SavePlayerLevel();
-        yield return SetupNextLevel(finishedSlot);
-    }
-
-    /// <summary>After the last failed try, reload this item instead of unlocking the next one.</summary>
-    private IEnumerator RetrySameItemAfterFailedAttempts()
-    {
-        _isLevelTransitioning = true;
-        EnsureLevelTransitionController();
-        if (useLevelTransitionFades && levelTransition != null)
-            yield return levelTransition.FadeOutForItemChange();
-        ClearPlayfieldForLevelTransition();
-
-        if (GameAssessmentClient.Instance != null)
-        {
-            yield return GameAssessmentClient.Instance.WaitForPendingReports();
-            GameAssessmentClient.Instance.ClearCurrentAttempt();
-        }
-
-        SetupLevel(currentLevel);
-        yield return null;
-        Canvas.ForceUpdateCanvases();
-        yield return null;
-        yield return null;
-
-        string name = StudentFacingNameForSlot(currentLevel);
-        if (useLevelTransitionFades && levelTransition != null)
-            yield return levelTransition.PlayItemTransitionReveal("Try this one again", name);
-
-        _isLevelTransitioning = false;
-        NotifyTutorialsAfterLevelReveal();
+        yield return SetupNextLevel(finishedSlot, finishedPassed);
     }
 
     private bool IsOnLastPlayableItem()
@@ -6255,12 +6221,13 @@ public partial class CharacterMove : MonoBehaviour
         }
 
         int finishedSlot = currentLevel;
+        bool finishedPassed = pendingLevelPassed;
         int nextLevel = currentLevel + 1;
         if (CanAdvanceToSlot(nextLevel))
         {
             currentLevel = nextLevel;
             SavePlayerLevel();
-            StartCoroutine(SetupNextLevel(finishedSlot));
+            StartCoroutine(SetupNextLevel(finishedSlot, finishedPassed));
         }
         else
         {
@@ -6270,7 +6237,7 @@ public partial class CharacterMove : MonoBehaviour
         }
     }
 
-    private IEnumerator SetupNextLevel(int finishedSlot)
+    private IEnumerator SetupNextLevel(int finishedSlot, bool finishedPassed = true)
     {
         _isLevelTransitioning = true;
         EnsureLevelTransitionController();
@@ -6303,11 +6270,11 @@ public partial class CharacterMove : MonoBehaviour
         yield return null;
         yield return null;
 
-        // 5) Title card + soft reveal: you finished X, next is Y.
+        // 5) Title card + soft reveal.
         string finishedName = StudentFacingNameForSlot(finishedSlot);
         string nextName = StudentFacingNameForSlot(currentLevel);
-        string title = "You finished " + finishedName;
-        string subtitle = "Next: " + nextName;
+        string title = finishedPassed ? ("You finished " + finishedName) : ("Next: " + nextName);
+        string subtitle = finishedPassed ? ("Next: " + nextName) : "";
         if (useLevelTransitionFades && levelTransition != null)
             yield return levelTransition.PlayItemTransitionReveal(title, subtitle);
 
@@ -9247,23 +9214,10 @@ public partial class CharacterMove : MonoBehaviour
         return string.IsNullOrWhiteSpace(plain);
     }
 
-    private string ResolveMaxAttemptsPopupText(LevelData levelData, string failureReason)
-    {
-        string msg = GetConfiguredPopupText(levelData?.maxAttemptsMessage, levelData, failureReason);
-        if (!IsBlankPopupMessage(msg)) return msg;
-
-        int max = levelData != null ? Mathf.Max(1, levelData.maxAttempts) : 1;
-        string reasonLine = string.IsNullOrWhiteSpace(failureReason) ? "" : $"\n\n{failureReason.Trim()}";
-        if (max <= 1)
-            return $"That was your only try.{reasonLine}\n\nTap Continue to try this item again.";
-        return $"You used all {max} tries.{reasonLine}\n\nTap Continue to try this item again.";
-    }
-
     private string ResolveSuccessPopupText(LevelData levelData)
     {
-        string msg = GetConfiguredPopupText(levelData?.attemptSuccessMessage, levelData);
-        if (!IsBlankPopupMessage(msg)) return msg;
-        return "Nice work!";
+        // Only teacher-authored success text — no default "Nice work!".
+        return GetConfiguredPopupText(levelData?.attemptSuccessMessage, levelData);
     }
 
     private static void SetRichPopupText(TextMeshProUGUI tmp, string message)
@@ -9397,16 +9351,17 @@ public partial class CharacterMove : MonoBehaviour
             _skipNextPlatformReport = true;
             if (successPopup != null && successPopupText != null)
             {
-                // Same Continue button as a real pass — always show clear "out of tries" copy
-                // so kids do not think they won and then see "Try this one again".
-                SetRichPopupText(successPopupText, ResolveMaxAttemptsPopupText(levelData, failureReason));
+                // Only teacher-authored max-attempts text (may be empty). Continue goes to next item.
+                SetRichPopupText(
+                    successPopupText,
+                    GetConfiguredPopupText(levelData.maxAttemptsMessage, levelData, failureReason));
                 successPopup.SetActive(true);
                 BringUiPopupToFront(successPopup);
                 GameInteractionSounds.PlayFailPopup();
             }
             else
             {
-                StartCoroutine(RetrySameItemAfterFailedAttempts());
+                AdvanceToNextLevel();
             }
             if (runButton != null) runButton.interactable = false;
             RefreshStudentResetButtonState();
