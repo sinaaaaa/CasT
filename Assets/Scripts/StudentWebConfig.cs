@@ -27,7 +27,31 @@ public static class StudentWebConfig
 #if UNITY_WEBGL && !UNITY_EDITOR
     [DllImport("__Internal")]
     private static extern string StudentWebBridge_GetConfigJson();
+
+    [DllImport("__Internal")]
+    private static extern void StudentWebBridge_NavigateParent(string path);
 #endif
+
+    /// <summary>Ask the Next.js play shell to leave the game and open a path (e.g. /student/home).</summary>
+    public static void NavigateParent(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            path = "/student/home";
+
+#if UNITY_WEBGL && !UNITY_EDITOR
+        try
+        {
+            StudentWebBridge_NavigateParent(path);
+            return;
+        }
+        catch (Exception e)
+        {
+            Debug.LogWarning($"[StudentWebConfig] NavigateParent failed: {e.Message}");
+        }
+#else
+        Debug.Log($"[StudentWebConfig] NavigateParent({path}) — WebGL only.");
+#endif
+    }
 
     public static bool TryApplyToGame()
     {

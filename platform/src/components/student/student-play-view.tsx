@@ -32,7 +32,11 @@ export async function StudentPlayView({
   const cookieStore = await cookies();
   const sessionToken = cookieStore.get(STUDENT_SESSION_COOKIE)?.value ?? "";
   const playableLevels = await getPlayableLevelsForStudent(session.studentCode);
-  const playableRefs = playableLevels.map((level) => ({ id: level.id, levelKey: level.levelKey }));
+  const playableRefs = playableLevels.map((level) => ({
+    id: level.id,
+    levelKey: level.levelKey,
+    config: level.config,
+  }));
 
   const requestedKey = itemKey?.trim();
   const requested = requestedKey

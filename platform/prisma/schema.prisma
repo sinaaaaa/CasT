@@ -87,6 +87,10 @@ model StudentProfile {
   displayName String
   externalId  String?  @unique
   isArchived  Boolean  @default(false)
+  /// Playlist bookmark: next item key after the last finished item (pass or fail-continue).
+  resumeLevelKey String?
+  /// 1-based slot matching Unity assigned list / Play next.
+  resumeSlot     Int?
   createdAt   DateTime @default(now())
 
   classMemberships    ClassStudent[]

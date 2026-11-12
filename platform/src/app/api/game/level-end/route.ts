@@ -11,6 +11,13 @@ import { analyzeAttemptConstructs } from "@/lib/ct/scoring";
 import { debuggingTelemetryFromExtras, parsePlaySlot } from "@/lib/attempt-mistakes";
 import { AttemptStatus, Prisma } from "@prisma/client";
 import { clearStudentLevelReplay } from "@/lib/level-student-replay";
+import { getPlayableLevelsForStudent } from "@/lib/level-assignments";
+import {
+  advanceStudentResumeAfterItem,
+  isTerminalItemAttempt,
+  maxAttemptsFromLevelConfig,
+} from "@/lib/student-resume-cursor";
+import { parseAttemptRunMeta } from "@/lib/attempt-mistakes";
 
 export async function POST(request: NextRequest) {
   if (!verifyGameApiKey(request)) return gameApiUnauthorized();
@@ -139,6 +146,9 @@ export async function POST(request: NextRequest) {
           : {}),
         ...(typeof extras?.maxLevelRuns === "number" && extras.maxLevelRuns >= 1
           ? { maxLevelRuns: extras.maxLevelRuns }
+          : {}),
+        ...(typeof extras?.itemFinished === "boolean"
+          ? { itemFinished: extras.itemFinished }
           : {}),
         ...(storedPlaySlot != null ? { playSlot: storedPlaySlot } : {}),
         ...(playSlotFromExtras != null ? { playSlot: playSlotFromExtras } : {}),
@@ -291,6 +301,31 @@ export async function POST(request: NextRequest) {
 
   if (resolvedPassed) {
     await clearStudentLevelReplay(attempt.studentId, attempt.levelId);
+  }
+
+  // Advance Play next bookmark when this item is finished (pass or last failed try).
+  const runMeta = parseAttemptRunMeta(mistakesPayload);
+  const itemFinishedFlag =
+    extras && typeof extras.itemFinished === "boolean" ? extras.itemFinished : null;
+  const maxAttempts = maxAttemptsFromLevelConfig(attempt.level.config);
+  const terminal = isTerminalItemAttempt({
+    passed: resolvedPassed,
+    attemptNumber: attempt.attemptNumber,
+    maxAttempts: runMeta.maxLevelRuns ?? maxAttempts,
+    itemFinished: itemFinishedFlag,
+  });
+  if (terminal) {
+    try {
+      const playable = await getPlayableLevelsForStudent(attempt.studentId);
+      const refs = playable.map((l) => ({
+        id: l.id,
+        levelKey: l.levelKey,
+        config: l.config,
+      }));
+      await advanceStudentResumeAfterItem(attempt.studentId, refs, attempt.levelId);
+    } catch (e) {
+      console.warn("[level-end] resume cursor advance failed:", e);
+    }
   }
 
   return Response.json({ success: true, attempt: updated });

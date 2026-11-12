@@ -147,15 +147,16 @@ public class PlatformLevelLoader : MonoBehaviour
                 yield break;
             }
 
-            result.Sort((a, b) =>
+            // Keep API order. Assignment playlists are ordered by teacher assign order;
+            // sorting by catalog orderIndex remaps slots and breaks Play next / resume.
+            for (int i = 0; i < result.Count; i++)
             {
-                int cmp = a.orderIndex.CompareTo(b.orderIndex);
-                if (cmp != 0) return cmp;
-                return string.Compare(a.levelKey, b.levelKey, StringComparison.Ordinal);
-            });
+                if (result[i] != null)
+                    result[i].orderIndex = i;
+            }
 
             LoadSucceeded = true;
-            Debug.Log($"[PlatformLevelLoader] Loaded {result.Count} level(s) from platform.");
+            Debug.Log($"[PlatformLevelLoader] Loaded {result.Count} level(s) from platform (playlist order preserved).");
             onComplete?.Invoke(result);
         }
     }

@@ -32,6 +32,7 @@ export async function getStudentHomeData(studentProfileId: string, studentCode: 
   const playableRefs = playableLevels.map((level) => ({
     id: level.id,
     levelKey: level.levelKey,
+    config: level.config,
   }));
   const [resume, replayLevelIds] = await Promise.all([
     resolveGameResumeLevel(studentProfileId, playableRefs),

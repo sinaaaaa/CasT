@@ -565,6 +565,8 @@ public class GameAssessmentClient : MonoBehaviour
         public int maxLevelRuns;
         /// <summary>1-based slot in the student's assigned item list (for accurate reporting).</summary>
         public int playSlot;
+        /// <summary>True when this RUN ends the item (pass or last failed try) so Play next can advance.</summary>
+        public bool itemFinished;
         /// <summary>Geometry Path: undirected edge keys the robot traveled this run.</summary>
         public string[] geometryTraveledKeys;
         /// <summary>Geometry Path: target edges completed this run.</summary>

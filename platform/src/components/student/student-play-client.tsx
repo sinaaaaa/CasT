@@ -35,7 +35,7 @@ function buildUnityUrl(baseUrl: string, config: StudentGameConfig): string {
   url.searchParams.set("studentCode", config.studentCode);
   url.searchParams.set("token", config.sessionToken);
   url.searchParams.set("apiBaseUrl", config.apiBaseUrl);
-  url.searchParams.set("v", "ipad-fs-attempts-1");
+  url.searchParams.set("v", "resume-cursor-1");
   if (config.gameApiKey) {
     url.searchParams.set("gameApiKey", config.gameApiKey);
   }
@@ -110,6 +110,21 @@ export function StudentPlayClient({
       })
       .catch(() => setStatus("missing"));
   }, [config, unityGameUrl]);
+
+  // Unity all-items-complete Close → leave play and return to the student panel.
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data as { type?: string; href?: string } | null;
+      if (!data || data.type !== "sparc-exit-play") return;
+      const href =
+        typeof data.href === "string" && data.href.startsWith("/")
+          ? data.href
+          : homeHref;
+      window.location.assign(href);
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [homeHref]);
 
   useEffect(() => {
     setPlayViewportLock(true);

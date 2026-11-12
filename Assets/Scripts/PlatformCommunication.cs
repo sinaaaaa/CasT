@@ -138,6 +138,45 @@ public class PlatformCommunication : MonoBehaviour
         StartCoroutine(SendProgress(userId, level, score, actions));
     }
 
+    /// <summary>Save Play-next bookmark after Continue (pass or fail). No attempt id needed.</summary>
+    public void SendResumeCursor(string userId, string resumeLevelKey, int resumeSlot)
+    {
+        if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(resumeLevelKey) || resumeSlot < 1)
+            return;
+        StartCoroutine(SendResumeCursorRoutine(userId, resumeLevelKey, resumeSlot));
+    }
+
+    private IEnumerator SendResumeCursorRoutine(string userId, string resumeLevelKey, int resumeSlot)
+    {
+        var url = platformUrl.TrimEnd('/') + "/api/game/save-resume";
+        var payload = new SaveResumeRequest
+        {
+            studentId = NormalizeExternalId(userId),
+            resumeLevelKey = resumeLevelKey,
+            resumeSlot = resumeSlot
+        };
+        var json = JsonUtility.ToJson(payload);
+
+        using var req = new UnityWebRequest(url, "POST");
+        req.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(json));
+        req.downloadHandler = new DownloadHandlerBuffer();
+        req.SetRequestHeader("Content-Type", "application/json");
+        req.SetRequestHeader("X-Game-Api-Key", gameApiKey);
+
+        yield return req.SendWebRequest();
+
+        if (req.result != UnityWebRequest.Result.Success)
+        {
+            Debug.LogWarning(
+                $"[PlatformCommunication] save-resume failed (HTTP {req.responseCode}): {req.downloadHandler?.text ?? req.error}"
+            );
+        }
+        else
+        {
+            Debug.Log($"[PlatformCommunication] save-resume ok → slot {resumeSlot} ({resumeLevelKey})");
+        }
+    }
+
     private IEnumerator SendProgress(string userId, string level, int score, string actions)
     {
         if (string.IsNullOrEmpty(GameAssessmentClient.Instance.CurrentAttemptId))
@@ -184,5 +223,13 @@ public class PlatformCommunication : MonoBehaviour
         public int score;
         public string finalCommand;
         public string feedback;
+    }
+
+    [Serializable]
+    private class SaveResumeRequest
+    {
+        public string studentId;
+        public string resumeLevelKey;
+        public int resumeSlot;
     }
 }

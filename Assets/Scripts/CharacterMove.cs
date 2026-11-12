@@ -858,6 +858,12 @@ public partial class CharacterMove : MonoBehaviour
     public TextMeshProUGUI successPopupText; // Text for the success popup message
     public Button successPopupContinueButton; // Button to proceed from success popup
 
+    [Header("All items complete")]
+    [Tooltip("Optional dedicated panel when the student finishes the whole playlist. Assign in the Unity inspector.")]
+    public GameObject allItemsCompletePopup;
+    [Tooltip("Close / Done button on that panel — returns to the student home panel in the browser.")]
+    public Button allItemsCompleteCloseButton;
+
     [Header("Item / intro transitions")]
     [Tooltip("Soft fade cover when switching items so the previous level never flashes. Auto-created if empty.")]
     public LevelTransitionController levelTransition;
@@ -4101,13 +4107,11 @@ public partial class CharacterMove : MonoBehaviour
         PlayerPrefs.Save();
         Debug.Log($"[CharacterMove] Saved level slot {currentLevel} ({levelKey}) for user {currentUserId}");
 
-        if (!string.IsNullOrEmpty(currentUserId) && currentUserId != "UnknownUser")
+        // Bookmark Play next on the platform (no attempt id required).
+        if (!string.IsNullOrEmpty(currentUserId) && currentUserId != "UnknownUser" &&
+            !string.IsNullOrEmpty(levelKey))
         {
-            PlatformCommunication.Instance.SendGameProgress(
-                currentUserId,
-                GetPlatformLevelKey(currentLevel),
-                0,
-                BuildCommandsString(_telemetryFinalCommands));
+            PlatformCommunication.Instance.SendResumeCursor(currentUserId, levelKey, currentLevel);
         }
     }
 
@@ -4834,12 +4838,49 @@ public partial class CharacterMove : MonoBehaviour
         {
             for (int i = actionQueueTransform.childCount - 1; i >= 0; i--)
                 Destroy(actionQueueTransform.GetChild(i).gameObject);
+            ResetProgramStripScale();
         }
         actionQueue.Clear();
         blankSlotInstances.Clear();
         blankSlotQueueIndices.Clear();
         currentBlankIndexInSequence = 0;
         userBlankChoices.Clear();
+    }
+
+    /// <summary>iPad WebGL: never leave the yellow strip stuck at a shrunk localScale.</summary>
+    private void ResetProgramStripScale()
+    {
+        if (actionQueueTransform == null) return;
+        actionQueueTransform.localScale = Vector3.one;
+    }
+
+    private Coroutine _programStripRefreshRoutine;
+
+    private void ScheduleProgramStripLayoutRefresh()
+    {
+        if (!isActiveAndEnabled) return;
+        if (_programStripRefreshRoutine != null)
+            StopCoroutine(_programStripRefreshRoutine);
+        _programStripRefreshRoutine = StartCoroutine(ProgramStripLayoutRefreshRoutine());
+    }
+
+    private IEnumerator ProgramStripLayoutRefreshRoutine()
+    {
+        // Wait for Safari / CanvasScaler / letterbox resize to settle.
+        yield return null;
+        Canvas.ForceUpdateCanvases();
+        yield return null;
+        ResetProgramStripScale();
+        if (actionQueueTransform != null)
+        {
+            var rt = actionQueueTransform as RectTransform;
+            if (rt != null)
+                LayoutRebuilder.ForceRebuildLayoutImmediate(rt);
+            EnsureActionQueueLeftAligned();
+        }
+        yield return null;
+        ResetProgramStripScale();
+        _programStripRefreshRoutine = null;
     }
 
     /// <summary>Clears user-added blocks from the action queue UI (used between intro steps).</summary>
@@ -5499,6 +5540,13 @@ public partial class CharacterMove : MonoBehaviour
         {
             Debug.LogWarning("[CharacterMove] successPopupContinueButton is not assigned in the inspector!");
         }
+        if (allItemsCompletePopup != null)
+            allItemsCompletePopup.SetActive(false);
+        if (allItemsCompleteCloseButton != null)
+        {
+            allItemsCompleteCloseButton.onClick.RemoveAllListeners();
+            allItemsCompleteCloseButton.onClick.AddListener(OnAllItemsCompleteClose);
+        }
         if (wrongAnswerPopup != null)
             BringUiPopupToFront(wrongAnswerPopup);
         // appleObject.SetActive(false); // This might be an old reference
@@ -5640,6 +5688,7 @@ public partial class CharacterMove : MonoBehaviour
         _hasShownAnyLevel = true;
         _isLevelTransitioning = false;
         NotifyTutorialsAfterLevelReveal();
+        ScheduleProgramStripLayoutRefresh();
     }
 
     /// <summary>Starts flag / drag help only after the fade cover is fully gone.</summary>
@@ -5873,6 +5922,7 @@ public partial class CharacterMove : MonoBehaviour
 
             _isLevelTransitioning = false;
             NotifyTutorialsAfterLevelReveal();
+            ScheduleProgramStripLayoutRefresh();
         }
         else
         {
@@ -5892,8 +5942,7 @@ public partial class CharacterMove : MonoBehaviour
     {
         if (_allItemsCompleteActive)
         {
-            successPopup.SetActive(false);
-            _allItemsCompleteActive = false;
+            ExitToStudentPanel();
             yield break;
         }
 
@@ -5941,34 +5990,38 @@ public partial class CharacterMove : MonoBehaviour
         _allItemsCompleteActive = true;
         SavePlayerLevel();
 
-        int total = CountNonIntroItems();
-        if (total <= 0)
-            total = LoadedLevelCount > 0 ? LoadedLevelCount : currentLevel;
-        string levelLine = "";
-        if (completedLevel != null)
-        {
-            string configured = GetConfiguredPopupText(completedLevel.attemptSuccessMessage, completedLevel);
-            if (!string.IsNullOrWhiteSpace(configured))
-                levelLine = configured.Trim() + "\n\n";
-        }
+        if (successPopup != null)
+            successPopup.SetActive(false);
 
-        string message =
-            levelLine +
-            "You completed all " + total + " items!\n\n" +
-            "Great work. Your results are saved. You can close the game or ask your teacher what to try next.";
-
-        if (successPopup != null && successPopupText != null)
+        // Prefer the dedicated Unity panel you assign in the inspector.
+        if (allItemsCompletePopup != null)
         {
-            SetRichPopupText(successPopupText, message);
-            if (!successPopup.activeSelf)
-                successPopup.SetActive(true);
-            BringUiPopupToFront(successPopup);
+            allItemsCompletePopup.SetActive(true);
+            BringUiPopupToFront(allItemsCompletePopup);
             GameInteractionSounds.PlaySuccessPopup();
         }
-        else if (chatGPTResponseText != null)
+        else if (successPopup != null && successPopupText != null)
         {
-            chatGPTResponseText.richText = true;
-            chatGPTResponseText.text = message;
+            int total = CountNonIntroItems();
+            if (total <= 0)
+                total = LoadedLevelCount > 0 ? LoadedLevelCount : currentLevel;
+            string levelLine = "";
+            if (completedLevel != null)
+            {
+                string configured = GetConfiguredPopupText(completedLevel.attemptSuccessMessage, completedLevel);
+                if (!string.IsNullOrWhiteSpace(configured))
+                    levelLine = configured.Trim() + "\n\n";
+            }
+
+            string message =
+                levelLine +
+                "You completed all " + total + " items!\n\n" +
+                "Tap Continue to go back to your student panel.";
+
+            SetRichPopupText(successPopupText, message);
+            successPopup.SetActive(true);
+            BringUiPopupToFront(successPopup);
+            GameInteractionSounds.PlaySuccessPopup();
         }
 
         if (runButton != null)
@@ -5978,6 +6031,23 @@ public partial class CharacterMove : MonoBehaviour
         RefreshRunButtonState();
         levelStartTime = -1f;
         Debug.Log("[CharacterMove] All items completed!");
+    }
+
+    private void OnAllItemsCompleteClose()
+    {
+        ExitToStudentPanel();
+    }
+
+    /// <summary>Leave WebGL play and return to the Next.js student home panel.</summary>
+    private void ExitToStudentPanel()
+    {
+        _allItemsCompleteActive = false;
+        if (allItemsCompletePopup != null)
+            allItemsCompletePopup.SetActive(false);
+        if (successPopup != null)
+            successPopup.SetActive(false);
+
+        StudentWebConfig.NavigateParent("/student/home");
     }
 
     private string GetPlatformLevelKey(int levelNumber)
@@ -6072,6 +6142,8 @@ public partial class CharacterMove : MonoBehaviour
             : Mathf.Max(1, currentAttempt + (passed ? 1 : 0));
         assessmentExtras.maxLevelRuns = levelData != null ? levelData.maxAttempts : 0;
         assessmentExtras.playSlot = currentLevel;
+        int maxRuns = levelData != null ? Mathf.Max(1, levelData.maxAttempts) : 3;
+        assessmentExtras.itemFinished = passed || currentAttempt >= maxRuns || DebugRunsExhausted;
 
         _currentRunReportedToPlatform = true;
         client.ReportLevelComplete(
@@ -6280,6 +6352,7 @@ public partial class CharacterMove : MonoBehaviour
 
         _isLevelTransitioning = false;
         NotifyTutorialsAfterLevelReveal();
+        ScheduleProgramStripLayoutRefresh();
     }
 
     private void EnsureLevelTransitionController()
@@ -6347,6 +6420,9 @@ public partial class CharacterMove : MonoBehaviour
         _gridObjectFadeCoroutines.Clear();
     }
 
+    private int _lastProgramStripScreenW = -1;
+    private int _lastProgramStripScreenH = -1;
+
     void Update()
     {
         // Existing code...
@@ -6358,10 +6434,20 @@ public partial class CharacterMove : MonoBehaviour
         }
         
         // Ensure the time scale is normal when the success popup is active
-        if (successPopup.activeSelf && Time.timeScale < 1.0f)
+        if (successPopup != null && successPopup.activeSelf && Time.timeScale < 1.0f)
         {
             Debug.Log("[CharacterMove] Detected paused game with active popup. Restoring time scale.");
             Time.timeScale = 1.0f;
+        }
+
+        // iPad Safari chrome / orientation can change Screen size mid-session and leave
+        // the yellow-strip commands looking tiny until a hard refresh.
+        if (Screen.width != _lastProgramStripScreenW || Screen.height != _lastProgramStripScreenH)
+        {
+            _lastProgramStripScreenW = Screen.width;
+            _lastProgramStripScreenH = Screen.height;
+            ResetProgramStripScale();
+            ScheduleProgramStripLayoutRefresh();
         }
 
         SyncPatternBoardCounterLive();
@@ -6498,7 +6584,11 @@ public partial class CharacterMove : MonoBehaviour
             // Don't rip the queue out of ProgramBagScroll if it exists.
             var scroll = rt.GetComponentInParent<ScrollRect>();
             if (scroll != null && scroll.name == "ProgramBagScroll")
+            {
+                // Still restore scale — iPad can leave a stuck shrink from an earlier fit.
+                rt.localScale = Vector3.one;
                 return;
+            }
 
             if (rt.parent != strip)
                 rt.SetParent(strip, worldPositionStays: false);
@@ -7018,29 +7108,13 @@ public partial class CharacterMove : MonoBehaviour
     }
 
     /// <summary>
-    /// Shrinks the whole card row (never below 80%) when the strip is shorter than a card,
-    /// so cards keep breathing room above and below instead of touching the dashed border.
+    /// Keep strip commands at full size. Older builds scaled localScale down when the
+    /// viewport height was measured too early on iPad, and arrows stayed tiny until refresh.
     /// </summary>
     private void FitProgramQueueToStripHeight(RectTransform queueRt, HorizontalLayoutGroup hlg)
     {
-        if (queueRt == null || hlg == null) return;
-        var viewport = queueRt.parent as RectTransform;
-        if (viewport == null) return;
-        float available = viewport.rect.height;
-        if (available <= 1f) return;
-
-        float tallest = 0f;
-        for (int i = 0; i < queueRt.childCount; i++)
-        {
-            var le = queueRt.GetChild(i).GetComponent<LayoutElement>();
-            if (le != null && !le.ignoreLayout && queueRt.GetChild(i).gameObject.activeSelf)
-                tallest = Mathf.Max(tallest, le.preferredHeight);
-        }
-        if (tallest <= 0f) return;
-
-        float needed = tallest + hlg.padding.top + hlg.padding.bottom;
-        float s = Mathf.Clamp(available / needed, 0.8f, 1f);
-        queueRt.localScale = new Vector3(s, s, 1f);
+        if (queueRt == null) return;
+        queueRt.localScale = Vector3.one;
     }
 
     /// <summary>

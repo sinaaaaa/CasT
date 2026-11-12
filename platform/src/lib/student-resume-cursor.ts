@@ -1,0 +1,121 @@
+import { prisma } from "@/lib/prisma";
+import { AttemptStatus } from "@prisma/client";
+import { levelGameplayConfigSchema } from "@/lib/level-config";
+
+type PlayableLevelRef = {
+  id: string;
+  levelKey: string;
+  config?: unknown;
+};
+
+export type StudentResumeCursor = {
+  resumeLevelKey: string;
+  resumeSlot: number;
+};
+
+/** Read maxAttempts from level config; default 3. */
+export function maxAttemptsFromLevelConfig(config: unknown): number {
+  const parsed = levelGameplayConfigSchema.safeParse(config);
+  const n = parsed.success ? parsed.data.maxAttempts : 3;
+  return Number.isFinite(n) && n >= 1 ? Math.min(99, Math.floor(n)) : 3;
+}
+
+/**
+ * Persist "play next" bookmark. Only moves forward so a late stale report cannot rewind.
+ */
+export async function saveStudentResumeCursor(
+  studentProfileId: string,
+  resume: StudentResumeCursor
+): Promise<StudentResumeCursor | null> {
+  const key = resume.resumeLevelKey?.trim();
+  const slot = resume.resumeSlot;
+  if (!key || !Number.isFinite(slot) || slot < 1) return null;
+
+  const current = await prisma.studentProfile.findUnique({
+    where: { id: studentProfileId },
+    select: { resumeSlot: true },
+  });
+  if (current?.resumeSlot != null && current.resumeSlot > slot) {
+    return {
+      resumeLevelKey: key,
+      resumeSlot: current.resumeSlot,
+    };
+  }
+
+  await prisma.studentProfile.update({
+    where: { id: studentProfileId },
+    data: {
+      resumeLevelKey: key,
+      resumeSlot: slot,
+    },
+  });
+
+  return { resumeLevelKey: key, resumeSlot: slot };
+}
+
+/**
+ * After a terminal item end (pass or exhausted attempts), bookmark the next playlist slot.
+ */
+export async function advanceStudentResumeAfterItem(
+  studentProfileId: string,
+  orderedLevels: PlayableLevelRef[],
+  finishedLevelId: string
+): Promise<StudentResumeCursor | null> {
+  if (orderedLevels.length === 0) return null;
+  const finishedIndex = orderedLevels.findIndex((l) => l.id === finishedLevelId);
+  if (finishedIndex < 0) return null;
+
+  const nextIndex = Math.min(finishedIndex + 1, orderedLevels.length - 1);
+  const next = orderedLevels[nextIndex];
+  if (!next) return null;
+
+  return saveStudentResumeCursor(studentProfileId, {
+    resumeLevelKey: next.levelKey,
+    resumeSlot: nextIndex + 1,
+  });
+}
+
+/** True when this ended attempt should advance the playlist cursor. */
+export function isTerminalItemAttempt(params: {
+  passed: boolean;
+  attemptNumber: number;
+  maxAttempts: number;
+  itemFinished?: boolean | null;
+}): boolean {
+  if (params.itemFinished === true) return true;
+  if (params.passed) return true;
+  const max = Math.max(1, params.maxAttempts || 3);
+  return params.attemptNumber >= max;
+}
+
+/**
+ * Derive finished flags from attempts when no explicit cursor exists yet.
+ */
+export async function loadEndedAttemptCountsByLevel(
+  studentProfileId: string
+): Promise<Map<string, number>> {
+  const rows = await prisma.levelAttempt.groupBy({
+    by: ["levelId"],
+    where: {
+      studentId: studentProfileId,
+      endedAt: { not: null },
+      status: { in: [AttemptStatus.CORRECT, AttemptStatus.INCORRECT] },
+    },
+    _count: { _all: true },
+  });
+  return new Map(rows.map((row) => [row.levelId, row._count._all]));
+}
+
+export async function getStoredStudentResumeCursor(
+  studentProfileId: string
+): Promise<StudentResumeCursor | null> {
+  const row = await prisma.studentProfile.findUnique({
+    where: { id: studentProfileId },
+    select: { resumeLevelKey: true, resumeSlot: true },
+  });
+  if (!row?.resumeLevelKey || row.resumeSlot == null || row.resumeSlot < 1) return null;
+  return {
+    resumeLevelKey: row.resumeLevelKey,
+    resumeSlot: row.resumeSlot,
+  };
+}

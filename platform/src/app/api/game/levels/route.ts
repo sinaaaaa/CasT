@@ -38,7 +38,11 @@ export async function GET(request: NextRequest) {
     if (profileId) {
       const active = await getActiveDirectAssignmentLevelIds(profileId);
       hasCustomAssignments = active.size > 0;
-      const playableRefs = levels.map((l) => ({ id: l.id, levelKey: l.levelKey }));
+      const playableRefs = levels.map((l) => ({
+        id: l.id,
+        levelKey: l.levelKey,
+        config: l.config,
+      }));
       const resume = requestedItem
         ? await resolveRequestedPlayLevel(profileId, playableRefs, requestedItem)
         : await resolveGameResumeLevel(profileId, playableRefs);
