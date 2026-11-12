@@ -82,8 +82,19 @@ export function TeacherShell({
       return;
     }
     fetch("/api/teacher/classes")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data: { classes?: { id: string; name: string; studentCount?: number }[] } | null) => {
+      .then(async (r) => {
+        if (!r.ok) return null;
+        const text = await r.text();
+        if (!text.trim()) return null;
+        try {
+          return JSON.parse(text) as {
+            classes?: { id: string; name: string; studentCount?: number }[];
+          };
+        } catch {
+          return null;
+        }
+      })
+      .then((data) => {
         const first = data?.classes?.[0];
         if (first) {
           setSidebarClass({

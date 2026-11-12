@@ -22,6 +22,7 @@ export function maxAttemptsFromLevelConfig(config: unknown): number {
 
 /**
  * Persist "play next" bookmark. Only moves forward so a late stale report cannot rewind.
+ * Uses raw SQL so Prisma Client does not require these columns on every StudentProfile query.
  */
 export async function saveStudentResumeCursor(
   studentProfileId: string,
@@ -31,26 +32,25 @@ export async function saveStudentResumeCursor(
   const slot = resume.resumeSlot;
   if (!key || !Number.isFinite(slot) || slot < 1) return null;
 
-  const current = await prisma.studentProfile.findUnique({
-    where: { id: studentProfileId },
-    select: { resumeSlot: true },
-  });
-  if (current?.resumeSlot != null && current.resumeSlot > slot) {
-    return {
-      resumeLevelKey: key,
-      resumeSlot: current.resumeSlot,
-    };
+  try {
+    const current = await getStoredStudentResumeCursor(studentProfileId);
+    if (current?.resumeSlot != null && current.resumeSlot > slot) {
+      return current;
+    }
+
+    await prisma.$executeRaw`
+      UPDATE "StudentProfile"
+      SET "resumeLevelKey" = ${key},
+          "resumeSlot" = ${Math.floor(slot)}
+      WHERE id = ${studentProfileId}
+    `;
+
+    return { resumeLevelKey: key, resumeSlot: Math.floor(slot) };
+  } catch (e) {
+    // Columns missing → run Neon SQL / npm run db:student-resume
+    console.warn("[resume] saveStudentResumeCursor failed:", e);
+    return null;
   }
-
-  await prisma.studentProfile.update({
-    where: { id: studentProfileId },
-    data: {
-      resumeLevelKey: key,
-      resumeSlot: slot,
-    },
-  });
-
-  return { resumeLevelKey: key, resumeSlot: slot };
 }
 
 /**
@@ -109,13 +109,38 @@ export async function loadEndedAttemptCountsByLevel(
 export async function getStoredStudentResumeCursor(
   studentProfileId: string
 ): Promise<StudentResumeCursor | null> {
-  const row = await prisma.studentProfile.findUnique({
-    where: { id: studentProfileId },
-    select: { resumeLevelKey: true, resumeSlot: true },
-  });
-  if (!row?.resumeLevelKey || row.resumeSlot == null || row.resumeSlot < 1) return null;
-  return {
-    resumeLevelKey: row.resumeLevelKey,
-    resumeSlot: row.resumeSlot,
-  };
+  try {
+    const rows = await prisma.$queryRaw<
+      Array<{ resumeLevelKey: string | null; resumeSlot: number | null }>
+    >`
+      SELECT "resumeLevelKey", "resumeSlot"
+      FROM "StudentProfile"
+      WHERE id = ${studentProfileId}
+      LIMIT 1
+    `;
+    const row = rows[0];
+    if (!row?.resumeLevelKey || row.resumeSlot == null || row.resumeSlot < 1) return null;
+    return {
+      resumeLevelKey: row.resumeLevelKey,
+      resumeSlot: row.resumeSlot,
+    };
+  } catch (e) {
+    console.warn("[resume] getStoredStudentResumeCursor failed:", e);
+    return null;
+  }
+}
+
+/** Optional: ensure columns exist (safe no-op if already present). */
+export async function ensureStudentResumeColumns(): Promise<boolean> {
+  try {
+    await prisma.$executeRaw`
+      ALTER TABLE "StudentProfile"
+        ADD COLUMN IF NOT EXISTS "resumeLevelKey" TEXT,
+        ADD COLUMN IF NOT EXISTS "resumeSlot" INTEGER
+    `;
+    return true;
+  } catch (e) {
+    console.warn("[resume] ensureStudentResumeColumns failed:", e);
+    return false;
+  }
 }

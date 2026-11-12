@@ -1,7 +1,10 @@
 import { NextRequest } from "next/server";
 import { gameApiUnauthorized, verifyGameApiKey } from "@/lib/game-api";
 import { resolveStudentProfileId } from "@/lib/level-assignments";
-import { saveStudentResumeCursor } from "@/lib/student-resume-cursor";
+import {
+  ensureStudentResumeColumns,
+  saveStudentResumeCursor,
+} from "@/lib/student-resume-cursor";
 
 /**
  * Unity calls this when Continue advances to the next item (pass or fail).
@@ -35,6 +38,8 @@ export async function POST(request: NextRequest) {
   if (!profileId) {
     return Response.json({ error: "Student not found" }, { status: 404 });
   }
+
+  await ensureStudentResumeColumns();
 
   const saved = await saveStudentResumeCursor(profileId, {
     resumeLevelKey: resumeLevelKey.trim(),

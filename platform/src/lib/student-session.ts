@@ -56,9 +56,16 @@ export async function resolveStudentSessionFromToken(
 
   const row = await prisma.studentSession.findUnique({
     where: { tokenHash: hashToken(token.trim()) },
-    include: {
+    select: {
+      id: true,
+      studentId: true,
+      expiresAt: true,
       student: {
-        include: {
+        select: {
+          id: true,
+          displayName: true,
+          externalId: true,
+          isArchived: true,
           user: { select: { isActive: true } },
         },
       },

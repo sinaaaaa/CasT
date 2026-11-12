@@ -87,10 +87,8 @@ model StudentProfile {
   displayName String
   externalId  String?  @unique
   isArchived  Boolean  @default(false)
-  /// Playlist bookmark: next item key after the last finished item (pass or fail-continue).
-  resumeLevelKey String?
-  /// 1-based slot matching Unity assigned list / Play next.
-  resumeSlot     Int?
+  // resumeLevelKey / resumeSlot live in DB (see add_student_resume_cursor.sql)
+  // but are read/written via raw SQL so login still works if a DB is missing them.
   createdAt   DateTime @default(now())
 
   classMemberships    ClassStudent[]

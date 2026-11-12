@@ -35,7 +35,10 @@ export async function getStudentHomeData(studentProfileId: string, studentCode: 
     config: level.config,
   }));
   const [resume, replayLevelIds] = await Promise.all([
-    resolveGameResumeLevel(studentProfileId, playableRefs),
+    resolveGameResumeLevel(studentProfileId, playableRefs).catch((e) => {
+      console.warn("[student-home] resume resolve failed:", e);
+      return null;
+    }),
     getStudentReplayLevelIds(studentProfileId),
   ]);
 

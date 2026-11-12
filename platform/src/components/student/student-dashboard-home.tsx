@@ -67,8 +67,10 @@ export function StudentDashboardHome() {
             router.replace("/student/login?next=/student/home");
             return null;
           }
+          const text = await res.text();
           if (!res.ok) throw new Error("Failed to load");
-          return res.json() as Promise<HomeData>;
+          if (!text.trim()) throw new Error("Empty dashboard response");
+          return JSON.parse(text) as HomeData;
         })
         .then((d) => {
           if (cancelled || !d) return;
